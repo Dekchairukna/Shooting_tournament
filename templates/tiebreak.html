@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card narrow">
+  <h1>ตีเที่ยวพิเศษ 7 เมตรทุกสถานี</h1>
+  <p>{{ athlete.name }} — รอบ {{ round_no }}</p>
+  <form method="post" class="form-grid">
+    {% for station in [1,2,3,4,5] %}
+    <label>สถานี {{ station }}<input type="number" name="tb_{{ station }}" min="0" max="5" value="{{ existing.get(station, 0) }}"></label>
+    {% endfor %}
+    <button class="btn" type="submit">บันทึกเที่ยวพิเศษ</button>
+  </form>
+</section>
+{% endblock %}

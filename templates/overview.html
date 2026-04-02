@@ -1,0 +1,583 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .overview-page {
+    display: grid;
+    gap: 12px;
+  }
+
+  .overview-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 10px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .05);
+  }
+
+  .responsive-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .title-box h1 {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+    line-height: 1.1;
+    color: #0f172a;
+  }
+
+  .title-box .muted {
+    margin: 0;
+    font-size: .82rem;
+    color: #64748b;
+  }
+
+  .responsive-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-start;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: 800;
+    font-size: .8rem;
+    cursor: pointer;
+    background: #2563eb;
+    color: #fff;
+    line-height: 1.1;
+  }
+
+  .btn.secondary {
+    background: #fff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+  }
+
+  .status-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .legend {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 8px;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 800;
+    color: #334155;
+    background: #f8fafc;
+    border: 1px solid rgba(15, 23, 42, .05);
+  }
+
+  .legend.waiting { background: #eef2ff; color: #4338ca; }
+  .legend.active { background: #dbeafe; color: #1d4ed8; }
+  .legend.finished { background: #dcfce7; color: #166534; }
+
+  .qualification-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .qualification-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .qualification-table {
+    width: max-content;
+    min-width: 980px;
+    border-collapse: collapse;
+    font-size: .72rem;
+  }
+
+  .qualification-title-row th {
+    padding: 0;
+    background: #fff;
+    border: none;
+  }
+
+  .qualification-title {
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 900;
+    color: #0f172a;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .qualification-table th,
+  .qualification-table td {
+    padding: 4px 3px;
+    text-align: center;
+    border: 1px solid #d1d5db;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .qualification-table thead th {
+    font-size: .66rem;
+    font-weight: 900;
+    color: #334155;
+    background: #f8fafc;
+  }
+
+  .qualification-table .atelier-head {
+    background: #dbeafe;
+    color: #1e3a8a;
+    font-size: .68rem;
+  }
+
+  .station-image-cell {
+    background: #fff;
+    padding: 2px;
+  }
+
+  .station-image-cell img {
+    height: 70px;
+    width: auto;
+    display: block;
+    margin: 0 auto;
+    object-fit: contain;
+  }
+
+  .score-col {
+    min-width: 33px;
+    font-size: .7rem;
+  }
+
+  .score-total-col {
+    min-width: 40px;
+    font-weight: 900;
+    background: #f8fafc;
+    font-size: .7rem;
+  }
+
+  .col-order { min-width: 42px; }
+  .col-lane { min-width: 38px; }
+  .col-lane-order { min-width: 48px; }
+  .col-affiliation { min-width: 120px; }
+  .col-name { min-width: 190px; }
+  .col-total { min-width: 48px; }
+  .col-class { min-width: 44px; }
+  .col-status { min-width: 62px; }
+
+  .qualification-table tbody tr {
+    cursor: pointer;
+  }
+
+  .qualification-table tbody tr:nth-child(even) {
+    background: #fcfdff;
+  }
+
+  .qualification-table tbody tr:hover {
+    background: #f8fbff;
+  }
+
+  .qualification-table tbody tr.qualified-direct {
+    background: #dbeafe !important;
+  }
+
+  .qualification-table tbody tr.qualified-round2 {
+    background: #dcfce7 !important;
+  }
+
+  .qualification-table tbody tr.round2-candidate {
+    background: #fef3c7 !important;
+  }
+
+  .qualification-table tbody tr.eliminated {
+    background: #fee2e2 !important;
+  }
+
+  .text-left {
+    text-align: left !important;
+  }
+
+  .cell-name {
+    min-width: 250px;
+    max-width: 250px;
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: clip;
+    font-weight: 800;
+    line-height: 1.2;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .cell-affiliation {
+    min-width: 220px;
+    max-width: 220px;
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: clip;
+    color: #475569;
+    font-weight: 800;
+    line-height: 1.2;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .overall-total {
+    font-weight: 900;
+  }
+
+  .overall-rank {
+    font-weight: 900;
+    color: #1d4ed8;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    padding: 4px 7px;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 900;
+  }
+
+  .status-pill.waiting {
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  .status-pill.active {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  .status-pill.finished {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  @media (max-width: 1024px) {
+    .overview-card {
+      padding: 8px;
+      border-radius: 14px;
+    }
+
+    .responsive-head {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .title-box h1 {
+      font-size: 1rem;
+    }
+
+    .title-box .muted {
+      font-size: .76rem;
+    }
+
+    .responsive-toolbar {
+      gap: 5px;
+    }
+
+    .btn {
+      padding: 6px 8px;
+      font-size: .75rem;
+    }
+
+    .status-legend {
+      padding: 6px 8px;
+    }
+
+    .legend {
+      font-size: .68rem;
+      padding: 4px 7px;
+    }
+
+    .qualification-table {
+      min-width: 920px;
+      font-size: .66rem;
+    }
+
+    .qualification-table th,
+    .qualification-table td {
+      padding: 3px 2px;
+    }
+
+    .station-image-cell img {
+      height: 16px;
+    }
+
+    .score-col {
+      min-width: 20px;
+      font-size: .64rem;
+    }
+
+    .score-total-col {
+      min-width: 28px;
+      font-size: .64rem;
+    }
+
+    .col-affiliation { min-width: 150px; }
+    .col-name { min-width: 150px; }
+    .col-status { min-width: 56px; }
+
+    .cell-affiliation {
+      min-width: 95px;
+      max-width: 95px;
+    }
+
+    .cell-name {
+      min-width: 150px;
+      max-width: 150px;
+    }
+  }
+
+  @media print {
+    .responsive-toolbar,
+    .status-legend {
+      display: none !important;
+    }
+
+    .overview-card {
+      border: none;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    .qualification-wrap {
+      border: none;
+    }
+
+    .qualification-table {
+      min-width: 0;
+      width: 100%;
+      font-size: .62rem;
+    }
+
+    .station-image-cell img {
+      height: 14px;
+    }
+  }
+</style>
+
+<div class="overview-page">
+  <section class="overview-card overview-theme-{{ theme }}">
+    <div class="section-head responsive-head">
+      <div class="title-box">
+        <h1>{{ event.name }}</h1>
+        <p class="muted">{{ event.event_group }} | {{ event.category }} | {{ event.next_round_label }} | รอบที่กำลังดู:
+          {{ round_no }}</p>
+      </div>
+
+      <div class="toolbar responsive-toolbar">
+        <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">รอบ 1</a>
+        {% if event.has_round_two %}
+        <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=2) }}">รอบ 2</a>
+        {% endif %}
+        <a class="btn secondary" href="{{ url_for('bracket', event_id=event.id) }}">ตารางประกบ</a>
+        <button class="btn secondary"
+          onclick="captureTable('overviewTableWrap','overview-{{ event.id }}-r{{ round_no }}')">บันทึกเป็นรูปภาพ</button>
+        <button class="btn secondary" onclick="window.print()">พิมพ์ตาราง</button>
+      </div>
+    </div>
+
+    <div class="status-legend">
+      <span class="legend waiting">รอคิว</span>
+      <span class="legend active">กำลังตี</span>
+      <span class="legend finished">ตีเสร็จแล้ว</span>
+      <span class="legend" style="background:#dbeafe">เข้ารอบตรง</span>
+      <span class="legend" style="background:#dcfce7">ผ่านจากรอบ 2</span>
+      <span class="legend" style="background:#fef3c7">มีสิทธิ์รอบ 2</span>
+      <span class="legend" style="background:#fee2e2">ตกรอบ</span>
+    </div>
+
+    <div id="overviewTableWrap" class="table-export-block qualification-wrap {{ theme }}">
+      <div class="qualification-scroll">
+        <table class="qualification-table {{ theme }}">
+          <thead>
+            <tr class="qualification-title-row">
+              <th colspan="32">
+                <div class="qualification-title">Qualification Shooting</div>
+              </th>
+            </tr>
+            <tr>
+              <th rowspan="3" class="col-order"><span>ลำดับการตี</span></th>
+              <th rowspan="3" class="col-lane"><span>สนาม</span></th>
+              <th rowspan="3" class="col-lane-order"><span>ลำดับในสนาม</span></th>
+              <th rowspan="3" class="col-affiliation">สังกัด</th>
+              <th rowspan="3" class="col-name">ชื่อ</th>
+              {% for station in [1,2,3,4,5] %}
+              <th colspan="5" class="atelier-head">Atelier {{ station }}</th>
+              {% endfor %}
+              <th rowspan="3" class="col-total">Total</th>
+              <th rowspan="3" class="col-class">Class</th>
+              <th rowspan="3" class="col-status">สถานะ</th>
+            </tr>
+            <tr>
+              {% for station in [1,2,3,4,5] %}
+              <th colspan="5" class="station-image-cell"><img
+                  src="{{ url_for('static', filename=station_images[station-1]) }}" alt="station {{ station }}"></th>
+              {% endfor %}
+            </tr>
+            <tr>
+              {% for station in [1,2,3,4,5] %}
+              <th class="score-col">6m</th>
+              <th class="score-col">7m</th>
+              <th class="score-col">8m</th>
+              <th class="score-col">9m</th>
+              <th class="score-total-col">Total</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody id="overviewTableBody">
+            {% for row in rows %}
+            <tr class="status-{{ row.status }} {{ row.progress_class }}" data-athlete-id="{{ row.athlete.id }}"
+              onclick="window.location='{{ url_for('scorecard', athlete_id=row.athlete.id, round=round_no) }}'">
+              <td class="start-order">{{ row.display_order or row.athlete.start_order }}</td>
+              <td class="lane-no">{{ row.display_lane_no or row.athlete.lane_no or '-' }}</td>
+              <td class="lane-order">{{ row.display_lane_order or row.athlete.lane_order or '-' }}</td>
+              <td class="cell-affiliation">{{ row.athlete.affiliation }}</td>
+              <td class="text-left cell-name">{{ row.athlete.name }}</td>
+              
+              {% for station in [1,2,3,4,5] %}
+              <td class="score-col" data-station="{{ station }}" data-distance="6">{{
+                row.by_station[station].distances.get(6,0) }}</td>
+              <td class="score-col" data-station="{{ station }}" data-distance="7">{{
+                row.by_station[station].distances.get(7,0) }}</td>
+              <td class="score-col" data-station="{{ station }}" data-distance="8">{{
+                row.by_station[station].distances.get(8,0) }}</td>
+              <td class="score-col" data-station="{{ station }}" data-distance="9">{{
+                row.by_station[station].distances.get(9,0) }}</td>
+              <td class="score-total-col station-total" data-station="{{ station }}" data-distance="total">{{
+                row.by_station[station].total }}</td>
+              {% endfor %}
+              <td class="overall-total">{{ row.total }}</td>
+              <td class="overall-rank">{{ row.rank }}</td>
+              <td><span class="status-pill {{ row.status }}">{{ 'กำลังตี' if row.status == 'active' else ('ตีเสร็จแล้ว'
+                  if row.status == 'finished' else 'รอคิว') }}</span></td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="32">ยังไม่มีข้อมูล</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function captureTable(id, filename) {
+    const el = document.getElementById(id);
+    html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+      const a = document.createElement('a');
+      a.download = filename + '.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    });
+  }
+
+  function statusLabel(status) {
+    if (status === 'active') return 'กำลังตี';
+    if (status === 'finished') return 'ตีเสร็จแล้ว';
+    return 'รอคิว';
+  }
+
+  function updateOverviewRows(items) {
+    const tbody = document.getElementById('overviewTableBody');
+    if (!tbody) return;
+    const existingRows = Array.from(tbody.querySelectorAll('tr[data-athlete-id]'));
+    const rowMap = new Map(existingRows.map(row => [String(row.dataset.athleteId), row]));
+
+    items.forEach(item => {
+      const row = rowMap.get(String(item.athlete_id));
+      if (!row) return;
+      row.className = `status-${item.status} ${item.progress_class || ''}`;
+
+      const startOrder = row.querySelector('.start-order');
+      const laneNo = row.querySelector('.lane-no');
+      const laneOrder = row.querySelector('.lane-order');
+      const aff = row.querySelector('.cell-affiliation');
+      const name = row.querySelector('.cell-name');
+      const total = row.querySelector('.overall-total');
+      const rank = row.querySelector('.overall-rank');
+      const pill = row.querySelector('.status-pill');
+
+      if (startOrder) startOrder.textContent = item.display_order ?? item.start_order ?? '-';
+      if (laneNo) laneNo.textContent = item.display_lane_no ?? item.lane_no ?? '-';
+      if (laneOrder) laneOrder.textContent = item.display_lane_order ?? item.lane_order ?? '-';
+      if (aff) aff.textContent = item.affiliation;
+      if (name) name.textContent = item.name;
+      if (total) total.textContent = item.total;
+      if (rank) rank.textContent = item.rank;
+      if (pill) {
+        pill.textContent = statusLabel(item.status);
+        pill.className = `status-pill ${item.status}`;
+      }
+
+      for (const [station, stationData] of Object.entries(item.stations)) {
+        for (const [distance, value] of Object.entries(stationData)) {
+          const cell = row.querySelector(`[data-station="${station}"][data-distance="${distance}"]`);
+          if (cell) cell.textContent = value;
+        }
+      }
+    });
+
+    items.sort((a, b) => a.rank - b.rank || b.total - a.total);
+    items.forEach(item => {
+      const row = rowMap.get(String(item.athlete_id));
+      if (row) tbody.appendChild(row);
+    });
+  }
+
+  let isRefreshing = false;
+  async function refreshOverviewData() {
+    if (isRefreshing) return;
+    isRefreshing = true;
+    try {
+      const response = await fetch('{{ url_for("overview_data", event_id=event.id) }}?round={{ round_no }}', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      updateOverviewRows(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      isRefreshing = false;
+    }
+  }
+
+  setInterval(() => {
+    if (!document.hidden) refreshOverviewData();
+  }, 700);
+  refreshOverviewData();
+</script>
+{% endblock %}

@@ -1,0 +1,563 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card knockout-page">
+  <div class="page-top">
+    <div class="title-wrap">
+      <p class="eyebrow">Tournament</p>
+      <h1>KNOCKOUT CHAMPIONSHIP ROUND</h1>
+      <p class="subtitle">กดที่ชื่อในแต่ละ match box เพื่อเปิด scorecard ของรอบนั้น</p>
+    </div>
+
+    <div class="top-actions">
+      <a class="btn btn-soft" href="{{ url_for('event_overview', event_id=event.id) }}">{{ event.name }}</a>
+      <a class="btn btn-outline" href="{{ url_for('event_overview', event_id=event.id) }}">← Back to Event</a>
+      <a class="btn btn-dark" href="{{ url_for('index') }}">All Events</a>
+    </div>
+  </div>
+
+  <div class="breadcrumb-bar">
+    <a href="{{ url_for('index') }}">Home</a>
+    <span>›</span>
+    <a href="{{ url_for('event_overview', event_id=event.id) }}">{{ event.name }}</a>
+    <span>›</span>
+    <strong>Tournament Bracket</strong>
+  </div>
+
+  <style>
+    .knockout-page{
+      padding:22px;
+      border-radius:24px;
+      background:
+        radial-gradient(circle at top right, rgba(59,130,246,.08), transparent 22%),
+        radial-gradient(circle at bottom left, rgba(168,85,247,.08), transparent 20%),
+        #ffffff;
+    }
+
+    .page-top{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:18px;
+      flex-wrap:wrap;
+      margin-bottom:16px;
+    }
+
+    .title-wrap h1{
+      margin:4px 0 6px;
+      font-size:2rem;
+      line-height:1.1;
+      color:#0f172a;
+      letter-spacing:.2px;
+    }
+
+    .eyebrow{
+      margin:0;
+      font-size:.82rem;
+      font-weight:800;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      color:#6366f1;
+    }
+
+    .subtitle{
+      margin:0;
+      color:#64748b;
+      font-size:.98rem;
+    }
+
+    .top-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .breadcrumb-bar{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:20px;
+      padding:12px 14px;
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      background:linear-gradient(180deg,#ffffff,#f8fafc);
+      color:#64748b;
+      font-size:.94rem;
+    }
+
+    .breadcrumb-bar a{
+      color:#2563eb;
+      text-decoration:none;
+      font-weight:700;
+    }
+
+    .breadcrumb-bar a:hover{
+      text-decoration:underline;
+    }
+
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:10px 14px;
+      border-radius:12px;
+      text-decoration:none;
+      font-weight:800;
+      transition:.18s ease;
+      border:1px solid transparent;
+      white-space:nowrap;
+    }
+
+    .btn:hover{
+      transform:translateY(-1px);
+    }
+
+    .btn-soft{
+      background:linear-gradient(180deg,#eff6ff,#dbeafe);
+      color:#1d4ed8;
+      border-color:#bfdbfe;
+    }
+
+    .btn-outline{
+      background:#ffffff;
+      color:#0f172a;
+      border-color:#cbd5e1;
+    }
+
+    .btn-dark{
+      background:#0f172a;
+      color:#ffffff;
+      border-color:#0f172a;
+    }
+
+    .bracket-board{
+      display:grid;
+      grid-template-columns:1.65fr 1.2fr 1fr;
+      gap:20px;
+      align-items:start;
+      overflow-x:auto;
+      padding:8px 4px 10px;
+    }
+
+    .round-col{
+      min-width:max-content;
+    }
+
+    .round-title{
+      margin:0 0 12px;
+      padding:12px 14px;
+      border-radius:16px;
+      font-size:1rem;
+      font-weight:900;
+      letter-spacing:.02em;
+      border:1px solid transparent;
+      box-shadow:0 3px 12px rgba(15,23,42,.04);
+    }
+
+    .round-col.qf .round-title{
+      background:linear-gradient(180deg,#eff6ff,#dbeafe);
+      color:#1d4ed8;
+      border-color:#bfdbfe;
+    }
+
+    .round-col.sf .round-title{
+      background:linear-gradient(180deg,#faf5ff,#ede9fe);
+      color:#7c3aed;
+      border-color:#ddd6fe;
+    }
+
+    .round-col.final .round-title{
+      background:linear-gradient(180deg,#fff8e1,#fef3c7);
+      color:#b45309;
+      border-color:#fcd34d;
+    }
+
+    .match-box{
+      border:1px solid #e2e8f0;
+      border-radius:20px;
+      background:#ffffff;
+      padding:12px;
+      margin-bottom:24px;
+      box-shadow:0 8px 24px rgba(15,23,42,.06);
+    }
+
+    .round-col.qf .match-box{
+      border-color:#bfdbfe;
+      background:linear-gradient(180deg,#ffffff,#f8fbff);
+    }
+
+    .round-col.sf .match-box{
+      border-color:#ddd6fe;
+      background:linear-gradient(180deg,#ffffff,#fcfaff);
+    }
+
+    .round-col.final .match-box{
+      border-color:#fcd34d;
+      background:linear-gradient(180deg,#fffef8,#fff7df);
+    }
+
+    .match-title{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-bottom:10px;
+      padding:7px 10px;
+      border-radius:12px;
+      font-size:.9rem;
+      font-weight:900;
+      letter-spacing:.02em;
+      background:#f8fafc;
+      color:#334155;
+    }
+
+    .round-col.qf .match-title{
+      background:#dbeafe;
+      color:#1e40af;
+    }
+
+    .round-col.sf .match-title{
+      background:#ede9fe;
+      color:#6d28d9;
+    }
+
+    .round-col.final .match-title{
+      background:#fde68a;
+      color:#92400e;
+    }
+
+    .table-wrap{
+      overflow-x:auto;
+      border-radius:14px;
+    }
+
+    .match-row{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      font-size:.8rem;
+      background:#fff;
+      overflow:hidden;
+      border-radius:14px;
+    }
+
+    .match-row th,
+    .match-row td{
+      border-right:1px solid #e5e7eb;
+      border-bottom:1px solid #e5e7eb;
+      padding:6px 7px;
+      text-align:center;
+      white-space:nowrap;
+    }
+
+    .match-row th:first-child,
+    .match-row td:first-child{
+      border-left:1px solid #e5e7eb;
+    }
+
+    .match-row thead tr:first-child th{
+      border-top:1px solid #e5e7eb;
+    }
+
+    .match-row th{
+      font-weight:900;
+      font-size:.74rem;
+      letter-spacing:.02em;
+    }
+
+    .round-col.qf .match-row th{
+      background:#eff6ff;
+      color:#1e3a8a;
+    }
+
+    .round-col.sf .match-row th{
+      background:#f3e8ff;
+      color:#6b21a8;
+    }
+
+    .round-col.final .match-row th{
+      background:#fef3c7;
+      color:#92400e;
+    }
+
+    .match-row tbody tr:nth-child(even):not(.winner-row){
+      background:#fafafa;
+    }
+
+    .match-row tbody tr:hover:not(.winner-row){
+      background:#f8fafc;
+    }
+
+    .player-name{
+      text-align:left;
+      min-width:160px;
+      font-weight:700;
+    }
+
+    .score-link{
+      color:#0f172a;
+      text-decoration:none;
+      font-weight:800;
+    }
+
+    .score-link:hover{
+      color:#2563eb;
+      text-decoration:underline;
+    }
+
+    .winner-row td{
+      background:linear-gradient(180deg,#ecfdf5,#dcfce7) !important;
+      color:#166534;
+      font-weight:900;
+    }
+
+    .empty-slot{
+      color:#94a3b8;
+      font-style:italic;
+    }
+
+    .muted-box{
+      margin:0;
+      padding:18px;
+      border:1px dashed #cbd5e1;
+      border-radius:18px;
+      color:#64748b;
+      background:linear-gradient(180deg,#ffffff,#f8fafc);
+    }
+
+    .top-sf-1{margin-top:160px}
+    .top-sf-2{margin-top:0}
+    .top-final{margin-top:230px}
+
+    @media (max-width: 1200px){
+      .bracket-board{
+        grid-template-columns:1fr;
+      }
+
+      .round-col{
+        min-width:0;
+      }
+
+      .top-sf-1,
+      .top-sf-2,
+      .top-final{
+        margin-top:0;
+      }
+
+      .title-wrap h1{
+        font-size:1.6rem;
+      }
+    }
+  </style>
+
+  <div class="bracket-board">
+    <div class="round-col qf">
+      <h2 class="round-title">Quarter Final</h2>
+      {% for item in grouped.get('QF', []) %}
+      <div class="match-box">
+        <div class="match-title">QF {{ item.match.match_no }}</div>
+        <div class="table-wrap">
+          <table class="match-row">
+            <thead>
+              <tr>
+                <th>SEED</th><th>TEAM</th><th>NAME</th><th>R1</th><th>R1+R2</th>
+                <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>QF TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in [item.a, item.b] %}
+              <tr
+                data-round="QF"
+                data-match="{{ item.match.match_no }}"
+                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
+                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
+                <td class="seed-cell">{{ row.seed }}</td>
+                <td class="team-cell">{{ row.team }}</td>
+                <td class="player-name name-cell">
+                  {% if row.athlete %}
+                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
+                  {% else %}
+                    <span class="empty-slot">-</span>
+                  {% endif %}
+                </td>
+                <td class="r1-cell">{{ row.r1 }}</td>
+                <td class="r1r2-cell">{{ row.r1r2 }}</td>
+                {% for s in row.stations %}
+                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
+                {% endfor %}
+                <td class="total-cell">{{ row.total }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <p class="muted-box">ยังไม่มีคู่ Quarter Final</p>
+      {% endfor %}
+    </div>
+
+    <div class="round-col sf">
+      <h2 class="round-title">Semi Final</h2>
+      {% for item in grouped.get('SF', []) %}
+      <div class="match-box top-sf-{{ loop.index }}">
+        <div class="match-title">SF {{ item.match.match_no }}</div>
+        <div class="table-wrap">
+          <table class="match-row">
+            <thead>
+              <tr>
+                <th>TEAM</th><th>NAME</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>SF TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in [item.a, item.b] %}
+              <tr
+                data-round="SF"
+                data-match="{{ item.match.match_no }}"
+                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
+                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
+                <td class="team-cell">{{ row.team }}</td>
+                <td class="player-name name-cell">
+                  {% if row.athlete %}
+                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
+                  {% else %}
+                    <span class="empty-slot">-</span>
+                  {% endif %}
+                </td>
+                {% for s in row.stations %}
+                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
+                {% endfor %}
+                <td class="total-cell">{{ row.total }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <p class="muted-box">ยังไม่มีคู่ Semi Final</p>
+      {% endfor %}
+    </div>
+
+    <div class="round-col final">
+      <h2 class="round-title">Final</h2>
+      {% for item in grouped.get('F', []) %}
+      <div class="match-box top-final">
+        <div class="match-title">Final</div>
+        <div class="table-wrap">
+          <table class="match-row">
+            <thead>
+              <tr>
+                <th>TEAM</th><th>NAME</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>FINAL TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in [item.a, item.b] %}
+              <tr
+                data-round="F"
+                data-match="{{ item.match.match_no }}"
+                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
+                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
+                <td class="team-cell">{{ row.team }}</td>
+                <td class="player-name name-cell">
+                  {% if row.athlete %}
+                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
+                  {% else %}
+                    <span class="empty-slot">-</span>
+                  {% endif %}
+                </td>
+                {% for s in row.stations %}
+                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
+                {% endfor %}
+                <td class="total-cell">{{ row.total }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <p class="muted-box">ยังไม่มีคู่ Final</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateBracketGroup(roundKey, items){
+  items.forEach(item => {
+    ["a", "b"].forEach(slot => {
+      const row = document.querySelector(
+        `tr[data-round="${roundKey}"][data-match="${item.match_no}"][data-slot="${slot}"]`
+      );
+      if (!row) return;
+
+      const rowData = item[slot] || {};
+      const isWinner = item.winner_id && rowData.athlete_id && item.winner_id === rowData.athlete_id;
+
+      row.classList.toggle("winner-row", !!isWinner);
+
+      const seedCell = row.querySelector(".seed-cell");
+      const teamCell = row.querySelector(".team-cell");
+      const nameCell = row.querySelector(".name-cell");
+      const r1Cell = row.querySelector(".r1-cell");
+      const r1r2Cell = row.querySelector(".r1r2-cell");
+      const totalCell = row.querySelector(".total-cell");
+
+      if (seedCell) seedCell.textContent = rowData.seed ?? "";
+      if (teamCell) teamCell.textContent = rowData.team ?? "";
+      if (r1Cell) r1Cell.textContent = rowData.r1 ?? "";
+      if (r1r2Cell) r1r2Cell.textContent = rowData.r1r2 ?? "";
+      if (totalCell) totalCell.textContent = rowData.total ?? 0;
+
+      if (nameCell) {
+        const link = nameCell.querySelector("a");
+        if (link && rowData.name != null) {
+          link.textContent = rowData.name;
+        } else if (!link && rowData.name) {
+          nameCell.innerHTML = rowData.name;
+        }
+      }
+
+      const stationCells = row.querySelectorAll(".station-cell");
+      stationCells.forEach((cell, index) => {
+        cell.textContent = (rowData.stations && rowData.stations[index] != null)
+          ? rowData.stations[index]
+          : 0;
+      });
+    });
+  });
+}
+
+let bracketRefreshing = false;
+
+async function refreshBracketData(){
+  if (bracketRefreshing) return;
+  bracketRefreshing = true;
+
+  try {
+    const response = await fetch('{{ url_for("bracket_data", event_id=event.id) }}', {
+      headers: {'X-Requested-With': 'XMLHttpRequest'}
+    });
+    if (!response.ok) return;
+
+    const data = await response.json();
+    if (data.QF) updateBracketGroup("QF", data.QF);
+    if (data.SF) updateBracketGroup("SF", data.SF);
+    if (data.F) updateBracketGroup("F", data.F);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    bracketRefreshing = false;
+  }
+}
+
+setInterval(() => {
+  if (!document.hidden) refreshBracketData();
+}, 1000);
+
+refreshBracketData();
+</script>
+{% endblock %}

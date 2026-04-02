@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card">
+  <h1>สถิติ — {{ event.name }}</h1>
+  {% if best %}
+  <div class="highlight-box">
+    <h3>คะแนนสูงสุดของประเภทนี้</h3>
+    <p><strong>{{ best.athlete.name }}</strong> — {{ best.athlete.affiliation }}</p>
+    <p>{{ best.total }} คะแนน | 5 คะแนน {{ best.count_5 }} ครั้ง | 3 คะแนน {{ best.count_3 }} ครั้ง</p>
+  </div>
+  {% endif %}
+  <table class="table">
+    <thead><tr><th>อันดับ</th><th>ชื่อ</th><th>สังกัด</th><th>คะแนน</th><th>5 คะแนน</th><th>3 คะแนน</th></tr></thead>
+    <tbody>
+      {% for row in round1_rows %}
+      <tr><td>{{ row.rank }}</td><td>{{ row.athlete.name }}</td><td>{{ row.athlete.affiliation }}</td><td>{{ row.total }}</td><td>{{ row.count_5 }}</td><td>{{ row.count_3 }}</td></tr>
+      {% else %}
+      <tr><td colspan="6">ยังไม่มีข้อมูล</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,336 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card scorecard-theme-{{ theme }}">
+  <div class="section-head responsive-head">
+    <div>
+      <h1>{{ event.name }}</h1>
+      <p class="muted">ประเภทสุดยอดความแม่นยำ (SHOOTING) | {{ round_labels[round_no-1] }}</p>
+    </div>
+    <div class="toolbar responsive-toolbar">
+      <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=round_no) }}">กลับหน้ารวม</a>
+      <a class="btn secondary" href="{{ url_for('bracket', event_id=event.id) }}">หน้าประกบคู่</a>
+      <a class="btn secondary" href="{{ url_for('scorecard_print', athlete_id=athlete.id, round=round_no) }}" target="_blank">
+  พิมพ์แบบฟอร์ม
+</a>
+    </div>
+  </div>
+
+  <form method="post" id="scorecardForm">
+    <div id="scorecardCapture" class="scorecard-sheet print-landscape">
+      <div class="sheet-header">
+        <div class="sheet-logo">LOGO</div>
+        <div class="sheet-title-wrap">
+          <div class="sheet-title-main">{{ event.name }}</div>
+          <div class="sheet-title-sub">ประเภทสุดยอดความแม่นยำ (SHOOTING)</div>
+        </div>
+        <div class="sheet-logo">LOGO</div>
+      </div>
+
+      <table class="scorecard-meta-table">
+        <tr>
+          <th>หมายเลข</th>
+          <td>{{ athlete.bib_no or display_order }}</td>
+          <th>ชื่อ</th>
+          <td>{{ athlete.name }}</td>
+          <th>สังกัด</th>
+          <td>{{ athlete.affiliation }}</td>
+          <th>รอบที่คีย์</th>
+          <td>{{ round_labels[round_no-1] }}</td>
+        </tr>
+      </table>
+
+      <table class="scorecard-main-table scorecard-form-table scorecard-balanced-table">
+        <thead>
+          <tr>
+            <th rowspan="3" class="vertical-side">S<br>H<br>O<br>O<br>T<br>I<br>N<br>G</th>
+
+            {% for station in [1,2,3,4,5] %}
+            <th colspan="5" class="station-head station-color-{{ station }}">
+              <div>สถานีที่ {{ station }}</div>
+              <div class="station-subtitle">
+                {% if station == 1 %}ยิงลูกเดี่ยว{% endif %}
+                {% if station == 2 %}ยิงลูกเหนือเป้า{% endif %}
+                {% if station == 3 %}ยิงลูกกลางขวาง{% endif %}
+                {% if station == 4 %}ยิงลูกขาวเหนือลูกดำ{% endif %}
+                {% if station == 5 %}ยิงลูกเป้า{% endif %}
+              </div>
+            </th>
+            {% endfor %}
+
+            
+            <th rowspan="3" class="vertical-side">P<br>E<br>T<br>A<br>N<br>Q<br>U<br>E</th>
+          </tr>
+
+          <tr>
+            {% for station in [1,2,3,4,5] %}
+            <th colspan="5" class="station-image-cell scorecard-station-image-cell">
+              <img src="{{ url_for('static', filename=station_images[station-1]) }}" alt="station {{ station }}">
+            </th>
+            {% endfor %}
+          </tr>
+
+          
+        </thead>
+
+        <tbody>
+          <tr class="score-head-row">
+            <th class="round-col">รอบแข่งขัน</th>
+            {% for station in [1,2,3,4,5] %}
+            <th class="station-color-{{ station }}">6M</th>
+            <th class="station-color-{{ station }}">7M</th>
+            <th class="station-color-{{ station }}">8M</th>
+            <th class="station-color-{{ station }}">9M</th>
+            <th class="station-color-{{ station }}">รวม</th>
+            {% endfor %}
+            <th class="grand-total-col">คะแนนรวม</th>
+          </tr>
+
+          {% for round_label in round_labels %}
+          {% set r = loop.index %}
+          {% set editable = (r == round_no) %}
+          {% set running = round_station_running_totals.get(r, {}) if round_station_running_totals else {} %}
+
+          <tr class="round-row round-{{ r }} {% if editable %}editable-round{% else %}locked-round{% endif %}">
+            <th class="round-name">{{ round_label }}</th>
+
+            {% for station in [1,2,3,4,5] %}
+              {% for distance in [6,7,8,9] %}
+              {% set item = score_map.get((r, station, distance), {}) %}
+              <td class="station-color-{{ station }} score-cell-wrap">
+                {% if editable %}
+                <select class="score-input auto-score"
+                        data-round="{{ r }}"
+                        data-station="{{ station }}"
+                        data-distance="{{ distance }}">
+                  <option value="" {% if item.get('score','') == '' %}selected{% endif %}></option>
+                  <option value="0" {% if item.get('score','') == 0 or item.get('score','') == '0' %}selected{% endif %}>0</option>
+                  <option value="1" {% if item.get('score','') == 1 or item.get('score','') == '1' %}selected{% endif %}>1</option>
+                  <option value="3" {% if item.get('score','') == 3 or item.get('score','') == '3' %}selected{% endif %}>3</option>
+                  <option value="5" {% if item.get('score','') == 5 or item.get('score','') == '5' %}selected{% endif %}>5</option>
+                </select>
+                <div class="red-under">
+                  <label>
+                    <input type="checkbox"
+                           class="red-check"
+                           data-round="{{ r }}"
+                           data-station="{{ station }}"
+                           data-distance="{{ distance }}"
+                           {% if item.get('is_red_card') %}checked{% endif %}>
+                    แดง
+                  </label>
+                </div>
+                {% else %}
+                <div class="readonly-score">{{ item.get('score','') }}</div>
+                <div class="red-under readonly-red">{% if item.get('is_red_card') %}แดง{% endif %}</div>
+                {% endif %}
+              </td>
+              {% endfor %}
+
+              <td class="station-sum station-color-{{ station }}" id="station-total-{{ r }}-{{ station }}">
+                {{ station_totals.get((r, station), 0) }}
+              </td>
+            {% endfor %}
+
+            <td class="grand-total-cell" id="round-total-{{ r }}">{{ round_totals.get(r, 0) }}</td>
+          </tr>
+
+          <tr class="running-total-row round-{{ r }}">
+            <th class="running-total-label"></th>
+
+            {% for station in [1,2,3,4,5] %}
+              <td class="running-blank station-color-{{ station }}"></td>
+              <td class="running-blank station-color-{{ station }}"></td>
+              <td class="running-blank station-color-{{ station }}"></td>
+              <td class="running-blank station-color-{{ station }}"></td>
+              <td class="running-cumulative-total station-color-{{ station }}"
+                  id="station-running-total-{{ r }}-{{ station }}">
+                {{ running.get(station, 0) }}
+              </td>
+            {% endfor %}
+
+            <td class="round-running-total" id="round-running-total-{{ r }}">
+              {{ round_totals.get(r, 0) }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="scorecard-signatures scorecard-signatures-rounds">
+        {% for round_label in round_labels %}
+        {% set r = loop.index %}
+        {% set sig = round_signatures.get(r) if round_signatures else None %}
+        <div class="signature-round-block {% if r == round_no %}active-sign-round{% endif %}">
+          <div class="signature-round-title">{{ round_label }}</div>
+
+          <div class="signature-round-grid">
+            <div class="signature-col">
+              <div class="signature-title">กรรมการตัดสิน</div>
+              <input class="sig-text-input"
+                     type="text"
+                     name="referee_name_{{ r }}"
+                     value="{{ sig.referee_name if sig else '' }}"
+                     placeholder="พิมพ์ชื่อ หรือเขียนด้านล่าง"
+                     {% if r != round_no %}readonly{% endif %}>
+              <canvas class="sig-canvas {% if r != round_no %}locked-canvas{% endif %}"
+                      data-name="ref_sig_{{ r }}"
+                      {% if r != round_no %}data-locked="1"{% endif %}></canvas>
+              <input type="hidden" name="ref_sig_{{ r }}" id="ref_sig_{{ r }}">
+            </div>
+
+            <div class="signature-col">
+              <div class="signature-title">กรรมการบันทึกคะแนน</div>
+              <input class="sig-text-input"
+                     type="text"
+                     name="recorder_name_{{ r }}"
+                     value="{{ sig.recorder_name if sig else '' }}"
+                     placeholder="พิมพ์ชื่อ หรือเขียนด้านล่าง"
+                     {% if r != round_no %}readonly{% endif %}>
+              <canvas class="sig-canvas {% if r != round_no %}locked-canvas{% endif %}"
+                      data-name="rec_sig_{{ r }}"
+                      {% if r != round_no %}data-locked="1"{% endif %}></canvas>
+              <input type="hidden" name="rec_sig_{{ r }}" id="rec_sig_{{ r }}">
+            </div>
+
+            <div class="signature-col">
+              <div class="signature-title">นักกีฬา</div>
+              <input class="sig-text-input"
+                     type="text"
+                     name="athlete_name_{{ r }}"
+                     value="{{ sig.athlete_name if sig else (athlete.name if r == round_no else '') }}"
+                     placeholder="พิมพ์ชื่อ หรือเขียนด้านล่าง"
+                     {% if r != round_no %}readonly{% endif %}>
+              <canvas class="sig-canvas {% if r != round_no %}locked-canvas{% endif %}"
+                      data-name="ath_sig_{{ r }}"
+                      {% if r != round_no %}data-locked="1"{% endif %}></canvas>
+              <input type="hidden" name="ath_sig_{{ r }}" id="ath_sig_{{ r }}">
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if not is_superadmin %}
+      <div class="bypass-code-box">
+        <label>รหัสข้ามการลงชื่อ (admin)</label>
+        <input type="password" name="bypass_code" placeholder="กรอกเมื่อจำเป็น">
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="toolbar" style="margin-top:16px;">
+      <button type="submit" name="action" value="finish" class="btn">จบการตี</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function setupSignatureCanvas(canvas) {
+    if (canvas.dataset.locked === "1") return;
+
+    const input = document.getElementById(canvas.dataset.name);
+    const ctx = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * ratio;
+    canvas.height = rect.height * ratio;
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#111827';
+
+    let drawing = false;
+
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      const p = e.touches ? e.touches[0] : e;
+      return { x: p.clientX - r.left, y: p.clientY - r.top };
+    }
+
+    function start(e) {
+      drawing = true;
+      const p = pos(e);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      e.preventDefault();
+    }
+
+    function move(e) {
+      if (!drawing) return;
+      const p = pos(e);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      input.value = canvas.toDataURL('image/png');
+      e.preventDefault();
+    }
+
+    function end() {
+      drawing = false;
+      input.value = canvas.toDataURL('image/png');
+    }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+  }
+
+  document.querySelectorAll('.sig-canvas').forEach(setupSignatureCanvas);
+
+  async function autosaveCell(el) {
+    const roundNo = el.dataset.round;
+    const stationNo = el.dataset.station;
+    const distanceM = el.dataset.distance;
+    const red = document.querySelector(`.red-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`)?.checked || false;
+
+    const res = await fetch(`{{ url_for('autosave_scorecard', athlete_id=athlete.id) }}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        round_no: roundNo,
+        station_no: stationNo,
+        distance_m: distanceM,
+        score: el.value,
+        red: red
+      })
+    });
+
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const stationTotalEl = document.getElementById(`station-total-${roundNo}-${stationNo}`);
+    const runningEl = document.getElementById(`station-running-total-${roundNo}-${stationNo}`);
+    const roundTotalEl = document.getElementById(`round-total-${roundNo}`);
+    const roundRunningEl = document.getElementById(`round-running-total-${roundNo}`);
+
+    if (stationTotalEl) stationTotalEl.textContent = data.station_total ?? 0;
+    if (roundTotalEl) roundTotalEl.textContent = data.round_total ?? 0;
+    if (roundRunningEl) roundRunningEl.textContent = data.round_total ?? 0;
+
+    let acc = 0;
+    for (let s = 1; s <= 5; s++) {
+      const stEl = document.getElementById(`station-total-${roundNo}-${s}`);
+      const runEl = document.getElementById(`station-running-total-${roundNo}-${s}`);
+      const val = Number(stEl ? stEl.textContent : 0);
+      acc += val;
+      if (runEl) runEl.textContent = acc;
+    }
+  }
+
+  document.querySelectorAll('.auto-score').forEach(el => {
+    el.addEventListener('change', () => autosaveCell(el));
+  });
+
+  document.querySelectorAll('.red-check').forEach(el => {
+    el.addEventListener('change', () => {
+      const target = document.querySelector(`.auto-score[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`);
+      if (target) autosaveCell(target);
+    });
+  });
+</script>
+{% endblock %}
