@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<section class="card">
+<section class="card narrow">
   <h1>{{ 'แก้ไขอีเวนต์' if is_edit else 'สร้างอีเวนต์ Shooting' }}</h1>
   <form method="post" class="form-grid form-wide">
     <label>ชื่องาน<input name="name" value="{{ event.name if event else '' }}" required></label>

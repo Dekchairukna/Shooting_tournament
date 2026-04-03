@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="grid-2">
+<style>
+  @media (max-width: 768px){
+    .users-page{display:grid;gap:14px;}
+  }
+</style>
+<div class="grid-2 users-page">
   <section class="card">
     <h1>สร้างผู้ใช้ใหม่</h1>
     <form method="post" class="form-grid">
@@ -18,10 +23,12 @@
   </section>
   <section class="card">
     <h2>รายการผู้ใช้</h2>
-    <table class="table">
-      <thead><tr><th>ID</th><th>Username</th><th>Role</th></tr></thead>
-      <tbody>{% for user in users %}<tr><td>{{ user.id }}</td><td>{{ user.username }}</td><td>{{ user.role }}</td></tr>{% endfor %}</tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>ID</th><th>Username</th><th>Role</th></tr></thead>
+        <tbody>{% for user in users %}<tr><td>{{ user.id }}</td><td>{{ user.username }}</td><td>{{ user.role }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
   </section>
 </div>
 {% endblock %}

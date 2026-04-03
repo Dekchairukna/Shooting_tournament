@@ -9,7 +9,8 @@
     <p>{{ best.total }} คะแนน | 5 คะแนน {{ best.count_5 }} ครั้ง | 3 คะแนน {{ best.count_3 }} ครั้ง</p>
   </div>
   {% endif %}
-  <table class="table">
+  <div class="table-wrap">
+    <table class="table">
     <thead><tr><th>อันดับ</th><th>ชื่อ</th><th>สังกัด</th><th>คะแนน</th><th>5 คะแนน</th><th>3 คะแนน</th></tr></thead>
     <tbody>
       {% for row in round1_rows %}
@@ -19,5 +20,6 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 {% endblock %}

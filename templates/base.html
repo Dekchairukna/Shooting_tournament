@@ -163,12 +163,48 @@
         align-items:flex-start;
       }
 
+      .brand{
+        width:100%;
+      }
+
       .navlinks{
         width:100%;
       }
 
       .container{
         padding:12px;
+      }
+    }
+
+    @media (max-width: 640px){
+      .topbar{
+        gap:10px;
+      }
+
+      .brand a{
+        width:100%;
+        font-size:1rem;
+      }
+
+      .navlinks{
+        display:grid;
+        grid-template-columns:1fr;
+        gap:8px;
+      }
+
+      .navlinks a,
+      .badge{
+        width:100%;
+        justify-content:center;
+        text-align:center;
+      }
+
+      .container{
+        padding:10px;
+      }
+
+      .flash{
+        font-size:.95rem;
       }
     }
   </style>

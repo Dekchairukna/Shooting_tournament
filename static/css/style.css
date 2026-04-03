@@ -578,3 +578,108 @@ a{text-decoration:none;color:inherit}.container{max-width:1700px;margin:0 auto;p
     height:42px;
   }
 }
+
+/* ===== global responsive helpers ===== */
+.table-wrap{
+  width:100%;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+
+.responsive-toolbar,
+.toolbar{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.responsive-toolbar .btn,
+.toolbar .btn{
+  min-height:42px;
+}
+
+.form-grid textarea{
+  width:100%;
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  margin-top:6px;
+  font:inherit;
+}
+
+.table th,
+.table td{
+  white-space:nowrap;
+}
+
+.table td form{
+  margin:0;
+}
+
+@media(max-width:1024px){
+  .container{padding:14px}
+  .card{padding:16px}
+  .form-wide,
+  .grid-2,
+  .hero-grid,
+  .scorecard-footer-grid,
+  .three-cols{
+    grid-template-columns:1fr !important;
+  }
+  .section-head,
+  .toolbar{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .section-head > div:last-child,
+  .toolbar > *{
+    width:100%;
+  }
+  .section-head .btn,
+  .toolbar .btn{
+    width:100%;
+    text-align:center;
+  }
+}
+
+@media(max-width:768px){
+  body{font-size:15px}
+  .container{padding:12px}
+  .card{padding:14px;border-radius:14px}
+  .center-card{margin:24px auto}
+  .narrow{max-width:100%}
+  .stats-grid{grid-template-columns:1fr}
+  .table{font-size:14px}
+  .table th,.table td{padding:8px}
+  .qualification-wrap,.qualification-scroll,.scorecard-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .scorecard-sheet{padding:10px;min-width:1120px}
+  .scorecard-meta-table th,.scorecard-meta-table td{font-size:12px;padding:5px 6px}
+  .scorecard-balanced-table th,.scorecard-balanced-table td{font-size:11px}
+  .sig-canvas{height:110px}
+}
+
+@media(max-width:640px){
+  .container{padding:10px}
+  .card{padding:12px;border-radius:12px;margin-bottom:14px}
+  .btn{width:100%;text-align:center}
+  .btn.small{width:auto}
+  .form-grid,
+  .form-wide,
+  .grid-2,
+  .hero-grid,
+  .stats-grid,
+  .three-cols{
+    grid-template-columns:1fr !important;
+  }
+  .table-wrap{border-radius:12px}
+  .table{font-size:13px}
+  .table th,.table td{padding:7px}
+  .status-legend{flex-wrap:wrap}
+  .badge{justify-content:center}
+  .overview-card .toolbar .btn,
+  .responsive-toolbar .btn,
+  .action-group .btn{
+    width:100%;
+  }
+}

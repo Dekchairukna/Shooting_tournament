@@ -119,7 +119,7 @@
     display:inline-flex;
     align-items:center;
     justify-content:center;
-    padding:9px 13px;
+    padding:10px 14px;
     border:none;
     border-radius:12px;
     text-decoration:none;
@@ -129,6 +129,8 @@
     background:#2563eb;
     color:#fff;
     box-shadow:0 8px 18px rgba(37,99,235,.16);
+    min-height:42px;
+    white-space:nowrap;
   }
 
   .btn.secondary{
@@ -147,6 +149,7 @@
 
   .table-wrap{
     overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
     border-radius:18px;
     border:1px solid #e2e8f0;
     background:#fff;
@@ -174,6 +177,7 @@
     text-transform:uppercase;
     font-weight:900;
     border-bottom:1px solid #e2e8f0;
+    z-index:1;
   }
 
   .table th,
@@ -218,6 +222,16 @@
     color:#64748b;
   }
 
+  .mobile-label{
+    display:none;
+    font-size:.78rem;
+    font-weight:800;
+    color:#64748b;
+    margin-bottom:4px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+
   @media (max-width: 1100px){
     .hero-grid{
       grid-template-columns:1fr;
@@ -238,6 +252,10 @@
       font-size:1.55rem;
     }
 
+    .page-subtitle{
+      font-size:.92rem;
+    }
+
     .stats-grid{
       grid-template-columns:1fr 1fr;
       gap:10px;
@@ -253,18 +271,147 @@
     }
 
     .table{
-      min-width:760px;
+      min-width:720px;
       font-size:.9rem;
     }
 
     .section-head{
       align-items:flex-start;
     }
+
+    .btn{
+      font-size:.88rem;
+      padding:9px 12px;
+    }
   }
 
   @media (max-width: 640px){
+    .dashboard-page{
+      gap:12px;
+    }
+
+    .card{
+      padding:14px;
+      border-radius:16px;
+    }
+
+    .page-title{
+      font-size:1.35rem;
+      margin-bottom:10px;
+    }
+
+    .page-subtitle{
+      font-size:.88rem;
+    }
+
     .stats-grid{
       grid-template-columns:1fr;
+    }
+
+    .stat{
+      min-height:auto;
+      padding:14px;
+    }
+
+    .stat span{
+      font-size:1.5rem;
+    }
+
+    .highlight-box{
+      padding:14px;
+    }
+
+    .section-head h2{
+      font-size:1.1rem;
+    }
+
+    .section-head .muted{
+      font-size:.88rem;
+    }
+
+    .section-head > .btn{
+      width:100%;
+    }
+
+    .table-wrap.mobile-cards{
+      overflow:visible;
+      border:none;
+      background:transparent;
+    }
+
+    .table-wrap.mobile-cards .table{
+      min-width:100%;
+      border:0;
+    }
+
+    .table-wrap.mobile-cards .table thead{
+      display:none;
+    }
+
+    .table-wrap.mobile-cards .table,
+    .table-wrap.mobile-cards .table tbody,
+    .table-wrap.mobile-cards .table tr,
+    .table-wrap.mobile-cards .table td{
+      display:block;
+      width:100%;
+    }
+
+    .table-wrap.mobile-cards .table tbody tr{
+      background:#fff;
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      padding:12px;
+      margin-bottom:12px;
+      box-shadow:0 8px 22px rgba(15,23,42,.04);
+    }
+
+    .table-wrap.mobile-cards .table tbody tr:hover{
+      background:#fff;
+    }
+
+    .table-wrap.mobile-cards .table td{
+      border:none;
+      padding:8px 0;
+      white-space:normal;
+    }
+
+    .table-wrap.mobile-cards .table td:last-child{
+      padding-bottom:0;
+    }
+
+    .mobile-label{
+      display:block;
+    }
+
+    .actions-cell{
+      min-width:unset;
+    }
+
+    .action-group{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      margin-top:4px;
+    }
+
+    .action-group .btn,
+    .action-group form,
+    .action-group form button{
+      width:100%;
+    }
+
+    .action-group form{
+      margin:0;
+    }
+  }
+
+  @media (max-width: 420px){
+    .action-group{
+      grid-template-columns:1fr;
+    }
+
+    .btn{
+      min-height:44px;
     }
   }
 </style>
@@ -338,7 +485,7 @@
       {% endif %}
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap mobile-cards">
       <table class="table">
         <thead>
           <tr>
@@ -353,12 +500,28 @@
         <tbody>
           {% for event in events %}
           <tr>
-            <td><strong>{{ event.name }}</strong></td>
-            <td>{{ event.event_group }}</td>
-            <td>{{ event.category }}</td>
-            <td>{{ event.competition_date.strftime('%d/%m/%Y') }}</td>
-            <td>{{ event.lane_count }}</td>
+            <td>
+              <div class="mobile-label">ชื่องาน</div>
+              <strong>{{ event.name }}</strong>
+            </td>
+            <td>
+              <div class="mobile-label">รุ่น</div>
+              {{ event.event_group }}
+            </td>
+            <td>
+              <div class="mobile-label">ประเภท</div>
+              {{ event.category }}
+            </td>
+            <td>
+              <div class="mobile-label">วันแข่งขัน</div>
+              {{ event.competition_date.strftime('%d/%m/%Y') }}
+            </td>
+            <td>
+              <div class="mobile-label">สนาม</div>
+              {{ event.lane_count }}
+            </td>
             <td class="actions-cell">
+              <div class="mobile-label">จัดการ</div>
               <div class="action-group">
                 <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">หน้ารวม</a>
                 <a class="btn secondary" href="{{ url_for('event_stats', event_id=event.id) }}">สถิติ</a>
@@ -366,7 +529,7 @@
                 {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
                 <a class="btn secondary" href="{{ url_for('manage_athletes', event_id=event.id) }}">นักกีฬา</a>
                 <a class="btn secondary" href="{{ url_for('edit_event', event_id=event.id) }}">แก้ไข</a>
-                <form method="post" action="{{ url_for('delete_event', event_id=event.id) }}" style="display:inline" onsubmit="return confirm('ลบอีเวนต์นี้?');">
+                <form method="post" action="{{ url_for('delete_event', event_id=event.id) }}" onsubmit="return confirm('ลบอีเวนต์นี้?');">
                   <button class="btn danger" type="submit">ลบ</button>
                 </form>
                 {% endif %}
