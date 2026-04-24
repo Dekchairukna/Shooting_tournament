@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h1>{{ event.name }}</h1>
+      <p class="muted">เพิ่มนักกีฬาและจัดลำดับยิง</p>
+    </div>
+    <div>
+      <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">ไปหน้ารวม</a>
+    </div>
+  </div>
+  <div class="grid-2">
+    <form method="post" class="form-grid">
+      <label>ชื่อ<input name="name" required></label>
+      <label>สังกัด<input name="affiliation" required></label>
+      <p class="muted" style="grid-column:1/-1; margin:0;">หมายเลขและลำดับรวม ระบบสร้างให้อัตโนมัติ</p>
+      <button class="btn" type="submit">เพิ่มนักกีฬา</button>
+    </form>
+    <div class="card muted-box">
+      <h3>การกระจายสนามอัตโนมัติ</h3>
+      <p>สนาม = วนตามจำนวนสนาม เช่น 1, 2, 3, 4 แล้วกลับไป 1</p>
+      <form method="post" action="{{ url_for('randomize_athletes', event_id=event.id) }}">
+        <button class="btn secondary" type="submit">สุ่มลำดับทั้งหมด</button>
+      </form>
+    </div>
+  </div>
+  <div class="card muted-box" style="margin-top:1rem;">
+    <h3>นำเข้ารายชื่อนักกีฬาจาก Excel</h3>
+    <p class="muted">ไฟล์ต้องเป็น .xlsx และต้องมี 2 คอลัมน์คือ <strong>ชื่อ</strong> และ <strong>สังกัด</strong></p>
+    <form method="post" action="{{ url_for('import_athletes_excel', event_id=event.id) }}" enctype="multipart/form-data" class="form-grid">
+      <label style="grid-column:1/-1;">เลือกไฟล์ Excel<input type="file" name="excel_file" accept=".xlsx" required></label>
+      <div style="grid-column:1/-1; display:flex; gap:.75rem; flex-wrap:wrap;">
+        <button class="btn" type="submit">อัปโหลด Excel</button>
+        <a class="btn secondary" href="{{ url_for('athletes_import_template') }}">ดาวน์โหลดไฟล์ตัวอย่าง</a>
+      </div>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+    <thead><tr><th>No</th><th>หมายเลข</th><th>ชื่อ</th><th>สังกัด</th><th>สนาม</th><th>ลำดับในสนาม</th><th>จัดการ</th></tr></thead>
+    <tbody>
+      {% for athlete in athletes %}
+      <tr>
+        <td>{{ athlete.start_order }}</td>
+        <td>{{ athlete.bib_no }}</td>
+        <td>{{ athlete.name }}</td>
+        <td>{{ athlete.affiliation }}</td>
+        <td>{{ athlete.lane_no }}</td>
+        <td>{{ athlete.lane_order }}</td>
+        <td>
+          <form method="post" action="{{ url_for('delete_athlete', athlete_id=athlete.id) }}" onsubmit="return confirm('ยืนยันลบ ' + {{ athlete.name|tojson }} + ' ?');">
+            <button type="submit" class="btn secondary" style="background:#dc2626; border-color:#dc2626; color:#fff;">ลบ</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">ยังไม่มีนักกีฬา</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

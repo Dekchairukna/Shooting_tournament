@@ -1,0 +1,353 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .print-tools {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .sheet {
+    border: 3px solid #000;
+    padding: 8px;
+    margin-bottom: 8px;
+    background: #fff;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .header-left {
+    flex: 1;
+  }
+
+  .event-name {
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+
+  .athlete-meta {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px 16px;
+    font-size: 20px;
+    margin-top: 4px;
+  }
+
+  .meta-item {
+    line-height: 1.34;
+  }
+
+  .round-table2 {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 14px;
+    
+  }
+
+   .round-table  {
+    width: 100%;
+    margin-top: 12px;
+    border: 1px solid #000;
+    padding: 8px;
+  }
+
+  .round-table th,
+  .round-table td {
+    border: 1px solid #000;
+    padding: 6px 4px;
+    text-align: center;
+    vertical-align: middle;
+    padding: 8px;
+  }
+
+  .round-table thead th {
+    background: #f5f5f5;
+    font-weight: 900;
+    padding: 8px;
+  }
+
+  .round-label-col {
+    height: 30px;
+    min-width: 120px;
+    font-weight: 800;
+    text-align: left !important;
+    padding-left: 8px !important;
+    white-space: nowrap;
+  }
+
+  .station-group {
+    font-size: 13px;
+  }
+
+  .distance-col {
+    min-width: 34px;
+  }
+
+  .station-total-col {
+    min-width: 45px;
+    font-weight: 800;
+  }
+
+  .grand-total-col,
+  .rank-col {
+    min-width: 38px;
+    font-weight: 900;
+  }
+
+  .rank-col2 {
+    min-width: 60px;
+    font-weight: 900;
+  }
+
+  .cumulative-row td {
+    background: #fafafa;
+    font-weight: 800;
+  }
+
+  .cumulative-row .round-label-col {
+    color: #374151;
+  }
+
+  .signature-block {
+    margin-top: 12px;
+    border: 1px solid #000;
+    padding: 8px;
+  }
+
+  .signature-title {
+    font-weight: 900;
+    margin-bottom: 6px;
+  }
+
+  .signature-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr 1fr;
+    gap: 0;
+    font-size: 14px;
+  }
+
+  .signature-grid>div {
+    border: 1px solid #000;
+    padding: 8px 6px;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+  }
+
+  .signature-head {
+    font-weight: 800;
+    background: #f5f5f5;
+  }
+
+  @media print {
+
+    .topbar,
+    .print-tools {
+      display: none !important;
+    }
+
+    .container {
+      max-width: none !important;
+      width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    body {
+      margin: 0;
+      font-family: Tahoma, sans-serif;
+    }
+
+    .sheet {
+      border: 2px solid #000;
+      padding: 10px;
+      margin-bottom: 12px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+  }
+
+  .station-group {
+    font-size: 13px;
+    background: #f5f5f5;
+    font-weight: 900;
+  }
+
+  .station-image-cell {
+    background: #fff;
+    padding: 6px 4px !important;
+  }
+
+  .station-image-cell img {
+    display: block;
+    margin: 0 auto;
+    max-height: 56px;
+    width: auto;
+    object-fit: contain;
+  }
+</style>
+
+<div class="print-tools">
+  <a class="btn secondary" href="{{ url_for('scorecard', athlete_id=athlete.id, round=round_no) }}">← กลับ scorecard</a>
+  <button class="btn secondary" onclick="window.print()">พิมพ์</button>
+</div>
+
+<div class="sheet">
+  <div class="header">
+    <div class="header-left">
+      <div class="event-name">{{ event.name }}</div>
+      <div class="event-name">
+        SHOOTING
+        &nbsp;&nbsp; {{ event.category }}
+      </div>
+
+      <div class="athlete-meta">
+        <div class="meta-item"><strong>ลำดับการตี:</strong> {{ display_order or athlete.start_order }}</div>
+        <div class="meta-item"><strong>สังกัด:</strong> {{ athlete.affiliation }}</div>
+        <div class="meta-item"><strong>ชื่อ:</strong> {{ athlete.name }}</div>
+        <div class="meta-item"><strong>สนาม:</strong> {{ display_lane_no or athlete.lane_no }}/{{ display_lane_order or
+          athlete.lane_order }}</div>
+      </div>
+    </div>
+  </div>
+
+  <table class="round-table">
+    <thead>
+      <tr>
+        <th rowspan="3" class="round-label-col">รอบแข่งขัน</th>
+        {% for st in [1,2,3,4,5] %}
+        <th colspan="5" class="station-group">Atelier {{ st }}</th>
+        {% endfor %}
+        <th rowspan="3" class="grand-total-col">คะแนนรวม</th>
+        <th rowspan="3" class="rank-col">ลำดับ</th>
+        <th rowspan="3" class="rank-col2">ลายเซ็นนักกีฬา</th>
+      </tr>
+
+      <tr>
+        {% for st in [1,2,3,4,5] %}
+        <th colspan="5" class="station-image-cell">
+          <img src="{{ url_for('static', filename='station_' ~ st ~ '.png') }}" alt="Station {{ st }}">
+        </th>
+        {% endfor %}
+      </tr>
+
+      <tr>
+        {% for st in [1,2,3,4,5] %}
+        <th class="distance-col">6M</th>
+        <th class="distance-col">7M</th>
+        <th class="distance-col">8M</th>
+        <th class="distance-col">9M</th>
+        <th class="distance-col">รวม</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for rn in [1,2,3,4,5] %}
+      {% set sig = round_signatures[rn] %}
+      {% set has_started = sig and (sig.started_at or sig.finished_at) %}
+
+      <tr>
+        <td class="round-label-col">{{ round_labels[rn-1] }}</td>
+
+        {% for st in [1,2,3,4,5] %}
+        <td>{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</td>
+        <td>{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</td>
+        <td>{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</td>
+        <td>{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</td>
+        <td class="station-total-col">
+          {{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}
+        </td>
+        {% endfor %}
+
+        <td class="grand-total-col">
+          {{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}
+        </td>
+        <td class="rank-col">
+
+        </td>
+
+        <td class="rank-col">
+
+        </td>
+      </tr>
+
+      <tr class="cumulative-row">
+        <td class="round-label-col"></td>
+
+        {% set ns = namespace(running=0) %}
+        {% for st in [1,2,3,4,5] %}
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="station-total-col">
+          {% if has_started %}
+          {% set ns.running = ns.running + (station_totals[(rn, st)] if station_totals[(rn, st)] is defined else 0) %}
+          {{ ns.running }}
+          {% else %}
+          {{ '' }}
+          {% endif %}
+        </td>
+
+        {% endfor %}
+
+        <td class="grand-total-col">
+          {{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}
+        </td>
+        <td class="rank-col">{{ round_ranks[rn] if has_started and round_ranks[rn] is defined and round_ranks[rn] != ''
+          else '' }}</td>
+        <td class="rank-col">
+          {% if round_signatures[rn] and round_signatures[rn].athlete_signature %}
+          <img src="{{ round_signatures[rn].athlete_signature }}" alt="ลายเซ็นนักกีฬา" class="signature-image-print">
+          {% else %}
+          <div>{{ round_signatures[rn].athlete_name or '' if round_signatures[rn] else '' }}</div>
+          {% endif %}
+        </td>
+
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="signature-block">
+    <div class="signature-title">ลายเซ็น / ผู้เกี่ยวข้องแต่ละรอบ</div>
+
+    <div class="signature-grid">
+      <div class="signature-head">รอบ</div>
+
+      <div class="signature-head">กรรมการ</div>
+      <div class="signature-head">ผู้บันทึก</div>
+
+      {% for rn in [1,2,3,4,5] %}
+      <div><strong>{{ round_labels[rn-1] }}</strong></div>
+
+      <div>
+        {% if round_signatures[rn] and round_signatures[rn].referee_signature %}
+        <img src="{{ round_signatures[rn].referee_signature }}" alt="ลายเซ็นกรรมการ" class="signature-image-print">
+        {% else %}
+        {{ round_signatures[rn].referee_name or '' if round_signatures[rn] else '' }}
+        {% endif %}
+      </div>
+      <div>
+        {% if round_signatures[rn] and round_signatures[rn].recorder_signature %}
+        <img src="{{ round_signatures[rn].recorder_signature }}" alt="ลายเซ็นผู้บันทึก" class="signature-image-print">
+        {% else %}
+        {{ round_signatures[rn].recorder_name or '' if round_signatures[rn] else '' }}
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

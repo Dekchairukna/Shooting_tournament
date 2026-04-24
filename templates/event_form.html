@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card narrow">
+  <h1>{{ 'แก้ไขอีเวนต์' if is_edit else 'สร้างอีเวนต์ Shooting' }}</h1>
+  <form method="post" class="form-grid form-wide">
+    <label>ชื่องาน<input name="name" value="{{ event.name if event else '' }}" required></label>
+    <label>รุ่นแข่งขัน
+      <select name="event_group">
+        {% for v in ['ทั่วไป','อาวุโส','เยาวชน'] %}
+        <option value="{{ v }}" {% if event and event.event_group == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>ประเภท
+      <select name="category">
+        {% for v in ['ชาย','หญิง','ผสม'] %}
+        <option value="{{ v }}" {% if event and event.category == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>วันแข่งขัน<input type="date" name="competition_date" value="{{ event.competition_date.isoformat() if event else '' }}" required></label>
+    <label>จำนวนสนาม<input type="number" min="1" name="lane_count" value="{{ event.lane_count if event else 4 }}" required></label>
+    <label>จากรอบแรกเข้ารอบถัดไปทันที กี่คน<input type="number" min="0" name="direct_qualifiers" value="{{ event.direct_qualifiers if event else 4 }}" required></label>
+    <label>มีรอบ 2 หรือไม่
+      <select name="has_round_two">
+        <option value="yes" {% if not event or event.has_round_two %}selected{% endif %}>มี</option>
+        <option value="no" {% if event and not event.has_round_two %}selected{% endif %}>ไม่มี</option>
+      </select>
+    </label>
+    <label>ถ้ามีรอบ 2 ให้ตีถึงลำดับที่เท่าไหร่<input type="number" min="1" name="round_two_cutoff_rank" value="{{ event.round_two_cutoff_rank if event else 16 }}"></label>
+    <label>จากรอบ 2 คัดเข้ารอบต่อกี่คน<input type="number" min="1" name="round_two_advancers" value="{{ event.round_two_advancers if event else 4 }}"></label>
+    <label>รอบถัดไปคือรอบอะไร
+      <select name="next_round_label">
+        {% for v in ['รอบ 8 คน','รอบ 4 คน','รอบรองชนะเลิศ'] %}
+        <option value="{{ v }}" {% if event and event.next_round_label == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <input type="hidden" name="location" value="{{ event.location if event else '' }}">
+    <button class="btn" type="submit">{{ 'บันทึกการแก้ไข' if is_edit else 'สร้างอีเวนต์' }}</button>
+  </form>
+</section>
+{% endblock %}

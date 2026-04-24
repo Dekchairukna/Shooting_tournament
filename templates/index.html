@@ -1,0 +1,549 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .dashboard-page{
+    display:grid;
+    gap:18px;
+  }
+
+  .hero-grid{
+    display:grid;
+    grid-template-columns:1.15fr .95fr;
+    gap:18px;
+    align-items:stretch;
+  }
+
+  .card{
+    background:linear-gradient(180deg,#ffffff,#fbfdff);
+    border:1px solid #e2e8f0;
+    border-radius:22px;
+    padding:20px;
+    box-shadow:0 10px 28px rgba(15,23,42,.05);
+  }
+
+  .hero-card{
+    position:relative;
+    overflow:hidden;
+  }
+
+  .hero-card::after{
+    content:"";
+    position:absolute;
+    inset:auto -30px -30px auto;
+    width:160px;
+    height:160px;
+    background:radial-gradient(circle, rgba(37,99,235,.12), transparent 65%);
+    pointer-events:none;
+  }
+
+  .page-title{
+    margin:0 0 14px;
+    font-size:1.9rem;
+    line-height:1.1;
+    color:#0f172a;
+  }
+
+  .page-subtitle{
+    margin:-4px 0 0;
+    color:#64748b;
+    font-size:.98rem;
+  }
+
+  .stats-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:14px;
+    margin-top:18px;
+  }
+
+  .stat{
+    border:1px solid #dbeafe;
+    background:linear-gradient(180deg,#eff6ff,#ffffff);
+    border-radius:18px;
+    padding:18px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    min-height:110px;
+    justify-content:center;
+  }
+
+  .stat span{
+    font-size:2rem;
+    font-weight:900;
+    color:#1d4ed8;
+    line-height:1;
+  }
+
+  .stat small{
+    font-size:.95rem;
+    color:#475569;
+    font-weight:700;
+  }
+
+  .highlight-box{
+    margin-top:18px;
+    padding:16px 18px;
+    border-radius:18px;
+    border:1px solid #fde68a;
+    background:linear-gradient(180deg,#fffdf2,#fff8db);
+  }
+
+  .highlight-box h3{
+    margin:0 0 8px;
+    font-size:1rem;
+    color:#92400e;
+  }
+
+  .highlight-box p{
+    margin:4px 0;
+    color:#44403c;
+  }
+
+  .section-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+
+  .section-head h2{
+    margin:0;
+    font-size:1.25rem;
+    color:#0f172a;
+  }
+
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:10px 14px;
+    border:none;
+    border-radius:12px;
+    text-decoration:none;
+    font-weight:800;
+    font-size:.92rem;
+    cursor:pointer;
+    background:#2563eb;
+    color:#fff;
+    box-shadow:0 8px 18px rgba(37,99,235,.16);
+    min-height:42px;
+    white-space:nowrap;
+  }
+
+  .btn.secondary{
+    background:#fff;
+    color:#334155;
+    border:1px solid #cbd5e1;
+    box-shadow:none;
+  }
+
+  .btn.danger{
+    background:#fff1f2;
+    color:#be123c;
+    border:1px solid #fecdd3;
+    box-shadow:none;
+  }
+
+  .table-wrap{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    border-radius:18px;
+    border:1px solid #e2e8f0;
+    background:#fff;
+  }
+
+  .table{
+    width:100%;
+    min-width:820px;
+    border-collapse:separate;
+    border-spacing:0;
+    font-size:.94rem;
+  }
+
+  .table.compact{
+    min-width:unset;
+  }
+
+  .table thead th{
+    position:sticky;
+    top:0;
+    background:#f8fafc;
+    color:#334155;
+    font-size:.83rem;
+    letter-spacing:.02em;
+    text-transform:uppercase;
+    font-weight:900;
+    border-bottom:1px solid #e2e8f0;
+    z-index:1;
+  }
+
+  .table th,
+  .table td{
+    padding:12px 14px;
+    text-align:left;
+    border-bottom:1px solid #eef2f7;
+    vertical-align:middle;
+    white-space:nowrap;
+  }
+
+  .table tbody tr:nth-child(even){
+    background:#fcfdff;
+  }
+
+  .table tbody tr:hover{
+    background:#f8fbff;
+  }
+
+  .table tbody tr:last-child td{
+    border-bottom:none;
+  }
+
+  .actions-cell{
+    white-space:normal;
+    min-width:250px;
+  }
+
+  .action-group{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  .empty-row{
+    text-align:center !important;
+    color:#64748b;
+    padding:18px !important;
+  }
+
+  .muted{
+    color:#64748b;
+  }
+
+  .mobile-label{
+    display:none;
+    font-size:.78rem;
+    font-weight:800;
+    color:#64748b;
+    margin-bottom:4px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+
+  @media (max-width: 1100px){
+    .hero-grid{
+      grid-template-columns:1fr;
+    }
+  }
+
+  @media (max-width: 900px){
+    .dashboard-page{
+      gap:14px;
+    }
+
+    .card{
+      padding:16px;
+      border-radius:18px;
+    }
+
+    .page-title{
+      font-size:1.55rem;
+    }
+
+    .page-subtitle{
+      font-size:.92rem;
+    }
+
+    .stats-grid{
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .stat{
+      min-height:96px;
+      padding:14px;
+    }
+
+    .stat span{
+      font-size:1.7rem;
+    }
+
+    .table{
+      min-width:720px;
+      font-size:.9rem;
+    }
+
+    .section-head{
+      align-items:flex-start;
+    }
+
+    .btn{
+      font-size:.88rem;
+      padding:9px 12px;
+    }
+  }
+
+  @media (max-width: 640px){
+    .dashboard-page{
+      gap:12px;
+    }
+
+    .card{
+      padding:14px;
+      border-radius:16px;
+    }
+
+    .page-title{
+      font-size:1.35rem;
+      margin-bottom:10px;
+    }
+
+    .page-subtitle{
+      font-size:.88rem;
+    }
+
+    .stats-grid{
+      grid-template-columns:1fr;
+    }
+
+    .stat{
+      min-height:auto;
+      padding:14px;
+    }
+
+    .stat span{
+      font-size:1.5rem;
+    }
+
+    .highlight-box{
+      padding:14px;
+    }
+
+    .section-head h2{
+      font-size:1.1rem;
+    }
+
+    .section-head .muted{
+      font-size:.88rem;
+    }
+
+    .section-head > .btn{
+      width:100%;
+    }
+
+    .table-wrap.mobile-cards{
+      overflow:visible;
+      border:none;
+      background:transparent;
+    }
+
+    .table-wrap.mobile-cards .table{
+      min-width:100%;
+      border:0;
+    }
+
+    .table-wrap.mobile-cards .table thead{
+      display:none;
+    }
+
+    .table-wrap.mobile-cards .table,
+    .table-wrap.mobile-cards .table tbody,
+    .table-wrap.mobile-cards .table tr,
+    .table-wrap.mobile-cards .table td{
+      display:block;
+      width:100%;
+    }
+
+    .table-wrap.mobile-cards .table tbody tr{
+      background:#fff;
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      padding:12px;
+      margin-bottom:12px;
+      box-shadow:0 8px 22px rgba(15,23,42,.04);
+    }
+
+    .table-wrap.mobile-cards .table tbody tr:hover{
+      background:#fff;
+    }
+
+    .table-wrap.mobile-cards .table td{
+      border:none;
+      padding:8px 0;
+      white-space:normal;
+    }
+
+    .table-wrap.mobile-cards .table td:last-child{
+      padding-bottom:0;
+    }
+
+    .mobile-label{
+      display:block;
+    }
+
+    .actions-cell{
+      min-width:unset;
+    }
+
+    .action-group{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      margin-top:4px;
+    }
+
+    .action-group .btn,
+    .action-group form,
+    .action-group form button{
+      width:100%;
+    }
+
+    .action-group form{
+      margin:0;
+    }
+  }
+
+  @media (max-width: 420px){
+    .action-group{
+      grid-template-columns:1fr;
+    }
+
+    .btn{
+      min-height:44px;
+    }
+  }
+</style>
+
+<div class="dashboard-page">
+  <div class="hero-grid">
+    <section class="card hero-card">
+      <h1 class="page-title">แดชบอร์ด</h1>
+      <p class="page-subtitle">ภาพรวมของรายการแข่งขันและนักกีฬาในระบบ</p>
+
+      <div class="stats-grid">
+        <div class="stat">
+          <span>{{ stats.events_count }}</span>
+          <small>อีเวนต์</small>
+        </div>
+        <div class="stat">
+          <span>{{ stats.athletes_count }}</span>
+          <small>นักกีฬา</small>
+        </div>
+      </div>
+
+      {% if stats.top_score %}
+      <div class="highlight-box">
+        <h3>คะแนนสูงสุดในระบบ</h3>
+        <p><strong>{{ stats.top_score.athlete.name }}</strong> — {{ stats.top_score.athlete.affiliation }}</p>
+        <p>{{ stats.top_score.total }} คะแนน</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>สถิติสังกัดที่ทำคะแนนดีที่สุด</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table compact">
+          <thead>
+            <tr>
+              <th>สังกัด</th>
+              <th>นักกีฬา</th>
+              <th>คะแนนสูงสุด</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in stats.top_affiliations %}
+            <tr>
+              <td>{{ row.athlete.affiliation }}</td>
+              <td>{{ row.athlete.name }}</td>
+              <td>{{ row.total }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="3" class="empty-row">ยังไม่มีข้อมูล</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="section-head">
+      <div>
+        <h2>รายการแข่งขัน</h2>
+        <div class="muted">เลือกดูหน้ารวม สถิติ และจัดการนักกีฬาได้จากตารางนี้</div>
+      </div>
+
+      {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
+      <a class="btn" href="{{ url_for('create_event') }}">+ สร้างอีเวนต์</a>
+      {% endif %}
+    </div>
+
+    <div class="table-wrap mobile-cards">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ชื่องาน</th>
+            <th>รุ่น</th>
+            <th>ประเภท</th>
+            <th>วันแข่งขัน</th>
+            <th>สนาม</th>
+            <th>จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr>
+            <td>
+              <div class="mobile-label">ชื่องาน</div>
+              <strong>{{ event.name }}</strong>
+            </td>
+            <td>
+              <div class="mobile-label">รุ่น</div>
+              {{ event.event_group }}
+            </td>
+            <td>
+              <div class="mobile-label">ประเภท</div>
+              {{ event.category }}
+            </td>
+            <td>
+              <div class="mobile-label">วันแข่งขัน</div>
+              {{ event.competition_date.strftime('%d/%m/%Y') }}
+            </td>
+            <td>
+              <div class="mobile-label">สนาม</div>
+              {{ event.lane_count }}
+            </td>
+            <td class="actions-cell">
+              <div class="mobile-label">จัดการ</div>
+              <div class="action-group">
+                <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">หน้ารวม</a>
+                <a class="btn secondary" href="{{ url_for('event_stats', event_id=event.id) }}">สถิติ</a>
+
+                {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
+                <a class="btn secondary" href="{{ url_for('manage_athletes', event_id=event.id) }}">นักกีฬา</a>
+                <a class="btn secondary" href="{{ url_for('edit_event', event_id=event.id) }}">แก้ไข</a>
+                <form method="post" action="{{ url_for('delete_event', event_id=event.id) }}" onsubmit="return confirm('ลบอีเวนต์นี้?');">
+                  <button class="btn danger" type="submit">ลบ</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="empty-row">ยังไม่มีอีเวนต์</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

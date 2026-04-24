@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+  .print-select-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 14px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .05);
+  }
+
+  .print-select-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .print-select-head h1 {
+    margin: 0;
+    font-size: 1.15rem;
+  }
+
+  .muted {
+    color: #64748b;
+    font-size: .85rem;
+    margin-top: 4px;
+  }
+
+  .round-select-box,
+  .select-tools,
+  .print-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .round-select-box {
+    margin-bottom: 12px;
+  }
+
+  .round-select-box select {
+    height: 36px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 0 10px;
+    font-weight: 800;
+  }
+
+  .athlete-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .athlete-row {
+    display: grid;
+    grid-template-columns: 34px 70px minmax(180px, 1fr) minmax(180px, 1fr);
+    gap: 8px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+    cursor: pointer;
+  }
+
+  .athlete-row:hover {
+    background: #eff6ff;
+  }
+
+  .athlete-row input {
+    transform: scale(1.2);
+  }
+
+  .athlete-order {
+    font-weight: 900;
+    color: #1d4ed8;
+  }
+
+  .athlete-name {
+    font-weight: 900;
+  }
+
+  .athlete-affiliation {
+    color: #475569;
+    font-weight: 700;
+  }
+
+  .print-actions {
+    margin-top: 14px;
+  }
+
+  .select-tools {
+    margin-top: 8px;
+  }
+
+  @media (max-width: 767px) {
+    .athlete-row {
+      grid-template-columns: 30px 52px 1fr;
+    }
+
+    .athlete-affiliation {
+      grid-column: 3;
+    }
+  }
+</style>
+
+<section class="print-select-card">
+  <div class="print-select-head">
+    <div>
+      <h1>เลือกพิมพ์ Scorecard</h1>
+      <div class="muted">
+        {{ event.name }} | {{ event.event_group }} | {{ event.category }}
+      </div>
+    </div>
+
+    <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=round_no) }}">
+      กลับหน้ารวม
+    </a>
+  </div>
+
+  <form method="get" class="round-select-box">
+    <label><strong>เลือกรอบ:</strong></label>
+    <select name="round">
+      {% for label in round_labels %}
+      {% set rn = loop.index %}
+      <option value="{{ rn }}" {% if rn == round_no %}selected{% endif %}>
+        {{ label }}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn secondary">เปลี่ยนรอบ</button>
+  </form>
+
+  <form method="post">
+    <input type="hidden" name="round" value="{{ round_no }}">
+
+    <div class="select-tools">
+      <button type="button" class="btn secondary" onclick="checkAllAthletes(true)">เลือกทั้งหมด</button>
+      <button type="button" class="btn secondary" onclick="checkAllAthletes(false)">ยกเลิกทั้งหมด</button>
+    </div>
+
+    <div class="athlete-list">
+      {% for athlete in athletes %}
+      <label class="athlete-row">
+        <input type="checkbox" name="athlete_ids" value="{{ athlete.id }}">
+        <div class="athlete-order">#{{ athlete.start_order }}</div>
+        <div class="athlete-name">{{ athlete.name }}</div>
+        <div class="athlete-affiliation">{{ athlete.affiliation }}</div>
+      </label>
+      {% else %}
+      <div class="muted">ยังไม่มีนักกีฬาในรอบนี้</div>
+      {% endfor %}
+    </div>
+
+    <div class="print-actions">
+      <button type="submit" name="print_mode" value="selected" class="btn">พิมพ์คนที่เลือก</button>
+      <button type="submit" name="print_mode" value="all" class="btn secondary">พิมพ์ทั้งหมดในรอบนี้</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  function checkAllAthletes(checked) {
+    document.querySelectorAll('input[name="athlete_ids"]').forEach(input => {
+      input.checked = checked;
+    });
+  }
+</script>
+
+{% endblock %}
