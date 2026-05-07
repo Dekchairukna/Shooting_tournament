@@ -88,8 +88,8 @@
     border: 1px solid rgba(15, 23, 42, .05);
   }
 
-  .legend.waiting { background: #eef2ff; color: #4338ca; }
-  .legend.active { background: #dbeafe; color: #1d4ed8; }
+  .legend.waiting { background: #f8fafc; color: #475569; }
+  .legend.active { background: #fef9c3; color: #854d0e; }
   .legend.finished { background: #dcfce7; color: #166534; }
 
   .qualification-wrap {
@@ -217,6 +217,37 @@
     background: #fee2e2 !important;
   }
 
+  /* สีแถวตามการคีย์คะแนน: ให้ทับสีเข้ารอบ/ตกรอบ เพื่อเห็นสถานะล่าสุดชัดเจน */
+  .qualification-table tbody tr.status-active,
+  .qualification-table tbody tr.status-active > td {
+    background: #fef9c3 !important; /* เหลืองพาสเทล: มีการคีย์/กำลังตี */
+  }
+
+  .qualification-table tbody tr.status-finished,
+  .qualification-table tbody tr.status-finished > td {
+    background: #dcfce7 !important; /* เขียวพาสเทล: คีย์และบันทึกแล้ว */
+  }
+
+  .qualification-table tbody tr.status-waiting,
+  .qualification-table tbody tr.status-waiting > td {
+    background: transparent;
+  }
+
+  .qualification-table tbody tr.status-waiting:nth-child(even),
+  .qualification-table tbody tr.status-waiting:nth-child(even) > td {
+    background: #fcfdff;
+  }
+
+  .qualification-table tbody tr.status-active:hover,
+  .qualification-table tbody tr.status-active:hover > td {
+    background: #fef08a !important;
+  }
+
+  .qualification-table tbody tr.status-finished:hover,
+  .qualification-table tbody tr.status-finished:hover > td {
+    background: #bbf7d0 !important;
+  }
+
   .text-left {
     text-align: left !important;
   }
@@ -241,20 +272,20 @@
 /* ให้หัวคอลัมน์สังกัด/ชื่อไม่บีบ */
 .col-affiliation {
   width: auto !important;
-  min-width: 160px !important;
+  min-width: 120px !important;
   max-width: none !important;
 }
 
 .col-name {
   width: auto !important;
-  min-width: 260px !important;
+  min-width: 200px !important;
   max-width: none !important;
 }
 
 /* ให้ข้อมูลจริงยาวตามชื่อ/สังกัด */
 .cell-affiliation {
   width: max-content !important;
-  min-width: 160px !important;
+  min-width: 120px !important;
   max-width: none !important;
   white-space: nowrap !important;
   word-break: normal !important;
@@ -269,7 +300,7 @@
 
 .cell-name {
   width: max-content !important;
-  min-width: 260px !important;
+  min-width: 200px !important;
   max-width: none !important;
   white-space: nowrap !important;
   word-break: normal !important;
@@ -293,32 +324,32 @@
 /* iPad */
 @media (min-width: 768px) and (max-width: 1180px) {
   .qualification-table {
-    width: max-content !important;
+    width: auto !important;
     min-width: 100% !important;
     font-size: .6rem !important;
   }
 
   .col-affiliation,
   .cell-affiliation {
-    min-width: 160px !important;
+    min-width: auto !important;
     max-width: none !important;
     font-size: .62rem !important;
   }
 
   .col-name,
   .cell-name {
-    min-width: 260px !important;
+    min-width: auto !important;
     max-width: none !important;
     font-size: .68rem !important;
   }
 
   .score-col {
-    min-width: 22px !important;
+    min-width: 18px !important;
     font-size: .58rem !important;
   }
 
   .score-total-col {
-    min-width: 28px !important;
+    min-width: 22px !important;
     font-size: .58rem !important;
   }
 }
@@ -344,8 +375,8 @@
 }
 
   .overall-rank {
-    font-weight: 900;
-    color: #1d4ed8;
+    font-weight: 1200;
+    color: #ff0000;
   }
 
   .status-pill {
@@ -365,8 +396,8 @@
   }
 
   .status-pill.active {
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: #fee5c3;
+    color: #854d0e;
   }
 
   .status-pill.finished {
@@ -733,9 +764,9 @@
     </div>
 
     <div class="status-legend">
-      <span class="legend waiting">รอคิว</span>
-      <span class="legend active">กำลังตี</span>
-      <span class="legend finished">ตีเสร็จแล้ว</span>
+      <span class="legend waiting">ยังไม่คีย์</span>
+      <span class="legend active">มีการคีย์แล้ว / กำลังตี</span>
+      <span class="legend finished">คีย์และบันทึกแล้ว</span>
       <span class="legend" style="background:#dbeafe">เข้ารอบตรง</span>
       <span class="legend" style="background:#dcfce7">ผ่านจากรอบ 2</span>
       <span class="legend" style="background:#fef3c7">มีสิทธิ์รอบ 2</span>
@@ -803,7 +834,7 @@
                 row.by_station[station].total }}</td>
               {% endfor %}
               <td class="overall-total">{{ row.total }}</td>
-              <td class="overall-rank">{{ row.rank }}</td>
+              <td class="overall-total">{{ row.rank }}</td>
               <td><span class="status-pill {{ row.status }}">{{ 'กำลังตี' if row.status == 'active' else ('ตีเสร็จแล้ว'
                   if row.status == 'finished' else 'รอคิว') }}</span></td>
             </tr>

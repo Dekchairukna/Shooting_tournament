@@ -2,9 +2,15 @@
 {% block content %}
 <style>
   /* ===== SCORECARD RESPONSIVE / iPad FIX ===== */
-
+.red-frame-cell {
+  position: relative;
+  box-shadow: inset 0 0 0 3px red !important;
+  color: rgb(0, 0, 0) !important;
+  font-weight: 900 !important;
+  background: #fff !important;
+}
   .card {
-    width: 100%;
+    width: auto;
     max-width: 100%;
     overflow: hidden;
   }
@@ -113,8 +119,8 @@
   }
 
   .vertical-side {
-    width: 28px;
-    min-width: 28px;
+    width: auto;
+    min-width: auto;
     font-size: .62rem;
     line-height: 1.1;
     background: #f8fafc;
@@ -142,7 +148,7 @@
   }
 
   .scorecard-station-image-cell img {
-    height: 52px;
+    height: 70px;
     width: auto;
     display: block;
     margin: 0 auto;
@@ -188,7 +194,7 @@
   }
 
   .grand-total-col {
-    width: 52px;
+    width: 40px;
     min-width: 52px;
     background: #e0f2fe;
     font-weight: 900;
@@ -204,7 +210,7 @@
 
   .running-total-row td,
   .running-total-row th {
-    height: 20px;
+    height: 38px;
     font-size: .6rem;
   }
 
@@ -424,7 +430,7 @@
     }
 
     .scorecard-station-image-cell img {
-      height: 38px;
+      height: 60px;
     }
 
     .score-cell-wrap {
@@ -495,7 +501,7 @@
     }
 
     .scorecard-station-image-cell img {
-      height: 30px;
+      height: 60px;
     }
 
     .signature-round-grid {
@@ -549,7 +555,7 @@
     }
 
     .scorecard-station-image-cell img {
-      height: 18px !important;
+      height: 50px !important;
     }
 
     .score-input {
@@ -617,7 +623,7 @@
             {% endfor %}
 
             
-            <th rowspan="3" class="vertical-side">P<br>E<br>T<br>A<br>N<br>Q<br>U<br>E</th>
+            <th rowspan="3" class="vertical-side2">P<br>E<br>T<br>A<br>N<br>Q<br>U<br>E</th>
           </tr>
 
           <tr>
@@ -701,7 +707,7 @@
               <td class="running-blank station-color-{{ station }}"></td>
               <td class="running-blank station-color-{{ station }}"></td>
               <td class="running-blank station-color-{{ station }}"></td>
-              <td class="running-cumulative-total station-color-{{ station }}"
+              <td class="running-cumulative-total red-frame-cell station-color-{{ station }}"
                   id="station-running-total-{{ r }}-{{ station }}">
                 {{ running.get(station, 0) }}
               </td>
@@ -724,7 +730,7 @@
 
           <div class="signature-round-grid">
             <div class="signature-col">
-              <div class="signature-title">กรรมการตัดสิน</div>
+              <div class="signature-title text-align">กรรมการตัดสิน</div>
               <input class="sig-text-input"
                      type="text"
                      name="referee_name_{{ r }}"
@@ -755,7 +761,7 @@
             </div>
 
             <div class="signature-col">
-              <div class="signature-title">กรรมการบันทึกคะแนน</div>
+              <div class="signature-title text-align center">กรรมการบันทึกคะแนน</div>
               <input class="sig-text-input"
                      type="text"
                      name="recorder_name_{{ r }}"
@@ -786,7 +792,7 @@
             </div>
 
             <div class="signature-col">
-              <div class="signature-title">นักกีฬา</div>
+              <div class="signature-title text-align">นักกีฬา</div>
               <input class="sig-text-input"
                      type="text"
                      name="athlete_name_{{ r }}"

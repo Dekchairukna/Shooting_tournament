@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="{{ html_lang|default('th') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -86,7 +86,7 @@
 
     .navbar-custom .navbar-nav {
       align-items: center;
-      gap: 8px;
+      gap: 15px;
     }
 
     .navbar-custom .nav-link {
@@ -124,6 +124,19 @@
     .navbar-custom .nav-link.logout-link:hover {
       background: #fecaca;
       color: #991b1b !important;
+    }
+
+
+
+    .language-switcher {
+      min-width: 112px;
+      border: 0;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-weight: 900;
+      color: #1d4ed8;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 4px 10px rgba(15, 23, 42, .12);
     }
 
     .user-badge {
@@ -224,7 +237,20 @@
         padding: 7px 8px !important;
       }
 
-      .user-badge {
+  
+
+    .language-switcher {
+      min-width: 112px;
+      border: 0;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-weight: 900;
+      color: #1d4ed8;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 4px 10px rgba(15, 23, 42, .12);
+    }
+
+    .user-badge {
         font-size: .72rem;
         padding: 7px 8px;
       }
@@ -258,7 +284,20 @@
       }
 
       .navbar-custom .nav-link,
-      .user-badge {
+  
+
+    .language-switcher {
+      min-width: 112px;
+      border: 0;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-weight: 900;
+      color: #1d4ed8;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 4px 10px rgba(15, 23, 42, .12);
+    }
+
+    .user-badge {
         width: 100%;
         justify-content: center;
         text-align: center;
@@ -299,7 +338,20 @@
       }
 
       .navbar-custom .nav-link,
-      .user-badge {
+  
+
+    .language-switcher {
+      min-width: 112px;
+      border: 0;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-weight: 900;
+      color: #1d4ed8;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 4px 10px rgba(15, 23, 42, .12);
+    }
+
+    .user-badge {
         width: 100%;
         justify-content: center;
         text-align: center;
@@ -344,8 +396,8 @@
   <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
     <div class="container-fluid">
       <a class="navbar-brand" href="{{ url_for('index') }}">
-        <span class="brand-badge">🎯</span>
-        <span>Petanque Shooting</span>
+        
+        <h1>Petanque Shooting</h1>
       </a>
 
       <button class="navbar-toggler" type="button"
@@ -359,6 +411,8 @@
 
       <div class="collapse navbar-collapse" id="mainNavbar">
         <ul class="navbar-nav ms-auto">
+
+          
           <li class="nav-item">
             <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}"
               href="{{ url_for('index') }}">
@@ -404,7 +458,15 @@
               เข้าสู่ระบบ
             </a>
           </li>
+          
           {% endif %}
+          <li class="nav-item d-flex align-items-center">
+            <select class="language-switcher" id="languageSwitcher" aria-label="Language">
+              {% for code, item in lang_labels.items() %}
+                <option value="{{ code }}" {% if code == current_lang %}selected{% endif %}>{{ item.name }}</option>
+              {% endfor %}
+            </select>
+          </li>
         </ul>
       </div>
     </div>
@@ -425,6 +487,12 @@
   </main>
 
   {% block scripts %}{% endblock %}
+
+  <script>
+    window.APP_LANG = {{ current_lang|default('th')|tojson }};
+    window.SET_LANGUAGE_URL = {{ url_for('set_language', lang='__LANG__', next=request.full_path)|tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

@@ -1,6 +1,54 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
+
+  /* ===== SIGNATURE PRINT BIG & CLEAR ===== */
+
+.signature-image-print{
+  filter:
+    contrast(350%)
+    brightness(40%)
+    saturate(0%)
+    drop-shadow(0 0 0 #000)
+    drop-shadow(0.6px 0 0 #000)
+    drop-shadow(-0.6px 0 0 #000)
+    drop-shadow(0 0.6px 0 #000)
+    drop-shadow(0 -0.6px 0 #000) !important;
+}
+  /* ======================================================================
+     SCORECARD PRINT - LOCKED GRID
+     เป้าหมาย: ช่องตารางไม่ขยับตามข้อความ/รูป/ลายเซ็น
+     ถ้าข้อมูลยาว ให้ทับ/ล้นในช่องได้ แต่เส้นตารางยังอยู่ตำแหน่งเดิม
+     ====================================================================== */
+
+  :root{
+    --sheet-border: #000;
+    --grid-line: #000;
+    --sheet-pad: 8px;
+
+    /* ปรับขนาดช่องหลักตรงนี้ */
+    --round-col-w: 110px;      /* ช่องรอบแข่งขัน */
+    --score-col-w: 32px;       /* ช่อง 6M/7M/8M/9M */
+    --station-total-w: 42px;   /* ช่องรวมของแต่ละ Atelier */
+    --grand-total-w: 52px;     /* ช่องคะแนนรวม */
+    --rank-w: 42px;            /* ช่องลำดับ */
+    --athlete-sign-w: 82px;    /* ช่องลายเซ็นนักกีฬา */
+
+    --row-h: 30px;
+    --head-h: 30px;
+    --image-row-h: 58px;
+    --font-table: 13px;
+    --font-small: 11px;
+  }
+
+  .red-frame-cell {
+  position: relative;
+  box-shadow: inset 0 0 0 3px red !important;
+  color: rgb(0, 0, 0) !important;
+  font-weight: 900 !important;
+  background: #fff !important;
+}
+
   .print-tools {
     display: flex;
     gap: 8px;
@@ -9,10 +57,11 @@
   }
 
   .sheet {
-    border: 3px solid #000;
-    padding: 8px;
+    border: 3px solid var(--sheet-border);
+    padding: var(--sheet-pad);
     margin-bottom: 8px;
     background: #fff;
+    box-sizing: border-box;
   }
 
   .header {
@@ -23,9 +72,7 @@
     margin-bottom: 8px;
   }
 
-  .header-left {
-    flex: 1;
-  }
+  .header-left { flex: 1; min-width: 0; }
 
   .event-name {
     font-size: 22px;
@@ -36,92 +83,146 @@
 
   .athlete-meta {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: 1fr 1.4fr 1.4fr .8fr;
     gap: 6px 16px;
-    font-size: 20px;
+    font-size: 18px;
     margin-top: 4px;
   }
 
   .meta-item {
-    line-height: 1.34;
+    line-height: 1.3;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: visible;
   }
 
-  .round-table2 {
+  /* ตารางหลัก: ล็อกตำแหน่งเส้น ไม่ให้เนื้อหาดันช่อง */
+  .round-table {
     width: 100%;
-    border-collapse: collapse;
-    margin-top: 8px;
-    font-size: 14px;
-    
-  }
-
-   .round-table  {
-    width: 100%;
-    margin-top: 12px;
-    border: 1px solid #000;
-    padding: 8px;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    margin-top: 10px;
+    border: 1px solid var(--grid-line);
+    font-size: var(--font-table);
+    background: #fff;
   }
 
   .round-table th,
   .round-table td {
-    border: 1px solid #000;
-    padding: 6px 4px;
+    border: 1px solid var(--grid-line);
+    box-sizing: border-box;
+    padding: 3px 2px;
+    height: var(--row-h);
+    line-height: 1.05;
     text-align: center;
     vertical-align: middle;
-    padding: 8px;
+    white-space: nowrap;
+    overflow: visible !important;  /* ให้ตัวหนังสือ/เส้นทับได้ แต่ช่องไม่ขยับ */
+    text-overflow: clip !important;
   }
 
   .round-table thead th {
     background: #f5f5f5;
     font-weight: 900;
-    padding: 8px;
+    height: var(--head-h);
   }
 
   .round-label-col {
-    height: 30px;
-    min-width: 120px;
-    font-weight: 800;
+    width: var(--round-col-w) !important;
+    min-width: var(--round-col-w) !important;
+    max-width: var(--round-col-w) !important;
+    font-weight: 900;
     text-align: left !important;
-    padding-left: 8px !important;
-    white-space: nowrap;
+    padding-left: 6px !important;
   }
 
   .station-group {
-    font-size: 13px;
+    font-size: var(--font-small);
+    background: #f5f5f5;
+    font-weight: 900;
   }
 
   .distance-col {
-    min-width: 34px;
+    width: var(--score-col-w) !important;
+    min-width: var(--score-col-w) !important;
+    max-width: var(--score-col-w) !important;
+    font-size: var(--font-small);
   }
 
   .station-total-col {
-    min-width: 45px;
-    font-weight: 800;
+    width: var(--station-total-w) !important;
+    min-width: var(--station-total-w) !important;
+    max-width: var(--station-total-w) !important;
+    font-weight: 900;
   }
 
-  .grand-total-col,
+  .grand-total-col {
+    width: var(--grand-total-w) !important;
+    min-width: var(--grand-total-w) !important;
+    max-width: var(--grand-total-w) !important;
+    font-weight: 900;
+  }
+
   .rank-col {
-    min-width: 38px;
+    width: var(--rank-w) !important;
+    min-width: var(--rank-w) !important;
+    max-width: var(--rank-w) !important;
     font-weight: 900;
   }
 
   .rank-col2 {
-    min-width: 60px;
+    width: var(--athlete-sign-w) !important;
+    min-width: var(--athlete-sign-w) !important;
+    max-width: var(--athlete-sign-w) !important;
     font-weight: 900;
+  }
+
+
+
+  .cg-round { width: var(--round-col-w); }
+  .cg-distance { width: var(--score-col-w); }
+  .cg-station-total { width: var(--station-total-w); }
+  .cg-grand-total { width: var(--grand-total-w); }
+  .cg-rank { width: var(--rank-w); }
+  .cg-athlete-sign { width: var(--athlete-sign-w); }
+
+  .station-image-cell {
+    height: var(--image-row-h) !important;
+    background: #fff;
+    padding: 1px !important;
+    overflow: hidden !important;
+  }
+
+  .station-image-cell img {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    max-height: calc(var(--image-row-h) - 4px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
   }
 
   .cumulative-row td {
     background: #fafafa;
-    font-weight: 800;
+    font-weight: 900;
   }
 
-  .cumulative-row .round-label-col {
-    color: #374151;
+  .cumulative-row .round-label-col { color: #374151; }
+
+  .signature-image-print {
+    display: block;
+    max-width: 100%;
+    max-height: 24px;
+    margin: 0 auto;
+    object-fit: contain;
   }
 
   .signature-block {
-    margin-top: 12px;
-    border: 1px solid #000;
-    padding: 8px;
+    margin-top: 10px;
+    border: 1px solid var(--grid-line);
+    padding: 6px;
   }
 
   .signature-title {
@@ -131,29 +232,42 @@
 
   .signature-grid {
     display: grid;
-    grid-template-columns: 180px 1fr 1fr;
+    grid-template-columns: 150px 1fr 1fr;
     gap: 0;
-    font-size: 14px;
+    font-size: 13px;
   }
 
-  .signature-grid>div {
-    border: 1px solid #000;
-    padding: 8px 6px;
-    min-height: 34px;
+  .signature-grid > div {
+    border: 1px solid var(--grid-line);
+    padding: 5px 6px;
+    min-height: 30px;
     display: flex;
     align-items: center;
+    overflow: hidden;
   }
 
   .signature-head {
-    font-weight: 800;
-    background: #f5f5f5;
-  }
-
+  font-weight: 900;
+  background: #f5f5f5;
+  display: flex;
+  align-items: center;      /* กลางแนวตั้ง */
+  justify-content: center;  /* กลางแนวนอน */
+  text-align: center;
+}
   @media print {
-
     .topbar,
     .print-tools {
       display: none !important;
+    }
+
+    @page { size: A4 landscape; margin: 6mm; }
+
+    html,
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      font-family: Tahoma, sans-serif;
+      background: #fff !important;
     }
 
     .container {
@@ -163,37 +277,30 @@
       margin: 0 !important;
     }
 
-    body {
-      margin: 0;
-      font-family: Tahoma, sans-serif;
-    }
-
     .sheet {
-      border: 2px solid #000;
-      padding: 10px;
-      margin-bottom: 12px;
+      border: 2px solid var(--sheet-border);
+      padding: 6px;
+      margin: 0;
       background: #fff;
       box-sizing: border-box;
+      page-break-inside: avoid;
     }
-  }
 
-  .station-group {
-    font-size: 13px;
-    background: #f5f5f5;
-    font-weight: 900;
-  }
+    .event-name { font-size: 18px; }
+    .athlete-meta { font-size: 14px; gap: 4px 10px; }
 
-  .station-image-cell {
-    background: #fff;
-    padding: 6px 4px !important;
-  }
+    .round-table th,
+    .round-table td {
+      font-size: 9px;
+      padding: 1px;
+      height: 23px;
+    }
 
-  .station-image-cell img {
-    display: block;
-    margin: 0 auto;
-    max-height: 56px;
-    width: auto;
-    object-fit: contain;
+    .station-group,
+    .distance-col { font-size: 8px; }
+    .signature-grid { font-size: 10px; }
+    .signature-grid > div { min-height: 24px; padding: 3px 4px; }
+    .signature-image-print { max-height: 20px; }
   }
 </style>
 
@@ -212,16 +319,25 @@
       </div>
 
       <div class="athlete-meta">
-        <div class="meta-item"><strong>ลำดับการตี:</strong> {{ display_order or athlete.start_order }}</div>
-        <div class="meta-item"><strong>สังกัด:</strong> {{ athlete.affiliation }}</div>
-        <div class="meta-item"><strong>ชื่อ:</strong> {{ athlete.name }}</div>
-        <div class="meta-item"><strong>สนาม:</strong> {{ display_lane_no or athlete.lane_no }}/{{ display_lane_order or
+        <div class="meta-item"><strong>ลำดับการตี :</strong> {{ display_order or athlete.start_order }}</div>
+        <div class="meta-item"><strong>สังกัด :</strong> {{ athlete.affiliation }}</div>
+        <div class="meta-item"><strong>ชื่อ :</strong> {{ athlete.name }}</div>
+        <div class="meta-item"><strong>สนาม :</strong> {{ display_lane_no or athlete.lane_no }}/{{ display_lane_order or
           athlete.lane_order }}</div>
       </div>
     </div>
   </div>
 
   <table class="round-table">
+    <colgroup>
+      <col class="cg-round">
+      {% for st in [1,2,3,4,5] %}
+      <col class="cg-distance"><col class="cg-distance"><col class="cg-distance"><col class="cg-distance"><col class="cg-station-total">
+      {% endfor %}
+      <col class="cg-grand-total">
+      <col class="cg-rank">
+      <col class="cg-athlete-sign">
+    </colgroup>
     <thead>
       <tr>
         <th rowspan="3" class="round-label-col">รอบแข่งขัน</th>
@@ -260,17 +376,17 @@
         <td class="round-label-col">{{ round_labels[rn-1] }}</td>
 
         {% for st in [1,2,3,4,5] %}
-        <td>{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</td>
-        <td>{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</td>
-        <td>{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</td>
-        <td>{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</td>
-        <td class="station-total-col">
+        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</td>
+        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</td>
+        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</td>
+        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</td>
+        <td class="station-total-col" style="color: rgb(255, 0, 0);">
           {{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}
         </td>
         {% endfor %}
 
         <td class="grand-total-col">
-          {{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}
+          
         </td>
         <td class="rank-col">
 
@@ -290,7 +406,7 @@
         <td></td>
         <td></td>
         <td></td>
-        <td class="station-total-col">
+        <td class="station-total-col red-frame-cell">
           {% if has_started %}
           {% set ns.running = ns.running + (station_totals[(rn, st)] if station_totals[(rn, st)] is defined else 0) %}
           {{ ns.running }}

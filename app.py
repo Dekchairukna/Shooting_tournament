@@ -16,6 +16,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 from flask_login import (
@@ -53,15 +54,38 @@ login_manager.login_view = "login"
 
 LANG_LABELS = {
     "th": {
+        "name": "ไทย",
         "shooting_title": "ประเภทสุดยอดความแม่นยำ (SHOOTING)",
     },
     "en": {
+        "name": "English",
         "shooting_title": "Precision Shooting",
     },
     "fr": {
+        "name": "Français",
         "shooting_title": "Tir de précision",
     },
+    "zh": {
+        "name": "中文",
+        "shooting_title": "精准射击",
+    },
 }
+SUPPORTED_LANGS = tuple(LANG_LABELS.keys())
+
+
+def current_language() -> str:
+    lang = session.get("lang", "th")
+    return lang if lang in SUPPORTED_LANGS else "th"
+
+
+@app.context_processor
+def inject_language_options():
+    lang = current_language()
+    return {
+        "current_lang": lang,
+        "lang_labels": LANG_LABELS,
+        "html_lang": "zh-CN" if lang == "zh" else lang,
+    }
 
 ROUND_LABELS = {
     1: "รอบที่ 1",
@@ -808,6 +832,14 @@ def dashboard_stats() -> dict:
 @app.context_processor
 def inject_globals():
     return {"now": datetime.now(), "MAX_RED_CARDS": MAX_RED_CARDS}
+
+
+@app.route("/set-language/<lang>")
+def set_language(lang):
+    if lang in SUPPORTED_LANGS:
+        session["lang"] = lang
+    next_url = request.args.get("next") or request.referrer or url_for("index")
+    return redirect(next_url)
 
 
 @app.route("/")
@@ -1632,4 +1664,9 @@ if __name__ == "__main__":
         db.create_all()
         ensure_schema()
         seed_defaults()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8000)),
+        debug=True
+    )

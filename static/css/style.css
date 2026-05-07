@@ -172,8 +172,8 @@ a{text-decoration:none;color:inherit}.container{max-width:1700px;margin:0 auto;p
 }
 
 .scorecard-balanced-table{
-  table-layout:fixed;
-  width:100%;
+  table-layout: 54px !important;
+  width: 100% !important;
 }
 
 .scorecard-balanced-table th,
@@ -204,9 +204,9 @@ a{text-decoration:none;color:inherit}.container{max-width:1700px;margin:0 auto;p
 .scorecard-balanced-table .running-total-label,
 .scorecard-balanced-table .score-head-row th:first-child,
 .scorecard-balanced-table tbody tr > th:first-child{
-  width: 100px !important;
-  min-width: 100px !important;
-  max-width: 100px !important;
+  width: auto!important;
+  min-width: auto !important;
+  max-width: auto !important;
   white-space: nowrap !important;
   text-align: left !important;
   padding-left: 12px !important;
@@ -214,14 +214,14 @@ a{text-decoration:none;color:inherit}.container{max-width:1700px;margin:0 auto;p
 }
 
 .scorecard-balanced-table .vertical-side{
-  width: 56px !important;
-  min-width: 56px !important;
-  max-width: 56px !important;
+  width: auto !important;
+  min-width: auto !important;
+  max-width: auto !important;
 }
 
 .scorecard-balanced-table .score-cell-wrap{
-  min-width: 52px !important;
-  max-width: 52px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
 }
 
 .scorecard-balanced-table .grand-total-col,
@@ -268,9 +268,9 @@ a{text-decoration:none;color:inherit}.container{max-width:1700px;margin:0 auto;p
 .scorecard-balanced-table .grand-total-col,
 .scorecard-balanced-table .grand-total-cell,
 .scorecard-balanced-table .round-running-total{
-  width:76px;
-  min-width:76px;
-  max-width:76px;
+  width:60px;
+  min-width:60px;
+  max-width:60px;
   font-size:14px;
   font-weight:900;
 }
@@ -588,7 +588,7 @@ a{text-decoration:none;color:inherit}.container{max-width:1700px;margin:0 auto;p
     width:38px;
     min-width:38px;
     max-width:38px;
-    font-size:11px;
+    
   }
   .scorecard-balanced-table .round-col,
   .scorecard-balanced-table .round-name,
@@ -812,5 +812,216 @@ a{text-decoration:none;color:inherit}.container{max-width:1700px;margin:0 auto;p
   .responsive-toolbar .btn,
   .action-group .btn{
     width:100%;
+  }
+}
+
+/* ======================================================================
+   FINAL SCORECARD SIZE CONTROL - แก้ขนาดสกอร์การ์ดที่นี่จุดเดียว
+   วางท้ายไฟล์เพื่อทับ CSS เก่าที่มีชื่อซ้ำหลายจุด
+   ====================================================================== */
+
+:root{
+  /* ปรับเองได้ */
+  --sc-table-min-width: 1120px;   /* ความกว้างขั้นต่ำของตารางบนจอเล็ก */
+  --sc-left: 120px;                /* ช่องซ้าย เช่น รอบ/ระยะ */
+  --sc-side: 120px;                /* ช่องแนวตั้งด้านข้าง */
+  --sc-cell: 44px;                /* ช่องคะแนนแต่ละช่อง */
+  --sc-input-w: 34px;             /* ความกว้างช่องกรอกคะแนน */
+  --sc-input-h: 28px;             /* ความสูงช่องกรอกคะแนน */
+  --sc-total: 60px;               /* ช่องรวมคะแนน */
+  --sc-img-w: 160px;               /* ความกว้างรูป station */
+  --sc-img-h: 120px;               /* ความสูงรูป station */
+  --sc-font: 14px;                /* ขนาดตัวอักษรในตาราง */
+  --sc-pad-y: 3px;                /* padding บน-ล่าง */
+  --sc-pad-x: 1px;                /* padding ซ้าย-ขวา */
+  --sc-border: #111827;           /* สีเส้นตาราง */
+}
+
+.scorecard-table-wrap,
+.scorecard-table-block{
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scorecard-sheet{
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+}
+
+.scorecard-balanced-table{
+  width: 100% !important;
+  min-width: var(--sc-table-min-width) !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+}
+
+.scorecard-balanced-table th,
+.scorecard-balanced-table td{
+  font-size: var(--sc-font) !important;
+  padding: var(--sc-pad-y) var(--sc-pad-x) !important;
+  border: 1px solid var(--sc-border) !important;
+  vertical-align: middle !important;
+  text-align: center !important;
+}
+
+.scorecard-balanced-table .round-col,
+.scorecard-balanced-table .round-name,
+.scorecard-balanced-table .running-total-label,
+.scorecard-balanced-table .score-head-row th:first-child,
+.scorecard-balanced-table tbody tr > th:first-child{
+  width: var(--sc-left) !important;
+  min-width: var(--sc-left) !important;
+  max-width: var(--sc-left) !important;
+  white-space: nowrap !important;
+  text-align: left !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+
+.scorecard-balanced-table .vertical-side{
+  width: var(--sc-side) !important;
+  min-width: var(--sc-side) !important;
+  max-width: var(--sc-side) !important;
+  font-size: var(--sc-font) !important;
+  line-height: 1.05 !important;
+}
+
+.scorecard-balanced-table .score-cell-wrap{
+  width: var(--sc-cell) !important;
+  min-width: var(--sc-cell) !important;
+  max-width: var(--sc-cell) !important;
+  padding-left: 1px !important;
+  padding-right: 1px !important;
+}
+
+.scorecard-balanced-table .score-input{
+  width: var(--sc-input-w) !important;
+  max-width: var(--sc-input-w) !important;
+  height: var(--sc-input-h) !important;
+  min-height: var(--sc-input-h) !important;
+  font-size: var(--sc-font) !important;
+  padding: 0 !important;
+  text-align: center !important;
+}
+
+.scorecard-balanced-table .readonly-score{
+  min-height: var(--sc-input-h) !important;
+  font-size: var(--sc-font) !important;
+}
+
+.scorecard-balanced-table .grand-total-col,
+.scorecard-balanced-table .grand-total-cell,
+.scorecard-balanced-table .round-running-total{
+  width: var(--sc-total) !important;
+  min-width: var(--sc-total) !important;
+  max-width: var(--sc-total) !important;
+  font-size: var(--sc-font) !important;
+}
+
+.scorecard-station-image-cell img{
+  display: block !important;
+  margin: 0 auto !important;
+  max-width: var(--sc-img-w) !important;
+  width: 100% !important;
+  height: var(--sc-img-h) !important;
+  object-fit: contain !important;
+}
+
+.scorecard-balanced-table .station-head{
+  font-size: calc(var(--sc-font) + 1px) !important;
+  line-height: 1.1 !important;
+}
+
+.scorecard-balanced-table .station-subtitle,
+.scorecard-balanced-table .red-under{
+  font-size: calc(var(--sc-font) - 2px) !important;
+  line-height: 1.05 !important;
+}
+
+/* แท็บเล็ต: ใช้ตัวแปรชุดเดียวกัน แต่ย่อให้พอดี */
+@media (max-width: 1200px){
+  :root{
+    --sc-table-min-width: 1020px;
+    --sc-left: 78px;
+    --sc-side: 110px;
+    --sc-side2: 90px;
+    --sc-cell: 30px;
+    --sc-input-w: 30px;
+    --sc-input-h: 28px;
+    --sc-total: 52px;
+    --sc-img-w: 120px;
+    --sc-img-h: 90px;
+    --sc-font: 10px;
+    --sc-pad-y: 2px;
+    --sc-pad-x: 1px;
+  }
+
+  .scorecard-sheet{
+    min-width: 0 !important;
+  }
+}
+
+/* มือถือ: ให้เลื่อนตาราง ไม่บีบจนพัง */
+@media (max-width: 768px){
+  :root{
+    --sc-table-min-width: 980px;
+    --sc-left: 72px;
+    --sc-side: 32px;
+    --sc-cell: 36px;
+    --sc-input-w: 28px;
+    --sc-input-h: 24px;
+    --sc-total: 48px;
+    --sc-img-w: 58px;
+    --sc-img-h: 42px;
+    --sc-font: 9px;
+  }
+
+  .scorecard-table-wrap,
+  .scorecard-table-block,
+  .scorecard-sheet{
+    overflow-x: auto !important;
+  }
+}
+
+/* ปริ้น A4 แนวนอน: ย่อเฉพาะตอนพิมพ์ */
+@media print{
+  @page{
+    size: A4 landscape;
+    margin: 6mm;
+  }
+
+  :root{
+    --sc-table-min-width: 0px;
+    --sc-left: 58px;
+    --sc-side: 24px;
+    --sc-cell: 28px;
+    --sc-input-w: 100%;
+    --sc-input-h: 28px;
+    --sc-total: 40px;
+    --sc-img-w: 44px;
+    --sc-img-h: 28px;
+    --sc-font: 7.5px;
+    --sc-pad-y: 1px;
+    --sc-pad-x: 1px;
+  }
+
+  .scorecard-table-wrap,
+  .scorecard-table-block,
+  .scorecard-sheet{
+    overflow: visible !important;
+  }
+
+  .scorecard-balanced-table{
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  .scorecard-balanced-table .score-input{
+    border: none !important;
+    background: transparent !important;
   }
 }
