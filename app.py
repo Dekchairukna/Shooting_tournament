@@ -258,6 +258,9 @@ def build_bracket_row_data(event, athlete, round_name):
 
 def ensure_schema() -> None:
     os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
+    # SQLite เดิมต้องมี migration เล็กน้อย แต่ PostgreSQL ให้ db.create_all() สร้าง schema ใหม่พอ
+    if db.engine.dialect.name != "sqlite":
+        return
     with db.engine.begin() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(score_signature)").fetchall()}
         if "recorder_signature" not in columns:
@@ -1739,13 +1742,24 @@ def public_shooting_live(event_id: int):
     return redirect(url_for('event_overview', event_id=event.id, round=request.args.get('round', 1)))
 
 
-if __name__ == "__main__":
+def init_database_for_deploy() -> None:
+    """Create database tables when running under gunicorn/Railway.
+
+    Flask code inside __main__ is not executed by `gunicorn app:app`,
+    so Railway needs this initialization during import.
+    """
     os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
     with app.app_context():
         db.create_all()
         ensure_schema()
         seed_defaults()
 
+
+# ให้ Railway/gunicorn สร้างตารางและ user ตั้งต้นทันทีตอน import app
+init_database_for_deploy()
+
+
+if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000)),
