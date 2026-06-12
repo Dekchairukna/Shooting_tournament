@@ -1658,6 +1658,87 @@ def event_stats(event_id: int):
     return render_template("stats.html", event=event, best=best, round1_rows=round1_rows)
 
 
+# -----------------------------------------------------------------------------
+# Public Live Report API / iframe support for Live Report Board
+# -----------------------------------------------------------------------------
+@app.after_request
+def live_report_public_headers(response):
+    response.headers.setdefault("Access-Control-Allow-Origin", "*")
+    response.headers.setdefault("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    response.headers.setdefault("Access-Control-Allow-Methods", "GET, OPTIONS")
+    # ให้ Report Board ฝังหน้า overview/bracket ผ่าน iframe ได้
+    response.headers.pop("X-Frame-Options", None)
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors *")
+    return response
+
+
+def _lr_shooting_event_payload(event):
+    return {
+        "id": event.id,
+        "name": event.name,
+        "event_group": event.event_group,
+        "category": event.category,
+        "competition_date": event.competition_date.isoformat() if event.competition_date else None,
+        "location": event.location,
+        "lane_count": event.lane_count,
+        "athlete_count": len(event.athletes),
+        "overview_url": url_for('event_overview', event_id=event.id, _external=True),
+        "public_live_url": url_for('api_public_shooting_report', event_id=event.id, _external=True),
+    }
+
+
+def _lr_athlete_payload(event, athlete, rank=None):
+    r1 = summarize_round(athlete.id, 1).get("total", 0)
+    r2 = summarize_round(athlete.id, 2).get("total", 0)
+    total = r1 + r2
+    return {
+        "rank": rank,
+        "id": athlete.id,
+        "bib_no": athlete.bib_no,
+        "name": athlete.name,
+        "affiliation": athlete.affiliation,
+        "lane_no": athlete.lane_no,
+        "lane_order": athlete.lane_order,
+        "start_order": athlete.start_order,
+        "status": athlete.status,
+        "red_card_count": athlete.red_card_count,
+        "round1_total": r1,
+        "round2_total": r2,
+        "total": total,
+    }
+
+
+@app.route('/api/public/shooting/events')
+def api_public_shooting_events():
+    events = Event.query.order_by(Event.created_at.desc(), Event.id.desc()).all()
+    return jsonify({"ok": True, "source": "shooting", "events": [_lr_shooting_event_payload(e) for e in events]})
+
+
+@app.route('/api/public/shooting/event/<int:event_id>/report')
+def api_public_shooting_report(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    athletes = sorted(event.athletes, key=lambda a: (a.lane_no, a.lane_order, a.start_order))
+    rows = [_lr_athlete_payload(event, a) for a in athletes]
+    ranking = sorted(rows, key=lambda r: (r["total"], r["round1_total"], -r["red_card_count"]), reverse=True)
+    for idx, row in enumerate(ranking, start=1):
+        row["rank"] = idx
+    return jsonify({
+        "ok": True,
+        "source": "shooting",
+        "event": _lr_shooting_event_payload(event),
+        "athletes": rows,
+        "ranking": ranking,
+        "live_url": url_for('event_overview', event_id=event.id, _external=True),
+    })
+
+
+@app.route('/public/shooting/<int:event_id>/live')
+def public_shooting_live(event_id: int):
+    # หน้า public สำหรับเอาไป iframe ใน Report Board โดยไม่ต้อง login
+    event = Event.query.get_or_404(event_id)
+    return redirect(url_for('event_overview', event_id=event.id, round=request.args.get('round', 1)))
+
+
 if __name__ == "__main__":
     os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
     with app.app_context():
