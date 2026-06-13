@@ -11,6 +11,8 @@ from flask import jsonify
 from flask import (
     Flask,
     flash,
+    g,
+    has_request_context,
     jsonify,
     redirect,
     render_template,
@@ -350,13 +352,66 @@ def seed_defaults() -> None:
     db.session.commit()
 
 
+
+def _request_cache() -> dict:
+    """Request-local cache for read-heavy overview and bracket pages.
+
+    The live polling cadence stays unchanged. This only prevents the same SQL
+    queries from being repeated many times while building one response.
+    """
+    if not has_request_context():
+        return {}
+    cache = getattr(g, "shooting_request_cache", None)
+    if cache is None:
+        cache = {}
+        g.shooting_request_cache = cache
+    return cache
+
+
+def clear_request_cache() -> None:
+    if has_request_context():
+        g.shooting_request_cache = {}
+
+
+def preload_event_score_data(event: Event) -> None:
+    """Load entries, signatures and tie-break scores for an event in 3 queries."""
+    if not has_request_context():
+        return
+    cache = _request_cache()
+    if ("preloaded_event", event.id) in cache:
+        return
+    athlete_ids = [a.id for a in event.athletes]
+    cache[("preloaded_event", event.id)] = True
+    if not athlete_ids:
+        return
+
+    entries_by_key = cache.setdefault("entries_by_athlete_round", {})
+    for entry in ScoreEntry.query.filter(ScoreEntry.athlete_id.in_(athlete_ids)).all():
+        entries_by_key.setdefault((entry.athlete_id, entry.round_no), []).append(entry)
+
+    signatures_by_key = cache.setdefault("signature_by_athlete_round", {})
+    for signature in ScoreSignature.query.filter(ScoreSignature.athlete_id.in_(athlete_ids)).all():
+        signatures_by_key[(signature.athlete_id, signature.round_no)] = signature
+
+    tiebreak_by_key = cache.setdefault("tiebreak_by_athlete_round", {})
+    for entry in TieBreakEntry.query.filter(TieBreakEntry.athlete_id.in_(athlete_ids)).all():
+        tiebreak_by_key.setdefault((entry.athlete_id, entry.round_no), []).append(entry)
+
 def get_round_score_map(athlete_id: int, round_no: int) -> Dict[Tuple[int, int], ScoreEntry]:
     entries = ScoreEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
     return {(e.station_no, e.distance_m): e for e in entries}
 
 
 def get_round_signature(athlete_id: int, round_no: int) -> ScoreSignature | None:
-    return ScoreSignature.query.filter_by(athlete_id=athlete_id, round_no=round_no).first()
+    cache = _request_cache()
+    signatures = cache.get("signature_by_athlete_round") if has_request_context() else None
+    key = (athlete_id, round_no)
+    if signatures is not None and key in signatures:
+        return signatures[key]
+    signature = ScoreSignature.query.filter_by(athlete_id=athlete_id, round_no=round_no).first()
+    if has_request_context():
+        cache.setdefault("signature_by_athlete_round", {})[key] = signature
+    return signature
 
 
 def ensure_round_entries(athlete_id: int, round_no: int) -> None:
@@ -377,6 +432,7 @@ def ensure_round_entries(athlete_id: int, round_no: int) -> None:
                 changed = True
     if changed:
         db.session.commit()
+        clear_request_cache()
 
 
 def ensure_signature(athlete_id: int, round_no: int) -> ScoreSignature:
@@ -386,11 +442,23 @@ def ensure_signature(athlete_id: int, round_no: int) -> ScoreSignature:
     signature = ScoreSignature(athlete_id=athlete_id, round_no=round_no)
     db.session.add(signature)
     db.session.commit()
+    clear_request_cache()
     return signature
 
 
 def summarize_round(athlete_id: int, round_no: int) -> dict:
-    entries = ScoreEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
+    cache = _request_cache()
+    summary_cache = cache.setdefault("round_summary", {}) if has_request_context() else {}
+    key = (athlete_id, round_no)
+    if key in summary_cache:
+        return summary_cache[key]
+
+    entries_map = cache.get("entries_by_athlete_round") if has_request_context() else None
+    if entries_map is not None:
+        entries = entries_map.get(key, [])
+    else:
+        entries = ScoreEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
+
     total = sum(e.score for e in entries)
     count_5 = sum(1 for e in entries if e.score == 5)
     count_3 = sum(1 for e in entries if e.score == 3)
@@ -402,15 +470,22 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
             "distances": {e.distance_m: e.score for e in station_entries},
             "total": sum(e.score for e in station_entries),
         }
-    tiebreak_total = sum(e.score for e in TieBreakEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all())
-    return {
+
+    tiebreak_map = cache.get("tiebreak_by_athlete_round") if has_request_context() else None
+    if tiebreak_map is not None:
+        tiebreak_entries = tiebreak_map.get(key, [])
+    else:
+        tiebreak_entries = TieBreakEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
+    result = {
         "total": total,
         "count_5": count_5,
         "count_3": count_3,
         "red_cards": red_cards,
         "by_station": by_station,
-        "tiebreak_total": tiebreak_total,
+        "tiebreak_total": sum(e.score for e in tiebreak_entries),
     }
+    summary_cache[key] = result
+    return result
 
 
 def build_scorecard_template_data(athlete_id: int) -> dict:
@@ -474,7 +549,13 @@ def ranking_key(item: dict):
 
 
 def build_round_ranking(event: Event, round_no: int) -> List[dict]:
-    athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.start_order).all()
+    cache = _request_cache()
+    cache_key = ("round_ranking", event.id, round_no)
+    if has_request_context() and cache_key in cache:
+        return cache[cache_key]
+
+    preload_event_score_data(event)
+    athletes = sorted(event.athletes, key=lambda a: a.start_order)
     rows = []
     round2_display_map = {}
     if round_no == 2:
@@ -484,11 +565,7 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             if row["rank"] > event.direct_qualifiers and is_round_two_candidate(event, row["athlete"])
         ]
         round2_source_rows.sort(key=lambda row: (
-            row["total"],
-            row["count_5"],
-            row["count_3"],
-            row["tiebreak_total"],
-            row["athlete"].start_order,
+            row["total"], row["count_5"], row["count_3"], row["tiebreak_total"], row["athlete"].start_order,
         ))
         lane_count = max(event.lane_count or 1, 1)
         for idx, source_row in enumerate(round2_source_rows, start=1):
@@ -499,11 +576,8 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             }
 
     for athlete in athletes:
-        if round_no == 2:
-            sig2 = get_round_signature(athlete.id, 2)
-            if not sig2:
-                continue
-        ensure_round_entries(athlete.id, round_no)
+        if round_no == 2 and not get_round_signature(athlete.id, 2):
+            continue
         summary = summarize_round(athlete.id, round_no)
         row = {
             "athlete": athlete,
@@ -523,73 +597,103 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             row.update(round2_display_map[athlete.id])
         rows.append(row)
     rows.sort(key=ranking_key, reverse=True)
-    rank = 1
     for idx, row in enumerate(rows):
         if idx == 0:
             row["rank"] = 1
             continue
         prev = rows[idx - 1]
-        if ranking_key(row) == ranking_key(prev):
-            row["rank"] = prev["rank"]
-        else:
-            row["rank"] = idx + 1
+        row["rank"] = prev["rank"] if ranking_key(row) == ranking_key(prev) else idx + 1
+    if has_request_context():
+        cache[cache_key] = rows
     return rows
 
 
+def round_two_candidate_ids(event: Event) -> set[int]:
+    cache = _request_cache()
+    cache_key = ("round_two_candidate_ids", event.id)
+    if has_request_context() and cache_key in cache:
+        return cache[cache_key]
+    ids: set[int] = set()
+    if event.has_round_two and event.round_two_cutoff_rank:
+        cutoff = event.round_two_cutoff_rank
+        direct = event.direct_qualifiers
+        round1_rows = build_round_ranking(event, 1)
+        if cutoff > direct:
+            cutoff_row = next((row for row in round1_rows if row["rank"] == cutoff), None)
+            if cutoff_row:
+                target_score = cutoff_row["total"]
+                ids = {
+                    row["athlete"].id for row in round1_rows
+                    if row["rank"] > direct and row["total"] >= target_score
+                }
+    if has_request_context():
+        cache[cache_key] = ids
+    return ids
+
+
 def is_round_two_candidate(event: Event, athlete: Athlete) -> bool:
-    if not event.has_round_two or not event.round_two_cutoff_rank:
-        return False
-    round1_rows = build_round_ranking(event, 1)
-    if not round1_rows:
-        return False
-    cutoff = event.round_two_cutoff_rank
-    direct = event.direct_qualifiers
-    if cutoff <= direct:
-        return False
-    eligible_rows = [r for r in round1_rows if r["rank"] > direct]
-    if not eligible_rows:
-        return False
-    target_score = None
-    for row in round1_rows:
-        if row["rank"] == cutoff:
-            target_score = row["total"]
-            break
-    if target_score is None:
-        return False
-    athlete_row = next((r for r in round1_rows if r["athlete"].id == athlete.id), None)
-    if not athlete_row or athlete_row["rank"] <= direct:
-        return False
-    return athlete_row["total"] >= target_score
+    return athlete.id in round_two_candidate_ids(event)
 
 
 def sync_round_two_candidates(event: Event) -> None:
     if not event.has_round_two:
         return
 
-    round1_rows = build_round_ranking(event, 1)
-    if not round1_rows:
+    candidate_ids = round_two_candidate_ids(event)
+    athlete_ids = [athlete.id for athlete in event.athletes]
+    if not athlete_ids:
         return
 
-    direct_ids = {row["athlete"].id for row in round1_rows if row["rank"] <= event.direct_qualifiers}
-    candidate_ids = {
-        row["athlete"].id
-        for row in round1_rows
-        if row["athlete"].id not in direct_ids and is_round_two_candidate(event, row["athlete"])
+    signatures = {
+        sig.athlete_id: sig
+        for sig in ScoreSignature.query.filter(
+            ScoreSignature.athlete_id.in_(athlete_ids),
+            ScoreSignature.round_no == 2,
+        ).all()
+    }
+    existing_entry_keys = {
+        (entry.athlete_id, entry.station_no, entry.distance_m)
+        for entry in ScoreEntry.query.filter(
+            ScoreEntry.athlete_id.in_(athlete_ids),
+            ScoreEntry.round_no == 2,
+        ).all()
     }
 
+    changed = False
     for athlete in event.athletes:
-        sig2 = get_round_signature(athlete.id, 2)
+        sig2 = signatures.get(athlete.id)
         if athlete.id in candidate_ids:
-            ensure_round_entries(athlete.id, 2)
-            sig2 = ensure_signature(athlete.id, 2)
-            if not sig2.started_at and not sig2.finished_at:
+            for station_no in STATIONS:
+                for distance_m in DISTANCES:
+                    key = (athlete.id, station_no, distance_m)
+                    if key not in existing_entry_keys:
+                        db.session.add(ScoreEntry(
+                            athlete_id=athlete.id,
+                            round_no=2,
+                            station_no=station_no,
+                            distance_m=distance_m,
+                            score=0,
+                            is_red_card=False,
+                        ))
+                        changed = True
+            if not sig2:
+                sig2 = ScoreSignature(athlete_id=athlete.id, round_no=2)
+                db.session.add(sig2)
+                signatures[athlete.id] = sig2
+                changed = True
+            if not sig2.started_at and not sig2.finished_at and athlete.status != "waiting":
                 athlete.status = "waiting"
+                changed = True
         elif sig2 and not sig2.started_at and not sig2.finished_at:
-            ScoreEntry.query.filter_by(athlete_id=athlete.id, round_no=2).delete()
-            TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=2).delete()
-            ScoreSignature.query.filter_by(athlete_id=athlete.id, round_no=2).delete()
+            ScoreEntry.query.filter_by(athlete_id=athlete.id, round_no=2).delete(synchronize_session=False)
+            TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=2).delete(synchronize_session=False)
+            ScoreSignature.query.filter_by(athlete_id=athlete.id, round_no=2).delete(synchronize_session=False)
+            changed = True
 
-    db.session.commit()
+    if changed:
+        db.session.commit()
+        clear_request_cache()
+
 
 def build_round_two_start_list(event: Event) -> list[dict]:
     round1_rows = build_round_ranking(event, 1)
@@ -618,6 +722,10 @@ def build_round_two_start_list(event: Event) -> list[dict]:
     return candidates
 
 def build_combined_qualifiers(event: Event) -> List[dict]:
+    cache = _request_cache()
+    cache_key = ("combined_qualifiers", event.id)
+    if has_request_context() and cache_key in cache:
+        return cache[cache_key]
     round1_rows = build_round_ranking(event, 1)
     direct_rows = [r for r in round1_rows if r["rank"] <= event.direct_qualifiers]
     if not event.has_round_two:
@@ -647,7 +755,10 @@ def build_combined_qualifiers(event: Event) -> List[dict]:
             row["rank"] = prev["rank"] if ranking_key(row) == ranking_key(prev) else idx + 1
     for idx, row in enumerate(combined_rows[:event.round_two_advancers]):
         row["seed"] = event.direct_qualifiers + idx + 1
-    return direct_rows + combined_rows
+    result = direct_rows + combined_rows
+    if has_request_context():
+        cache[cache_key] = result
+    return result
 
 
 def scorecard_print_positions() -> dict:
@@ -690,14 +801,17 @@ def scorecard_print_positions() -> dict:
 
 
 def get_progression_groups(event: Event) -> dict:
+    cache = _request_cache()
+    cache_key = ("progression_groups", event.id)
+    if has_request_context() and cache_key in cache:
+        return cache[cache_key]
     round1_rows = build_round_ranking(event, 1)
     direct_ids = {r["athlete"].id for r in round1_rows if r["rank"] <= event.direct_qualifiers}
     round2_candidate_ids = set()
     passed_round2_ids = set()
     eliminated_ids = set()
     if event.has_round_two:
-        candidates = [r for r in round1_rows if is_round_two_candidate(event, r["athlete"])]
-        round2_candidate_ids = {r["athlete"].id for r in candidates} - direct_ids
+        round2_candidate_ids = round_two_candidate_ids(event) - direct_ids
         combined = build_combined_qualifiers(event)
         advancers = combined[event.direct_qualifiers:event.direct_qualifiers + event.round_two_advancers]
         passed_round2_ids = {r["athlete"].id for r in advancers}
@@ -707,7 +821,10 @@ def get_progression_groups(event: Event) -> dict:
             continue
         if aid in round2_candidate_ids and aid not in passed_round2_ids:
             eliminated_ids.add(aid)
-    return {"direct": direct_ids, "round2_candidates": round2_candidate_ids, "round2_passed": passed_round2_ids, "eliminated": eliminated_ids}
+    result = {"direct": direct_ids, "round2_candidates": round2_candidate_ids, "round2_passed": passed_round2_ids, "eliminated": eliminated_ids}
+    if has_request_context():
+        cache[cache_key] = result
+    return result
 
 
 def compute_round_ranks(event: Event) -> dict[int, dict[int,int]]:
@@ -719,30 +836,50 @@ def compute_round_ranks(event: Event) -> dict[int, dict[int,int]]:
     return result
 
 
+def configured_bracket_start_round(event: Event) -> str:
+    return {
+        "รอบ 16 คน": "R16",
+        "รอบ 8 คน": "QF",
+        "รอบ 4 คน": "SF",
+        "รอบรองชนะเลิศ": "SF",
+    }.get(event.next_round_label, "QF")
+
+
 def ensure_bracket(event: Event) -> list[BracketMatch]:
     matches = BracketMatch.query.filter_by(event_id=event.id).order_by(BracketMatch.round_name, BracketMatch.match_no).all()
+    desired_round = configured_bracket_start_round(event)
+
+    # Older code chose the bracket from the current number of available seeds.
+    # That made a configured Round of 16 silently appear as Quarter Final.
+    # Rebuild only a not-yet-started stale bracket; never delete an active one.
     if matches:
-        return matches
+        existing_rounds = {match.round_name for match in matches}
+        initial_round = "R16" if "R16" in existing_rounds else ("QF" if "QF" in existing_rounds else "SF")
+        if initial_round != desired_round and not any(match.winner_id for match in matches):
+            BracketMatch.query.filter_by(event_id=event.id).delete(synchronize_session=False)
+            db.session.commit()
+            matches = []
+        else:
+            return matches
+
     qualifiers = build_combined_qualifiers(event)
-    seeds = qualifiers[:event.direct_qualifiers + event.round_two_advancers]
-    if len(seeds) >= 16:
-        order = [(1,16),(8,9),(5,12),(4,13),(3,14),(6,11),(7,10),(2,15)]
-        for idx,(a,b) in enumerate(order, start=1):
-            arow = seeds[a-1] if len(seeds) >= a else None
-            brow = seeds[b-1] if len(seeds) >= b else None
-            db.session.add(BracketMatch(event_id=event.id, round_name="R16", match_no=idx, athlete_a_id=arow["athlete"].id if arow else None, athlete_b_id=brow["athlete"].id if brow else None))
-    elif len(seeds) >= 8:
-        order = [(1,8),(4,5),(3,6),(2,7)]
-        for idx,(a,b) in enumerate(order, start=1):
-            arow = seeds[a-1] if len(seeds) >= a else None
-            brow = seeds[b-1] if len(seeds) >= b else None
-            db.session.add(BracketMatch(event_id=event.id, round_name="QF", match_no=idx, athlete_a_id=arow["athlete"].id if arow else None, athlete_b_id=brow["athlete"].id if brow else None))
-    elif len(seeds) >= 4:
-        order = [(1,4),(2,3)]
-        for idx,(a,b) in enumerate(order, start=1):
-            arow = seeds[a-1] if len(seeds) >= a else None
-            brow = seeds[b-1] if len(seeds) >= b else None
-            db.session.add(BracketMatch(event_id=event.id, round_name="SF", match_no=idx, athlete_a_id=arow["athlete"].id if arow else None, athlete_b_id=brow["athlete"].id if brow else None))
+    seed_count = event.direct_qualifiers + (event.round_two_advancers if event.has_round_two else 0)
+    seeds = qualifiers[:seed_count]
+    orders = {
+        "R16": [(1,16),(8,9),(5,12),(4,13),(3,14),(6,11),(7,10),(2,15)],
+        "QF": [(1,8),(4,5),(3,6),(2,7)],
+        "SF": [(1,4),(2,3)],
+    }
+    for idx, (a, b) in enumerate(orders[desired_round], start=1):
+        arow = seeds[a - 1] if len(seeds) >= a else None
+        brow = seeds[b - 1] if len(seeds) >= b else None
+        db.session.add(BracketMatch(
+            event_id=event.id,
+            round_name=desired_round,
+            match_no=idx,
+            athlete_a_id=arow["athlete"].id if arow else None,
+            athlete_b_id=brow["athlete"].id if brow else None,
+        ))
     db.session.commit()
     return BracketMatch.query.filter_by(event_id=event.id).order_by(BracketMatch.round_name, BracketMatch.match_no).all()
 
@@ -981,6 +1118,7 @@ def edit_event(event_id: int):
         event.round_two_advancers = int(request.form.get("round_two_advancers") or 4)
         recalculate_event_orders(event)
         db.session.commit()
+        reset_event_bracket(event)
         flash("แก้ไขอีเวนต์สำเร็จ", "success")
         return redirect(url_for("event_overview", event_id=event.id, round=1))
     return render_template("event_form.html", event=event, is_edit=True)
@@ -1203,6 +1341,7 @@ def autosave_scorecard(athlete_id: int):
         entry.is_red_card = red
         entry.score = 0 if red else value
     db.session.commit()
+    clear_request_cache()
     summary = summarize_round(athlete.id, round_no)
     station_entries = ScoreEntry.query.filter_by(
         athlete_id=athlete.id,
@@ -1682,6 +1821,7 @@ def bracket_excel(event_id: int):
 @app.route("/events/<int:event_id>/bracket_data")
 def bracket_data(event_id: int):
     event = Event.query.get_or_404(event_id)
+    preload_event_score_data(event)
 
     maybe_advance_bracket(event)
 
@@ -1770,6 +1910,7 @@ def api_public_shooting_events():
 @app.route('/api/public/shooting/event/<int:event_id>/report')
 def api_public_shooting_report(event_id: int):
     event = Event.query.get_or_404(event_id)
+    preload_event_score_data(event)
     athletes = sorted(event.athletes, key=lambda a: (a.lane_no, a.lane_order, a.start_order))
     rows = [_lr_athlete_payload(event, a) for a in athletes]
     ranking = sorted(rows, key=lambda r: (r["total"], r["round1_total"], -r["red_card_count"]), reverse=True)
