@@ -31,7 +31,7 @@
     <label>จากรอบ 2 คัดเข้ารอบต่อกี่คน<input type="number" min="1" name="round_two_advancers" value="{{ event.round_two_advancers if event else 4 }}"></label>
     <label>รอบถัดไปคือรอบอะไร
       <select name="next_round_label">
-        {% for v in ['รอบ 8 คน','รอบ 4 คน','รอบรองชนะเลิศ'] %}
+        {% for v in ['รอบ 16 คน','รอบ 8 คน','รอบ 4 คน','รอบรองชนะเลิศ'] %}
         <option value="{{ v }}" {% if event and event.next_round_label == v %}selected{% endif %}>{{ v }}</option>
         {% endfor %}
       </select>

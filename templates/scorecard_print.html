@@ -369,7 +369,8 @@
       </tr>
     </thead>
     <tbody>
-      {% for rn in [1,2,3,4,5] %}
+      {% for round_label in round_labels %}
+      {% set rn = loop.index %}
       {% set sig = round_signatures[rn] %}
       {% set has_started = sig and (sig.started_at or sig.finished_at) %}
 
@@ -445,7 +446,8 @@
       <div class="signature-head">กรรมการ</div>
       <div class="signature-head">ผู้บันทึก</div>
 
-      {% for rn in [1,2,3,4,5] %}
+      {% for round_label in round_labels %}
+      {% set rn = loop.index %}
       <div><strong>{{ round_labels[rn-1] }}</strong></div>
 
       <div>

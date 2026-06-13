@@ -92,13 +92,24 @@ ROUND_LABELS = {
     2: "รอบที่ 2",
 }
 
-SCORECARD_ROUND_LABELS = [
+SCORECARD_ROUND_LABELS_8 = [
     "รอบที่ 1",
     "รอบที่ 2",
     "รอบ 8 คน",
     "รอบรองชนะเลิศ",
     "รอบชิงชนะเลิศ",
 ]
+
+SCORECARD_ROUND_LABELS_16 = [
+    "รอบที่ 1",
+    "รอบที่ 2",
+    "รอบ 16 คน",
+    "รอบ 8 คน",
+    "รอบรองชนะเลิศ",
+    "รอบชิงชนะเลิศ",
+]
+
+ALL_SCORECARD_ROUNDS = [1, 2, 3, 4, 5, 6]
 
 STATIONS = [1, 2, 3, 4, 5]
 DISTANCES = [6, 7, 8, 9]
@@ -219,6 +230,27 @@ def role_required(*roles: str):
     return decorator
 
 #---------------คะแนนเรียลไทม์------------
+def event_has_round_of_16(event) -> bool:
+    if event.next_round_label == "รอบ 16 คน":
+        return True
+    return BracketMatch.query.filter_by(event_id=event.id, round_name="R16").first() is not None
+
+
+def scorecard_round_labels(event) -> list[str]:
+    return SCORECARD_ROUND_LABELS_16 if event_has_round_of_16(event) else SCORECARD_ROUND_LABELS_8
+
+
+def scorecard_round_numbers(event) -> list[int]:
+    return list(range(1, len(scorecard_round_labels(event)) + 1))
+
+
+def bracket_round_to_scorecard_round(round_name: str, event=None) -> int:
+    if round_name == "R16":
+        return 3
+    if event is not None and event_has_round_of_16(event):
+        return {"QF": 4, "SF": 5, "F": 6}[round_name]
+    return {"QF": 3, "SF": 4, "F": 5}[round_name]
+
 def build_bracket_row_data(event, athlete, round_name):
     if not athlete:
         return {
@@ -232,8 +264,7 @@ def build_bracket_row_data(event, athlete, round_name):
             "total": 0,
         }
 
-    round_map = {"QF": 3, "SF": 4, "F": 5}
-    round_no = round_map.get(round_name)
+    round_no = bracket_round_to_scorecard_round(round_name, event)
 
     r1_summary = summarize_round(athlete.id, 1)
     r2_summary = summarize_round(athlete.id, 2) if event.has_round_two else {"total": 0}
@@ -390,7 +421,7 @@ def build_scorecard_template_data(athlete_id: int) -> dict:
     station_reds: dict[tuple[int, int], int] = {}
     round_totals: dict[int, int] = {}
 
-    for round_no in [1, 2, 3, 4, 5]:
+    for round_no in ALL_SCORECARD_ROUNDS:
         round_totals[round_no] = 0
         for station_no in STATIONS:
             station_entries = [
@@ -629,9 +660,10 @@ def scorecard_print_positions() -> dict:
         "rows": {
             1: {"top": 362},  # รอบที่ 1
             2: {"top": 437},  # รอบที่ 2
-            3: {"top": 512},  # รอบ 8 คน
-            4: {"top": 587},  # รอบรองชนะเลิศ
-            5: {"top": 662},  # รอบชิงชนะเลิศ
+            3: {"top": 512},  # รอบ 16 คน (เมื่อเปิดใช้สาย 16 คน) หรือรอบ 8 คนในอีเวนต์เดิม
+            4: {"top": 587},  # รอบ 8 คน หรือรอบรองชนะเลิศในอีเวนต์เดิม
+            5: {"top": 662},  # รอบรองชนะเลิศ หรือรอบชิงชนะเลิศในอีเวนต์เดิม
+            6: {"top": 737},  # รอบชิงชนะเลิศ เมื่อเปิดใช้สาย 16 คน
         },
         "station_cols": {
             1: {"6": 170, "7": 211, "8": 252, "9": 293, "total": 334},
@@ -651,6 +683,7 @@ def scorecard_print_positions() -> dict:
             3: {"judge": 852, "recorder": 852},
             4: {"judge": 890, "recorder": 890},
             5: {"judge": 928, "recorder": 928},
+            6: {"judge": 966, "recorder": 966},
         },
     }
 
@@ -692,7 +725,13 @@ def ensure_bracket(event: Event) -> list[BracketMatch]:
         return matches
     qualifiers = build_combined_qualifiers(event)
     seeds = qualifiers[:event.direct_qualifiers + event.round_two_advancers]
-    if len(seeds) >= 8:
+    if len(seeds) >= 16:
+        order = [(1,16),(8,9),(5,12),(4,13),(3,14),(6,11),(7,10),(2,15)]
+        for idx,(a,b) in enumerate(order, start=1):
+            arow = seeds[a-1] if len(seeds) >= a else None
+            brow = seeds[b-1] if len(seeds) >= b else None
+            db.session.add(BracketMatch(event_id=event.id, round_name="R16", match_no=idx, athlete_a_id=arow["athlete"].id if arow else None, athlete_b_id=brow["athlete"].id if brow else None))
+    elif len(seeds) >= 8:
         order = [(1,8),(4,5),(3,6),(2,7)]
         for idx,(a,b) in enumerate(order, start=1):
             arow = seeds[a-1] if len(seeds) >= a else None
@@ -710,10 +749,16 @@ def ensure_bracket(event: Event) -> list[BracketMatch]:
 
 def maybe_advance_bracket(event: Event) -> None:
     matches = BracketMatch.query.filter_by(event_id=event.id).all()
+    r16 = sorted([m for m in matches if m.round_name == "R16"], key=lambda m: m.match_no)
     qf = sorted([m for m in matches if m.round_name == "QF"], key=lambda m: m.match_no)
     sf = sorted([m for m in matches if m.round_name == "SF"], key=lambda m: m.match_no)
     fn = sorted([m for m in matches if m.round_name == "F"], key=lambda m: m.match_no)
     changed = False
+    if r16 and all(m.winner_id for m in r16) and not qf:
+        pairings = [(r16[0].winner_id, r16[1].winner_id), (r16[2].winner_id, r16[3].winner_id), (r16[4].winner_id, r16[5].winner_id), (r16[6].winner_id, r16[7].winner_id)]
+        for idx,(a,b) in enumerate(pairings, start=1):
+            db.session.add(BracketMatch(event_id=event.id, round_name="QF", match_no=idx, athlete_a_id=a, athlete_b_id=b))
+        changed = True
     if qf and all(m.winner_id for m in qf) and not sf:
         pairings = [(qf[0].winner_id, qf[1].winner_id), (qf[2].winner_id, qf[3].winner_id)]
         for idx,(a,b) in enumerate(pairings, start=1):
@@ -726,12 +771,9 @@ def maybe_advance_bracket(event: Event) -> None:
         db.session.commit()
 
 
-def bracket_round_to_scorecard_round(round_name: str) -> int:
-    return {"QF": 3, "SF": 4, "F": 5}[round_name]
-
-
 def sync_match_winner_from_scores(match: BracketMatch) -> None:
-    round_no = bracket_round_to_scorecard_round(match.round_name)
+    event = Event.query.get(match.event_id)
+    round_no = bracket_round_to_scorecard_round(match.round_name, event)
     if not match.athlete_a_id or not match.athlete_b_id:
         return
     sig_a = get_round_signature(match.athlete_a_id, round_no)
@@ -752,7 +794,7 @@ def build_bracket_match_row(event: Event, athlete: Athlete | None, round_name: s
         return base
     r1 = summarize_round(athlete.id, 1)["total"]
     r2 = summarize_round(athlete.id, 2)["total"] if event.has_round_two else 0
-    round_no = bracket_round_to_scorecard_round(round_name)
+    round_no = bracket_round_to_scorecard_round(round_name, event)
     current = summarize_round(athlete.id, round_no)
     return {
         "athlete": athlete,
@@ -1231,8 +1273,13 @@ def scorecard(athlete_id: int):
                 reset_event_bracket(event)
             elif round_no == 2 and event.has_round_two:
                 reset_event_bracket(event)
-            elif round_no in [3, 4, 5]:
-                round_map = {3: "QF", 4: "SF", 5: "F"}
+            elif round_no >= 3:
+                round_map = ({3: "R16", 4: "QF", 5: "SF", 6: "F"}
+                             if event_has_round_of_16(event)
+                             else {3: "QF", 4: "SF", 5: "F"})
+                if round_no not in round_map:
+                    flash("รอบแข่งขันไม่ถูกต้อง", "warning")
+                    return redirect(url_for("bracket", event_id=event.id))
                 match = BracketMatch.query.filter_by(
                     event_id=event.id,
                     round_name=round_map[round_no]
@@ -1258,10 +1305,11 @@ def scorecard(athlete_id: int):
         3: "",
         4: "",
         5: "",
+        6: "",
     }
 
     round_station_running_totals = {}
-    for rn in [1, 2, 3, 4, 5]:
+    for rn in scorecard_round_numbers(event):
         running = {}
         acc = 0
         for st in [1, 2, 3, 4, 5]:
@@ -1271,7 +1319,7 @@ def scorecard(athlete_id: int):
         round_station_running_totals[rn] = running
 
     round_signatures = {}
-    for rn in [1, 2, 3, 4, 5]:
+    for rn in scorecard_round_numbers(event):
         round_signatures[rn] = get_round_signature(athlete.id, rn)
 
     combined_rows = build_combined_qualifiers(event) if event.has_round_two else []
@@ -1291,7 +1339,7 @@ def scorecard(athlete_id: int):
         athlete=athlete,
         event=event,
         round_no=round_no,
-        round_labels=SCORECARD_ROUND_LABELS,
+        round_labels=scorecard_round_labels(event),
         score_map=template_data["score_map"],
         station_totals=template_data["station_totals"],
         station_reds=template_data["station_reds"],
@@ -1323,10 +1371,11 @@ def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
         3: "",
         4: "",
         5: "",
+        6: "",
     }
 
     round_station_running_totals = {}
-    for rn in [1, 2, 3, 4, 5]:
+    for rn in scorecard_round_numbers(event):
         running = {}
         acc = 0
         for st in STATIONS:
@@ -1336,7 +1385,7 @@ def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
         round_station_running_totals[rn] = running
 
     round_signatures = {}
-    for rn in [1, 2, 3, 4, 5]:
+    for rn in scorecard_round_numbers(event):
         round_signatures[rn] = get_round_signature(athlete.id, rn)
 
     combined_rows = build_combined_qualifiers(event) if event.has_round_two else []
@@ -1360,7 +1409,7 @@ def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
         "athlete": athlete,
         "event": event,
         "round_no": round_no,
-        "round_labels": SCORECARD_ROUND_LABELS,
+        "round_labels": scorecard_round_labels(event),
         "score_map": template_data["score_map"],
         "station_totals": template_data["station_totals"],
         "station_reds": template_data["station_reds"],
@@ -1425,7 +1474,7 @@ def scorecards_print_select(event_id: int):
         event=event,
         athletes=athletes,
         round_no=round_no,
-        round_labels=SCORECARD_ROUND_LABELS,
+        round_labels=scorecard_round_labels(event),
     )
 
 
@@ -1462,7 +1511,7 @@ def scorecards_print_bulk(event_id: int):
         "scorecards_print_bulk.html",
         event=event,
         round_no=round_no,
-        round_labels=SCORECARD_ROUND_LABELS,
+        round_labels=scorecard_round_labels(event),
         print_items=print_items,
         station_images=[f"station_{i}.png" for i in STATIONS],
     )
@@ -1488,10 +1537,11 @@ def scorecard_print(athlete_id: int):
         3: "",
         4: "",
         5: "",
+        6: "",
     }
 
     round_station_running_totals = {}
-    for rn in [1, 2, 3, 4, 5]:
+    for rn in scorecard_round_numbers(event):
         running = {}
         acc = 0
         for st in STATIONS:
@@ -1501,7 +1551,7 @@ def scorecard_print(athlete_id: int):
         round_station_running_totals[rn] = running
 
     round_signatures = {}
-    for rn in [1, 2, 3, 4, 5]:
+    for rn in scorecard_round_numbers(event):
         round_signatures[rn] = get_round_signature(athlete.id, rn)
 
     combined_rows = build_combined_qualifiers(event) if event.has_round_two else []
@@ -1527,7 +1577,7 @@ def scorecard_print(athlete_id: int):
         athlete=athlete,
         event=event,
         round_no=round_no,
-        round_labels=SCORECARD_ROUND_LABELS,
+        round_labels=scorecard_round_labels(event),
         score_map=template_data["score_map"],
         station_totals=template_data["station_totals"],
         station_reds=template_data["station_reds"],
@@ -1586,7 +1636,7 @@ def bracket(event_id: int):
     matches = BracketMatch.query.filter_by(event_id=event.id).order_by(BracketMatch.round_name, BracketMatch.match_no).all()
     athlete_map = {a.id: a for a in event.athletes}
     seed_map = {row["athlete"].id: idx for idx, row in enumerate(qualifiers, start=1) if row.get("athlete")}
-    grouped = {"QF": [], "SF": [], "F": []}
+    grouped = {"R16": [], "QF": [], "SF": [], "F": []}
     for m in matches:
         a = athlete_map.get(m.athlete_a_id)
         b = athlete_map.get(m.athlete_b_id)
@@ -1595,7 +1645,7 @@ def bracket(event_id: int):
             "a": build_bracket_match_row(event, a, m.round_name, seed_map),
             "b": build_bracket_match_row(event, b, m.round_name, seed_map),
             "winner": athlete_map.get(m.winner_id),
-            "round_no": bracket_round_to_scorecard_round(m.round_name),
+            "round_no": bracket_round_to_scorecard_round(m.round_name, event),
         })
     return render_template("bracket.html", event=event, grouped=grouped)
 
@@ -1642,7 +1692,7 @@ def bracket_data(event_id: int):
 
     athlete_map = {a.id: a for a in event.athletes}
 
-    grouped = {"QF": [], "SF": [], "F": []}
+    grouped = {"R16": [], "QF": [], "SF": [], "F": []}
     for m in matches:
         grouped.setdefault(m.round_name, []).append({
             "match_no": m.match_no,

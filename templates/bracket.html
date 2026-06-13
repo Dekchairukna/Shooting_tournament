@@ -133,7 +133,7 @@
 
     .bracket-board{
       display:grid;
-      grid-template-columns:1.65fr 1.2fr 1fr;
+      grid-template-columns:1.85fr 1.65fr 1.2fr 1fr;
       gap:20px;
       align-items:start;
       overflow-x:auto;
@@ -153,6 +153,12 @@
       letter-spacing:.02em;
       border:1px solid transparent;
       box-shadow:0 3px 12px rgba(15,23,42,.04);
+    }
+
+    .round-col.r16 .round-title{
+      background:linear-gradient(180deg,#ecfdf5,#d1fae5);
+      color:#047857;
+      border-color:#a7f3d0;
     }
 
     .round-col.qf .round-title{
@@ -182,6 +188,11 @@
       box-shadow:0 8px 24px rgba(15,23,42,.06);
     }
 
+    .round-col.r16 .match-box{
+      border-color:#a7f3d0;
+      background:linear-gradient(180deg,#ffffff,#f5fffb);
+    }
+
     .round-col.qf .match-box{
       border-color:#bfdbfe;
       background:linear-gradient(180deg,#ffffff,#f8fbff);
@@ -209,6 +220,11 @@
       letter-spacing:.02em;
       background:#f8fafc;
       color:#334155;
+    }
+
+    .round-col.r16 .match-title{
+      background:#d1fae5;
+      color:#065f46;
     }
 
     .round-col.qf .match-title{
@@ -316,6 +332,11 @@
       letter-spacing:.02em;
     }
 
+    .round-col.r16 .match-row th{
+      background:#ecfdf5;
+      color:#065f46;
+    }
+
     .round-col.qf .match-row th{
       background:#eff6ff;
       color:#1e3a8a;
@@ -402,6 +423,52 @@
   </style>
 
   <div class="bracket-board">
+    <div class="round-col r16">
+      <h2 class="round-title">Round of 16</h2>
+      {% for item in grouped.get('R16', []) %}
+      <div class="match-box">
+        <div class="match-title">R16 {{ item.match.match_no }}</div>
+        <div class="table-wrap">
+          <table class="match-row">
+            <thead>
+              <tr>
+                <th>SEED</th><th>TEAM</th><th>NAME</th><th>R1</th><th>R1+R2</th>
+                <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>R16 TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in [item.a, item.b] %}
+              <tr
+                data-round="R16"
+                data-match="{{ item.match.match_no }}"
+                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
+                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
+                <td class="seed-cell">{{ row.seed }}</td>
+                <td class="team-cell">{{ row.team }}</td>
+                <td class="player-name name-cell">
+                  {% if row.athlete %}
+                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
+                  {% else %}
+                    <span class="empty-slot">-</span>
+                  {% endif %}
+                </td>
+                <td class="r1-cell">{{ row.r1 }}</td>
+                <td class="r1r2-cell">{{ row.r1r2 }}</td>
+                {% for s in row.stations %}
+                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
+                {% endfor %}
+                <td class="total-cell">{{ row.total }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <p class="muted-box">ยังไม่มีคู่รอบ 16 คน</p>
+      {% endfor %}
+    </div>
+
     <div class="round-col qf">
       <h2 class="round-title">Quarter Final</h2>
       {% for item in grouped.get('QF', []) %}
@@ -595,6 +662,7 @@ async function refreshBracketData(){
     if (!response.ok) return;
 
     const data = await response.json();
+    if (data.R16) updateBracketGroup("R16", data.R16);
     if (data.QF) updateBracketGroup("QF", data.QF);
     if (data.SF) updateBracketGroup("SF", data.SF);
     if (data.F) updateBracketGroup("F", data.F);
