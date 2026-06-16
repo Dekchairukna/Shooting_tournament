@@ -2127,15 +2127,23 @@ def scorecard(athlete_id: int):
         flash("นักกีฬาคนนี้ไม่มีสิทธิ์ตีรอบ 2", "warning")
         return redirect(url_for("event_overview", event_id=event.id, round=1))
 
-    ensure_round_entries(athlete.id, 1)
-    if round_no == 2:
-        ensure_round_entries(athlete.id, 2)
+        # GET: เปิดหน้า scorecard อย่างเดียว
+    # ไม่สร้าง score_entry / ไม่เปลี่ยนสถานะ / ไม่ commit
+    # POST หรือ autosave ค่อยสร้างข้อมูลจริง
+    if request.method == "POST":
+        ensure_round_entries(athlete.id, round_no)
+        signature = ensure_signature(athlete.id, round_no)
+    else:
+        signature = ScoreSignature.query.filter_by(
+            athlete_id=athlete.id,
+            round_no=round_no
+        ).first()
 
-    signature = ensure_signature(athlete.id, round_no)
-    if not signature.started_at:
-        signature.started_at = datetime.utcnow()
-        athlete.status = "active"
-        db.session.commit()
+        if not signature:
+            signature = ScoreSignature(
+                athlete_id=athlete.id,
+                round_no=round_no
+            )
 
     if request.method == "POST":
         referee_name_key = f"referee_name_{round_no}"
@@ -2144,6 +2152,10 @@ def scorecard(athlete_id: int):
         referee_sig_key = f"ref_sig_{round_no}"
         recorder_sig_key = f"rec_sig_{round_no}"
         athlete_sig_key = f"ath_sig_{round_no}"
+
+        if not signature.started_at:
+            signature.started_at = datetime.utcnow()
+            athlete.status = "active"
 
         signature.recorder_name = request.form.get(recorder_name_key, "").strip() or signature.recorder_name
         signature.referee_name = request.form.get(referee_name_key, "").strip() or signature.referee_name
@@ -2166,29 +2178,38 @@ def scorecard(athlete_id: int):
             signature.finished_at = datetime.utcnow()
             athlete.status = "finished"
             db.session.commit()
+
             if round_no == 1 and event.has_round_two:
                 sync_round_two_candidates(event)
                 reset_event_bracket(event)
             elif round_no == 2 and event.has_round_two:
                 reset_event_bracket(event)
             elif round_no >= 3:
-                round_map = ({3: "R16", 4: "QF", 5: "SF", 6: "F"}
-                             if event_has_round_of_16(event)
-                             else {3: "QF", 4: "SF", 5: "F"})
+                round_map = (
+                    {3: "R16", 4: "QF", 5: "SF", 6: "F"}
+                    if event_has_round_of_16(event)
+                    else {3: "QF", 4: "SF", 5: "F"}
+                )
+
                 if round_no not in round_map:
                     flash("รอบแข่งขันไม่ถูกต้อง", "warning")
                     return redirect(url_for("bracket", event_id=event.id))
+
                 match = BracketMatch.query.filter_by(
                     event_id=event.id,
                     round_name=round_map[round_no]
                 ).filter(
-                    (BracketMatch.athlete_a_id == athlete.id) | (BracketMatch.athlete_b_id == athlete.id)
+                    (BracketMatch.athlete_a_id == athlete.id) |
+                    (BracketMatch.athlete_b_id == athlete.id)
                 ).first()
+
                 if match:
                     sync_match_winner_from_scores(match)
                     maybe_advance_bracket(event)
+
                 flash("จบการตีเรียบร้อย", "success")
                 return redirect(url_for("bracket", event_id=event.id))
+
             flash("จบการตีเรียบร้อย", "success")
             return redirect(url_for("event_overview", event_id=event.id, round=round_no))
 
@@ -2221,12 +2242,24 @@ def scorecard(athlete_id: int):
         round_signatures[rn] = get_round_signature(athlete.id, rn)
 
     combined_rows = build_combined_qualifiers(event) if event.has_round_two else []
-    current_combined = next((r for r in combined_rows if r.get("athlete") and r["athlete"].id == athlete.id), None)
+    current_combined = next(
+        (
+            r for r in combined_rows
+            if r.get("athlete") and r["athlete"].id == athlete.id
+        ),
+        None
+    )
+
     display_order = athlete.start_order
     display_lane_no = athlete.lane_no
     display_lane_order = athlete.lane_order
+
     current_round_rows = build_round_ranking(event, round_no)
-    current_row = next((row for row in current_round_rows if row["athlete"].id == athlete.id), None)
+    current_row = next(
+        (row for row in current_round_rows if row["athlete"].id == athlete.id),
+        None
+    )
+
     if current_row:
         display_order = current_row.get("display_order", display_order)
         display_lane_no = current_row.get("display_lane_no", display_lane_no)
@@ -2255,111 +2288,6 @@ def scorecard(athlete_id: int):
         display_lane_no=display_lane_no,
         display_lane_order=display_lane_order,
     )
-
-
-def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
-    event = athlete.event
-
-    template_data = build_scorecard_template_data(athlete.id)
-    ranks = compute_round_ranks(event)
-
-    round_ranks = {
-        1: ranks.get(1, {}).get(athlete.id, ""),
-        2: ranks.get(2, {}).get(athlete.id, ""),
-        3: "",
-        4: "",
-        5: "",
-        6: "",
-    }
-
-    round_station_running_totals = {}
-    for rn in scorecard_round_numbers(event):
-        running = {}
-        acc = 0
-        for st in STATIONS:
-            val = template_data["station_totals"].get((rn, st), 0)
-            acc += val
-            running[st] = acc
-        round_station_running_totals[rn] = running
-
-    round_signatures = {}
-    for rn in scorecard_round_numbers(event):
-        round_signatures[rn] = get_round_signature(athlete.id, rn)
-
-    combined_rows = build_combined_qualifiers(event) if event.has_round_two else []
-    current_combined = next(
-        (r for r in combined_rows if r.get("athlete") and r["athlete"].id == athlete.id),
-        None
-    )
-
-    display_order = athlete.start_order
-    display_lane_no = athlete.lane_no
-    display_lane_order = athlete.lane_order
-
-    current_round_rows = build_round_ranking(event, round_no)
-    current_row = next((row for row in current_round_rows if row["athlete"].id == athlete.id), None)
-    if current_row:
-        display_order = current_row.get("display_order", display_order)
-        display_lane_no = current_row.get("display_lane_no", display_lane_no)
-        display_lane_order = current_row.get("display_lane_order", display_lane_order)
-
-    return {
-        "athlete": athlete,
-        "event": event,
-        "round_no": round_no,
-        "round_labels": scorecard_round_labels(event),
-        "score_map": template_data["score_map"],
-        "station_totals": template_data["station_totals"],
-        "station_reds": template_data["station_reds"],
-        "round_totals": template_data["round_totals"],
-        "round_ranks": round_ranks,
-        "round_signatures": round_signatures,
-        "round_station_running_totals": round_station_running_totals,
-        "current_combined": current_combined,
-        "combined_rows": combined_rows,
-        "display_order": display_order,
-        "display_lane_no": display_lane_no,
-        "display_lane_order": display_lane_order,
-        "positions": scorecard_print_positions(),
-        "station_images": [f"station_{i}.png" for i in STATIONS],
-    }
-
-
-def athletes_for_scorecard_round(event: Event, round_no: int, selected_ids: list[int] | None = None) -> list[Athlete]:
-    query = Athlete.query.filter_by(event_id=event.id)
-    if selected_ids:
-        query = query.filter(Athlete.id.in_(selected_ids))
-    athletes = query.order_by(Athlete.start_order, Athlete.id).all()
-
-    if round_no == 2 and event.has_round_two:
-        rows = build_round_ranking(event, 2)
-        rows = sort_round_two_rows_for_start(rows)
-        selected_set = set(selected_ids or [])
-        ordered = [row["athlete"] for row in rows if (not selected_set or row["athlete"].id in selected_set)]
-        return ordered
-
-    if round_no >= 3:
-        round_name = None
-        for key in ["R16", "QF", "SF", "F"]:
-            try:
-                if bracket_round_to_scorecard_round(key, event) == round_no:
-                    round_name = key
-                    break
-            except KeyError:
-                continue
-        if round_name:
-            ensure_bracket(event)
-            maybe_advance_bracket(event)
-            matches = BracketMatch.query.filter_by(event_id=event.id, round_name=round_name).order_by(BracketMatch.match_no).all()
-            ordered_ids = []
-            for match in matches:
-                for aid in [match.athlete_a_id, match.athlete_b_id]:
-                    if aid and aid not in ordered_ids:
-                        ordered_ids.append(aid)
-            athlete_by_id = {a.id: a for a in athletes}
-            return [athlete_by_id[aid] for aid in ordered_ids if aid in athlete_by_id]
-
-    return athletes
 
 
 @app.route("/events/<int:event_id>/scorecards-print-select", methods=["GET", "POST"])
