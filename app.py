@@ -185,7 +185,7 @@ class Athlete(db.Model):
 
 
 class ScoreEntry(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     athlete_id = db.Column(db.Integer, db.ForeignKey("athlete.id"), nullable=False)
     round_no = db.Column(db.Integer, nullable=False, default=1)
     station_no = db.Column(db.Integer, nullable=False)
@@ -196,7 +196,7 @@ class ScoreEntry(db.Model):
 
 
 class ScoreSignature(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     athlete_id = db.Column(db.Integer, db.ForeignKey("athlete.id"), nullable=False)
     round_no = db.Column(db.Integer, nullable=False)
     recorder_name = db.Column(db.String(255), nullable=True)
@@ -219,7 +219,7 @@ class TieBreakEntry(db.Model):
 
 
 class BracketMatch(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     event_id = db.Column(db.Integer, db.ForeignKey("event.id"), nullable=False)
     round_name = db.Column(db.String(20), nullable=False)
     match_no = db.Column(db.Integer, nullable=False)
@@ -245,6 +245,16 @@ def role_required(*roles: str):
             return redirect(url_for("index"))
         return wrapper
     return decorator
+
+
+def next_manual_id(model):
+    """Fallback สำหรับ PostgreSQL table เก่าที่ id ไม่มี sequence/default"""
+    try:
+        max_id = db.session.query(db.func.max(model.id)).scalar() or 0
+        return int(max_id) + 1
+    except Exception:
+        db.session.rollback()
+        return None
 
 #---------------คะแนนเรียลไทม์------------
 def event_has_round_of_16(event) -> bool:
@@ -331,9 +341,43 @@ def build_bracket_row_data(event, athlete, round_name, seed_map=None):
 
 def ensure_schema() -> None:
     os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
-    # SQLite เดิมต้องมี migration เล็กน้อย แต่ PostgreSQL ให้ db.create_all() สร้าง schema ใหม่พอ
+
+    # PostgreSQL บน Railway: ตารางที่เคยย้ายจาก SQLite บางตัวมี id NOT NULL
+    # แต่ไม่มี DEFAULT nextval(sequence) ทำให้ INSERT แล้ว id = null
+    # แก้แบบถาวรด้วยการสร้าง sequence และผูก default ให้ทุกตารางหลัก
+    if db.engine.dialect.name == "postgresql":
+        tables = [
+            "user",
+            "event",
+            "athlete",
+            "score_entry",
+            "score_signature",
+            "tie_break_entry",
+            "bracket_match",
+        ]
+        with db.engine.begin() as conn:
+            for table in tables:
+                seq = f"{table}_id_seq"
+                conn.exec_driver_sql(f'CREATE SEQUENCE IF NOT EXISTS "{seq}"')
+                conn.exec_driver_sql(
+                    f"""SELECT setval(
+                        '"{seq}"',
+                        COALESCE((SELECT MAX(id) FROM "{table}"), 0) + 1,
+                        false
+                    )"""
+                )
+                conn.exec_driver_sql(
+                    f'ALTER TABLE "{table}" ALTER COLUMN id SET DEFAULT nextval(\'"{seq}"\')'
+                )
+                conn.exec_driver_sql(
+                    f'ALTER SEQUENCE "{seq}" OWNED BY "{table}".id'
+                )
+        return
+
+    # SQLite migration เดิม
     if db.engine.dialect.name != "sqlite":
         return
+
     with db.engine.begin() as conn:
         columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(score_signature)").fetchall()}
         if "recorder_signature" not in columns:
@@ -346,45 +390,28 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN bypass_signed BOOLEAN DEFAULT 0")
         if "started_at" not in columns:
             conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN started_at DATETIME")
-        event_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(event)").fetchall()}
-        if "round_two_advancers" not in event_cols:
-            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN round_two_advancers INTEGER DEFAULT 4")
-        tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        if "bracket_match" not in tables:
-            conn.exec_driver_sql("CREATE TABLE bracket_match (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, round_name VARCHAR(20) NOT NULL, match_no INTEGER NOT NULL, athlete_a_id INTEGER, athlete_b_id INTEGER, winner_id INTEGER)")
+        if "finished_at" not in columns:
+            conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN finished_at DATETIME")
 
+        event_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(event)").fetchall()}
+        if "has_round_two" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN has_round_two BOOLEAN DEFAULT 1")
+        if "bracket_qualifiers" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN bracket_qualifiers INTEGER DEFAULT 8")
+        if "direct_qualifiers" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN direct_qualifiers INTEGER DEFAULT 4")
+        if "category" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN category VARCHAR(20) DEFAULT 'men'")
+        if "next_round_label" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN next_round_label VARCHAR(50)")
 
-
-def next_manual_id(model):
-    """Fallback สำหรับ PostgreSQL table เก่าที่ id ไม่มี sequence/default"""
-    try:
-        max_id = db.session.query(db.func.max(model.id)).scalar() or 0
-        return int(max_id) + 1
-    except Exception:
-        db.session.rollback()
-        return None
-
-def event_theme(category: str) -> str:
-    return {
-        "ชาย": "male",
-        "หญิง": "female",
-        "ผสม": "mixed",
-    }.get(category, "mixed")
-
-
-def scorecard_positions(round_no: int) -> dict:
-    row_y = {1: 462, 2: 536}.get(round_no, 462)
-    station_starts = {1: 170, 2: 374, 3: 580, 4: 785, 5: 990}
-    distances = [6, 7, 8, 9]
-    positions = {}
-    for station, start_x in station_starts.items():
-        for idx, distance in enumerate(distances):
-            positions[(station, distance)] = {"left": start_x + (idx * 40), "top": row_y}
-        positions[(station, "total")] = {"left": start_x + 160, "top": row_y}
-    positions[("grand_total", "value")] = {"left": 1196, "top": row_y}
-    positions[("rank", "value")] = {"left": 1268, "top": row_y}
-    return positions
-
+        athlete_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(athlete)").fetchall()}
+        if "lane_no" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN lane_no INTEGER")
+        if "lane_order" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN lane_order INTEGER")
+        if "start_order" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN start_order INTEGER")
 
 def seed_defaults() -> None:
     if not User.query.filter_by(username="superadmin").first():
