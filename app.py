@@ -413,6 +413,19 @@ def ensure_schema() -> None:
         if "start_order" not in athlete_columns:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN start_order INTEGER")
 
+
+def event_theme(category: str | None) -> str:
+    """คืนค่า class สีของ event ตามประเภทการแข่งขัน"""
+    category = (category or "men").strip().lower()
+    if category in {"women", "female", "หญิง", "lady", "ladies"}:
+        return "theme-women"
+    if category in {"mixed", "mix", "ผสม", "คู่ผสม"}:
+        return "theme-mixed"
+    if category in {"youth", "junior", "เยาวชน"}:
+        return "theme-youth"
+    return "theme-men"
+
+
 def seed_defaults() -> None:
     if not User.query.filter_by(username="superadmin").first():
         u = User(username="superadmin", role="superadmin")
