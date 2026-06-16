@@ -1,13 +1,58 @@
 {% extends 'base.html' %}
 {% block content %}
-<section class="card narrow">
+<section class="card tiebreak-card">
   <h1>ตีเที่ยวพิเศษ 7 เมตรทุกสถานี</h1>
-  <p>{{ athlete.name }} — รอบ {{ round_no }}</p>
-  <form method="post" class="form-grid">
-    {% for station in [1,2,3,4,5] %}
-    <label>สถานี {{ station }}<input type="number" name="tb_{{ station }}" min="0" max="5" value="{{ existing.get(station, 0) }}"></label>
+  <p class="muted">รอบ {{ round_no }} · เลือกคะแนนแบบ 0 / 1 / 3 / 5</p>
+  <p class="muted">ต้องบันทึกพร้อมกันทุกคนที่ติด Shoot-off หากยังเท่ากันให้กลับมาเลือกกลุ่มเดิมแล้วบันทึกเพิ่มอีกเที่ยว</p>
+
+  <form method="post" class="tiebreak-form">
+    {% for athlete in athletes %}
+    <div class="tiebreak-athlete-card">
+      <div class="athlete-head">
+        <strong>{{ athlete.name }}</strong>
+        <span>{{ athlete.affiliation or '-' }}</span>
+      </div>
+      <div class="tiebreak-grid">
+        {% for station in [1,2,3,4,5] %}
+        <label>สถานี {{ station }}
+          {% if bulk_mode is defined and bulk_mode %}
+            {% set old_score = existing.get(athlete.id, {}).get(station, 0) %}
+            <select name="tb_{{ athlete.id }}_{{ station }}" class="score-select">
+          {% else %}
+            {% set old_score = existing.get(station, 0) %}
+            <select name="tb_{{ station }}" class="score-select">
+          {% endif %}
+            {% for score in [0,1,3,5] %}
+            <option value="{{ score }}">{{ score }}</option>
+            {% endfor %}
+          </select>
+          <small>สะสมเดิม: {{ old_score }}</small>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
     {% endfor %}
-    <button class="btn" type="submit">บันทึกเที่ยวพิเศษ</button>
+    <div class="tiebreak-actions">
+      <a class="btn btn-secondary" href="{{ url_for('event_overview', event_id=event.id if event else athlete.event_id, round=round_no) }}">← กลับ Overview</a>
+      <button class="btn btn-primary btn-save-tiebreak" type="submit">บันทึกเที่ยวพิเศษพร้อมกัน</button>
+    </div>
   </form>
 </section>
+<style>
+.tiebreak-card{max-width:980px;margin:auto;padding:24px;}
+.tiebreak-card h1{font-size:2.2rem;margin:0 0 8px;color:#0f172a;}
+.tiebreak-form{display:grid;gap:16px;}
+.tiebreak-athlete-card{border:1px solid #dbeafe;border-radius:18px;background:#fff;padding:16px;box-shadow:0 8px 24px rgba(15,23,42,.05);}
+.athlete-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-weight:900;color:#0f172a;}
+.athlete-head strong{font-size:1.2rem;}
+.athlete-head span{color:#64748b;}
+.tiebreak-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+.score-select{width:100%;min-height:58px;border:1px solid #cbd5e1;border-radius:14px;padding:10px 14px;font-size:1.35rem;font-weight:900;background:#fff;}
+.tiebreak-grid label{font-weight:900;color:#0f172a;}
+.tiebreak-grid small{display:block;margin-top:4px;color:#64748b;font-weight:800;}
+.tiebreak-actions{display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;}
+.btn-save-tiebreak{min-height:58px;font-size:1.15rem;font-weight:1000;border-radius:14px;}
+@media(max-width:900px){.tiebreak-grid{grid-template-columns:repeat(2,1fr);} .tiebreak-card h1{font-size:1.7rem;}}
+@media(max-width:520px){.tiebreak-grid{grid-template-columns:1fr;}}
+</style>
 {% endblock %}

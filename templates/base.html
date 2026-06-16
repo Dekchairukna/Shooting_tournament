@@ -389,6 +389,60 @@
     }
 
     
+
+
+    /* ===== iPad 11 inch: fit every page to screen ===== */
+    @media (min-width: 768px) and (max-width: 1194px) {
+      html, body {
+        width: 100%;
+        max-width: 100vw;
+        overflow-x: hidden;
+      }
+
+      .container-main {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        padding: 8px !important;
+      }
+
+      .card,
+      .main-card,
+      .panel,
+      .section-card,
+      .bracket-card {
+        max-width: 100% !important;
+        border-radius: 14px !important;
+        padding: 8px !important;
+      }
+
+      .toolbar,
+      .responsive-toolbar,
+      .main-toolbar {
+        display: flex;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+      }
+
+      .btn,
+      button,
+      .action-btn,
+      .btn-main {
+        min-height: 38px;
+        padding: 7px 10px;
+        font-size: 13px;
+        border-radius: 10px;
+      }
+
+      .qualification-scroll,
+      .table-wrap,
+      .scorecard-table-wrap,
+      .bracket-print-wrap {
+        max-width: calc(100vw - 18px) !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+
   </style>
 </head>
 

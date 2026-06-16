@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<section class="card knockout-page">
+<section id="bracketExportArea" class="card knockout-page">
   <div class="page-top">
     <div class="title-wrap">
       <p class="eyebrow">Tournament</p>
@@ -8,10 +8,15 @@
       <p class="subtitle">กดที่ชื่อในแต่ละ match box เพื่อเปิด scorecard ของรอบนั้น</p>
     </div>
 
-    <div class="top-actions">
-      <a class="btn btn-soft" href="{{ url_for('event_overview', event_id=event.id) }}">{{ event.name }}</a>
-      <a class="btn btn-outline" href="{{ url_for('event_overview', event_id=event.id) }}">← Back to Event</a>
-      <a class="btn btn-dark" href="{{ url_for('index') }}">All Events</a>
+    <div class="top-actions responsive-toolbar">
+      <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">รอบ 1</a>
+      {% if event.has_round_two %}
+      <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=2) }}">รอบ 2</a>
+      {% endif %}
+      <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id) }}">กลับหน้าอีเวนต์</a>
+      <a class="btn secondary" href="{{ url_for('index') }}">รายการทั้งหมด</a>
+      <button type="button" class="btn secondary" onclick="downloadBracketImage()">บันทึกเป็นรูปภาพ</button>
+      <button type="button" class="btn secondary" onclick="window.print()">พิมพ์ตาราง</button>
     </div>
   </div>
 
@@ -67,9 +72,11 @@
 
     .top-actions{
       display:flex;
-      gap:10px;
       flex-wrap:wrap;
+      gap:10px;
       justify-content:flex-end;
+      align-items:center;
+      max-width:100%;
     }
 
     .breadcrumb-bar{
@@ -100,23 +107,38 @@
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      padding:10px 14px;
+      min-height:42px;
+      padding:9px 12px;
       border-radius:12px;
       text-decoration:none;
       font-weight:800;
+      font-size:.82rem;
       transition:.18s ease;
       border:1px solid transparent;
       white-space:nowrap;
+      cursor:pointer;
+      line-height:1.1;
     }
 
     .btn:hover{
       transform:translateY(-1px);
     }
 
+    .btn.secondary{
+      background:#ffffff;
+      color:#334155;
+      border:1px solid #cbd5e1;
+    }
+
+    .btn.secondary:hover{
+      background:#f8fafc;
+      color:#0f172a;
+    }
+
     .btn-soft{
-      background:linear-gradient(180deg,#eff6ff,#dbeafe);
+      background:linear-gradient(180deg,#f8fbff,#eff6ff);
       color:#1d4ed8;
-      border-color:#bfdbfe;
+      border-color:#dbeafe;
     }
 
     .btn-outline{
@@ -134,11 +156,35 @@
     .bracket-board{
       display:grid;
       grid-template-columns:1.85fr 1.65fr 1.2fr 1fr;
-      gap:20px;
+      gap:16px;
       align-items:start;
       overflow-x:auto;
       padding:8px 4px 10px;
     }
+
+    .bracket-board.start-qf{
+      grid-template-columns:1.7fr 1.25fr 1fr;
+    }
+
+    .bracket-board.start-sf{
+      grid-template-columns:1.45fr 1fr;
+    }
+
+    /* จัดรอบถัดไปให้อยู่กึ่งกลางระหว่างสายก่อนหน้า เป็นทรงสามเหลี่ยม */
+    /* QF1 อยู่กลางระหว่าง R16 1-2, QF2 ระหว่าง 3-4, QF3 ระหว่าง 5-6, QF4 ระหว่าง 7-8 */
+    .bracket-board.start-r16 .qf .qf-pos-1{margin-top:82px;}
+    .bracket-board.start-r16 .qf .qf-pos-2{margin-top:178px;}
+    .bracket-board.start-r16 .qf .qf-pos-3{margin-top:178px;}
+    .bracket-board.start-r16 .qf .qf-pos-4{margin-top:178px;}
+    .bracket-board.start-r16 .sf .sf-pos-1{margin-top:218px;}
+    .bracket-board.start-r16 .sf .sf-pos-2{margin-top:445px;}
+    .bracket-board.start-r16 .final .final-pos{margin-top:500px;}
+
+    .bracket-board.start-qf .sf .sf-pos-1{margin-top:98px;}
+    .bracket-board.start-qf .sf .sf-pos-2{margin-top:170px;}
+    .bracket-board.start-qf .final .final-pos{margin-top:230px;}
+
+    .bracket-board.start-sf .final .final-pos{margin-top:150px;}
 
     .round-col{
       min-width:max-content;
@@ -156,56 +202,65 @@
     }
 
     .round-col.r16 .round-title{
-      background:linear-gradient(180deg,#ecfdf5,#d1fae5);
+      background:linear-gradient(180deg,#f7fff9,#ecfdf5);
       color:#047857;
-      border-color:#a7f3d0;
+      border-color:#bbf7d0;
     }
 
     .round-col.qf .round-title{
-      background:linear-gradient(180deg,#eff6ff,#dbeafe);
+      background:linear-gradient(180deg,#f8fbff,#eff6ff);
       color:#1d4ed8;
-      border-color:#bfdbfe;
+      border-color:#dbeafe;
     }
 
     .round-col.sf .round-title{
-      background:linear-gradient(180deg,#faf5ff,#ede9fe);
+      background:linear-gradient(180deg,#fdfcff,#f5f3ff);
       color:#7c3aed;
-      border-color:#ddd6fe;
+      border-color:#ede9fe;
     }
 
     .round-col.final .round-title{
-      background:linear-gradient(180deg,#fff8e1,#fef3c7);
+      background:linear-gradient(180deg,#fffdf5,#fffbeb);
       color:#b45309;
-      border-color:#fcd34d;
+      border-color:#fde68a;
     }
 
     .match-box{
       border:1px solid #e2e8f0;
-      border-radius:20px;
+      border-radius:18px;
       background:#ffffff;
-      padding:12px;
-      margin-bottom:24px;
+      padding:10px;
+      margin-bottom:18px;
       box-shadow:0 8px 24px rgba(15,23,42,.06);
     }
 
     .round-col.r16 .match-box{
-      border-color:#a7f3d0;
+      border-color:#bbf7d0;
       background:linear-gradient(180deg,#ffffff,#f5fffb);
     }
 
     .round-col.qf .match-box{
-      border-color:#bfdbfe;
+      border-color:#dbeafe;
       background:linear-gradient(180deg,#ffffff,#f8fbff);
     }
 
     .round-col.sf .match-box{
-      border-color:#ddd6fe;
+      border-color:#ede9fe;
       background:linear-gradient(180deg,#ffffff,#fcfaff);
     }
 
     .round-col.final .match-box{
-      border-color:#fcd34d;
+      border-color:#fde68a;
       background:linear-gradient(180deg,#fffef8,#fff7df);
+    }
+
+    .match-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
     }
 
     .match-title{
@@ -222,23 +277,96 @@
       color:#334155;
     }
 
+    .round-actions{
+      display:flex;
+      justify-content:flex-end;
+      margin:-4px 0 12px;
+    }
+
+    .round-print-btn{
+      min-height:34px;
+      padding:7px 10px;
+      border-radius:10px;
+      font-size:.78rem;
+      font-weight:900;
+      background:#fff;
+      color:#0f172a;
+      border:1px solid #cbd5e1;
+      text-decoration:none;
+    }
+
+    .match-status{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:30px;
+      padding:5px 9px;
+      border-radius:999px;
+      font-size:.76rem;
+      font-weight:900;
+      border:1px solid transparent;
+    }
+    .match-status.waiting{background:#f1f5f9;color:#475569;border-color:#cbd5e1;}
+    .match-status.active{background:#ffedd5;color:#9a3412;border-color:#fed7aa;}
+    .match-status.ready_result{background:#fef3c7;color:#92400e;border-color:#fde68a;}
+    .match-status.finished{background:#dcfce7;color:#166534;border-color:#bbf7d0;}
+
+    .row-status-pill{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:62px;
+      padding:4px 7px;
+      border-radius:999px;
+      font-size:.7rem;
+      font-weight:900;
+    }
+    .row-status-pill.waiting{background:#f1f5f9;color:#475569;}
+    .row-status-pill.active{background:#ffedd5;color:#9a3412;}
+    .row-status-pill.finished{background:#dcfce7;color:#166534;}
+
+    .status-cell{
+      text-align:center;
+      white-space:nowrap;
+    }
+
+    .combined-summary{
+      margin:12px 0 22px;
+      border:1px solid #e2e8f0;
+      border-radius:18px;
+      overflow:hidden;
+      background:#fff;
+    }
+    .combined-summary h3{
+      margin:0;
+      padding:12px 14px;
+      background:#f8fafc;
+      color:#0f172a;
+      font-size:1rem;
+    }
+    .combined-table{width:100%;border-collapse:collapse;font-size:.86rem;}
+    .combined-table th,.combined-table td{border-top:1px solid #e2e8f0;padding:8px;text-align:center;}
+    .combined-table th{background:#f8fafc;font-weight:900;color:#334155;}
+    .combined-table td.name{text-align:left;font-weight:900;}
+    .combined-table td.aff{text-align:left;color:#475569;font-weight:700;}
+
     .round-col.r16 .match-title{
-      background:#d1fae5;
+      background:#ecfdf5;
       color:#065f46;
     }
 
     .round-col.qf .match-title{
-      background:#dbeafe;
+      background:#eff6ff;
       color:#1e40af;
     }
 
     .round-col.sf .match-title{
-      background:#ede9fe;
+      background:#f5f3ff;
       color:#6d28d9;
     }
 
     .round-col.final .match-title{
-      background:#fde68a;
+      background:#fffbeb;
       color:#92400e;
     }
 
@@ -251,10 +379,18 @@
       width:100%;
       border-collapse:separate;
       border-spacing:0;
-      font-size:.8rem;
+      font-size:.78rem;
       background:#fff;
       overflow:hidden;
       border-radius:14px;
+    }
+
+    .compact-match-row{
+      font-size:.76rem;
+    }
+
+    .compact-match-row .player-name{
+      min-width:132px;
     }
 
     .match-row th,
@@ -276,7 +412,7 @@
     }
 
 
-    @media (max-width: 900px){
+    @media (max-width: 640px){
       .knockout-page{
         padding:14px;
         border-radius:18px;
@@ -330,6 +466,12 @@
       font-weight:900;
       font-size:.74rem;
       letter-spacing:.02em;
+    }
+    .match-row .group-head th{
+      font-size:.72rem;
+      text-transform:none;
+      letter-spacing:.03em;
+      border-bottom:1px solid #dbeafe;
     }
 
     .round-col.r16 .match-row th{
@@ -412,188 +554,1010 @@
 
       .top-sf-1,
       .top-sf-2,
-      .top-final{
-        margin-top:0;
+      .top-final,
+      .qf-pos-1,.qf-pos-2,.qf-pos-3,.qf-pos-4,
+      .sf-pos-1,.sf-pos-2,.final-pos{
+        margin-top:0!important;
       }
 
       .title-wrap h1{
         font-size:1.6rem;
       }
     }
+
+
+    .exporting-bracket .top-actions,
+    .exporting-bracket .breadcrumb-bar,
+    .exporting-bracket .round-actions,
+    .exporting-bracket .subtitle,
+    .exporting-bracket .eyebrow{display:none!important;}
+    .exporting-bracket .bracket-board{grid-template-columns:2.05fr 1.75fr 1.25fr 1fr!important;overflow:visible!important;}
+
+    @media print{
+      @page{size:A4 landscape;margin:5mm;}
+      body{background:#fff!important;}
+      .top-actions,.breadcrumb-bar,.combined-summary,.round-actions,.subtitle,.eyebrow{display:none!important;}
+      .knockout-page{box-shadow:none!important;border:0!important;padding:0!important;border-radius:0!important;background:#fff!important;}
+      .page-top{margin-bottom:4px!important;}
+      .title-wrap h1{font-size:16px!important;text-align:center;width:100%;margin:0 0 4px!important;}
+      .bracket-board{display:grid!important;grid-template-columns:2.05fr 1.75fr 1.25fr 1fr!important;gap:3mm!important;overflow:visible!important;padding:0!important;align-items:start!important;}
+      .bracket-board.start-qf{grid-template-columns:1.8fr 1.25fr 1fr!important;}
+      .bracket-board.start-sf{grid-template-columns:1.4fr 1fr!important;}
+      .round-col{min-width:0!important;}
+      .round-title{font-size:10px!important;padding:4px 5px!important;margin:0 0 3px!important;border-radius:5px!important;text-align:center!important;}
+      .match-box{padding:3px!important;margin-bottom:3px!important;border-radius:6px!important;box-shadow:none!important;break-inside:avoid!important;}
+      .match-head{margin-bottom:2px!important;gap:2px!important;}
+      .match-title{font-size:8px!important;padding:2px 4px!important;margin:0!important;border-radius:4px!important;}
+      .match-status{font-size:7px!important;min-height:14px!important;padding:1px 4px!important;}
+      .table-wrap{overflow:visible!important;}
+      .match-row{font-size:7px!important;border-radius:0!important;}
+      .match-row th,.match-row td{padding:1px 2px!important;white-space:nowrap!important;}
+      .match-row th{font-size:6px!important;}
+      .player-name{min-width:0!important;max-width:34mm!important;overflow:hidden!important;text-overflow:ellipsis!important;}
+      .row-status-pill{font-size:6px!important;min-width:0!important;padding:1px 3px!important;}
+      .top-sf-1,.top-sf-2,.top-final,.qf-pos-1,.qf-pos-2,.qf-pos-3,.qf-pos-4,.sf-pos-1,.sf-pos-2,.final-pos{margin-top:0!important;}
+      .muted-box{font-size:8px!important;padding:5px!important;}
+    }
+
+
+    /* ===== BRACKET FIT FIX: ก้างปลาให้พอดีจอ / พิมพ์ A4 ===== */
+    .knockout-page{padding:14px!important;overflow:hidden!important;}
+    .page-top{margin-bottom:10px!important;}
+    .title-wrap h1{font-size:1.45rem!important;}
+    .subtitle{font-size:.86rem!important;}
+    .top-actions{gap:7px!important;}
+    .top-actions .btn{min-height:36px!important;padding:8px 10px!important;font-size:.78rem!important;border-radius:10px!important;}
+    .breadcrumb-bar{padding:8px 10px!important;margin-bottom:10px!important;font-size:.82rem!important;border-radius:12px!important;}
+
+    .bracket-board{
+      width:100%!important;
+      max-width:100%!important;
+      overflow:visible!important;
+      display:grid!important;
+      grid-template-columns:minmax(0,34%) minmax(0,24%) minmax(0,20%) minmax(0,18%)!important;
+      gap:1.2%!important;
+      align-items:start!important;
+      padding:4px 0!important;
+      box-sizing:border-box!important;
+    }
+    .bracket-board.start-qf{grid-template-columns:minmax(0,44%) minmax(0,28%) minmax(0,22%)!important;}
+    .bracket-board.start-sf{grid-template-columns:minmax(0,52%) minmax(0,32%)!important;}
+    .round-col{min-width:0!important;width:100%!important;position:relative!important;}
+    .round-title{font-size:.82rem!important;padding:7px 9px!important;border-radius:10px!important;margin-bottom:6px!important;}
+    .round-actions{margin:0 0 5px!important;}
+    .round-print-btn{min-height:26px!important;padding:5px 7px!important;font-size:.62rem!important;}
+    .match-box{padding:5px!important;margin-bottom:9px!important;border-radius:10px!important;box-shadow:0 3px 10px rgba(15,23,42,.04)!important;position:relative!important;}
+    .match-head{margin-bottom:4px!important;gap:4px!important;}
+    .match-title{font-size:.66rem!important;padding:4px 6px!important;border-radius:8px!important;margin-bottom:0!important;}
+    .match-status{font-size:.56rem!important;min-height:20px!important;padding:2px 5px!important;}
+    .table-wrap{overflow:hidden!important;border-radius:8px!important;}
+    .match-row{font-size:.54rem!important;table-layout:fixed!important;width:100%!important;border-radius:8px!important;}
+    .match-row th,.match-row td{padding:2px 2px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}
+    .match-row th{font-size:.48rem!important;}
+    .match-row .group-head th{font-size:.48rem!important;}
+    .player-name{min-width:0!important;width:auto!important;max-width:none!important;}
+    .team-cell{max-width:42px!important;}
+    .seed-cell{width:24px!important;}
+    .status-cell{width:42px!important;}
+    .row-status-pill{min-width:0!important;padding:1px 3px!important;}
+
+    /* ตำแหน่งก้างปลา: รอบถัดไปอยู่กลางระหว่างสองสายก่อนหน้า */
+    .bracket-board.start-r16 .qf .qf-pos-1{margin-top:58px!important;}
+    .bracket-board.start-r16 .qf .qf-pos-2{margin-top:92px!important;}
+    .bracket-board.start-r16 .qf .qf-pos-3{margin-top:92px!important;}
+    .bracket-board.start-r16 .qf .qf-pos-4{margin-top:92px!important;}
+    .bracket-board.start-r16 .sf .sf-pos-1{margin-top:150px!important;}
+    .bracket-board.start-r16 .sf .sf-pos-2{margin-top:205px!important;}
+    .bracket-board.start-r16 .final .final-pos{margin-top:250px!important;}
+    .bracket-board.start-qf .sf .sf-pos-1{margin-top:66px!important;}
+    .bracket-board.start-qf .sf .sf-pos-2{margin-top:104px!important;}
+    .bracket-board.start-qf .final .final-pos{margin-top:135px!important;}
+    .bracket-board.start-sf .final .final-pos{margin-top:82px!important;}
+
+    /* เส้นก้างปลาแบบเบา ๆ */
+    .round-col.r16 .match-box::after,
+    .round-col.qf .match-box::after,
+    .round-col.sf .match-box::after{
+      content:"";position:absolute;right:-1.2vw;top:50%;width:1.2vw;border-top:2px solid #9f0756;opacity:.85;
+    }
+    .round-col.qf .match-box::before,
+    .round-col.sf .match-box::before,
+    .round-col.final .match-box::before{
+      content:"";position:absolute;left:-1.2vw;top:50%;width:1.2vw;border-top:2px solid #9f0756;opacity:.85;
+    }
+
+    @media (max-width:1180px){
+      .bracket-board{grid-template-columns:minmax(0,35%) minmax(0,24%) minmax(0,20%) minmax(0,18%)!important;gap:1%!important;}
+      .match-row{font-size:.48rem!important;}
+      .match-row th{font-size:.43rem!important;}
+      .match-title{font-size:.58rem!important;}
+      .match-status{display:none!important;}
+      .round-actions{display:none!important;}
+    }
+
+    @media (max-width:900px){
+      .bracket-board{overflow-x:auto!important;grid-template-columns:320px 250px 210px 180px!important;}
+      .round-col{min-width:0!important;}
+    }
+
+    @media print{
+      @page{size:A4 landscape;margin:4mm;}
+      .knockout-page{padding:0!important;overflow:visible!important;}
+      .title-wrap h1{font-size:14px!important;}
+      .bracket-board{grid-template-columns:34% 24% 20% 18%!important;gap:1%!important;overflow:visible!important;width:100%!important;}
+      .round-title{font-size:8px!important;padding:3px 4px!important;margin-bottom:2px!important;}
+      .match-box{padding:2px!important;margin-bottom:3px!important;border-radius:4px!important;box-shadow:none!important;}
+      .match-row{font-size:5.5px!important;}
+      .match-row th,.match-row td{padding:1px!important;}
+      .match-row th{font-size:5px!important;}
+      .match-title{font-size:6px!important;padding:1px 3px!important;}
+    }
+
+
+    /* ===== PATCH: remove connector lines + restore scorecard click ===== */
+    .round-col.r16 .match-box::after,
+    .round-col.qf .match-box::after,
+    .round-col.sf .match-box::after,
+    .round-col.qf .match-box::before,
+    .round-col.sf .match-box::before,
+    .round-col.final .match-box::before{
+      content:none!important;
+      display:none!important;
+      border:0!important;
+      width:0!important;
+      pointer-events:none!important;
+    }
+
+    .player-name,
+    .name-cell{
+      position:relative!important;
+      z-index:2!important;
+    }
+
+    .score-link{
+      position:relative!important;
+      z-index:3!important;
+      display:block!important;
+      cursor:pointer!important;
+      pointer-events:auto!important;
+    }
+
+    .match-row tbody tr[data-scorecard-url]{
+      cursor:pointer;
+    }
+
+    @media print{
+      .round-col.r16 .match-box::after,
+      .round-col.qf .match-box::after,
+      .round-col.sf .match-box::after,
+      .round-col.qf .match-box::before,
+      .round-col.sf .match-box::before,
+      .round-col.final .match-box::before{
+        content:none!important;
+        display:none!important;
+        border:0!important;
+        width:0!important;
+      }
+    }
+
+
+    /* ===== FINAL PATCH: no lines + bigger bracket + smaller station cells + wider name + clickable scorecard ===== */
+    .round-col.r16 .match-box::after,
+    .round-col.qf .match-box::after,
+    .round-col.sf .match-box::after,
+    .round-col.qf .match-box::before,
+    .round-col.sf .match-box::before,
+    .round-col.final .match-box::before{
+      content:none!important;
+      display:none!important;
+      border:0!important;
+      width:0!important;
+      height:0!important;
+      pointer-events:none!important;
+    }
+
+    .knockout-page{
+      overflow-x:auto!important;
+      overflow-y:visible!important;
+    }
+
+    .bracket-board,
+    .bracket-board.start-r16{
+      grid-template-columns:700px 520px 420px 340px!important;
+      gap:22px!important;
+      width:max-content!important;
+      max-width:none!important;
+      overflow:visible!important;
+      align-items:start!important;
+    }
+
+    .bracket-board.start-qf{
+      grid-template-columns:600px 460px 360px!important;
+    }
+
+    .bracket-board.start-sf{
+      grid-template-columns:520px 380px!important;
+    }
+
+    .round-col{
+      min-width:0!important;
+      width:100%!important;
+    }
+
+    .match-box{
+      padding:10px!important;
+      margin-bottom:12px!important;
+      border-radius:14px!important;
+    }
+
+    .match-row{
+      font-size:.70rem!important;
+      table-layout:fixed!important;
+      width:100%!important;
+    }
+
+    .match-row th,
+    .match-row td{
+      padding:4px 5px!important;
+      height:30px!important;
+      line-height:1.12!important;
+      vertical-align:middle!important;
+    }
+
+    .match-row th{
+      font-size:.62rem!important;
+    }
+
+    .match-row .group-head th{
+      font-size:.60rem!important;
+      height:24px!important;
+    }
+
+    /* ช่องคะแนน S1-S5 ให้เล็กลง */
+    .station-cell,
+    .station-head{
+      width:26px!important;
+      min-width:26px!important;
+      max-width:26px!important;
+      padding-left:2px!important;
+      padding-right:2px!important;
+      text-align:center!important;
+    }
+
+    /* header S1-S5 ใน template ไม่มี class จึงบีบคอลัมน์ด้วย nth-last */
+    .match-row th:nth-last-child(6),
+    .match-row th:nth-last-child(5),
+    .match-row th:nth-last-child(4),
+    .match-row th:nth-last-child(3),
+    .match-row th:nth-last-child(2){
+      width:26px!important;
+      min-width:26px!important;
+      max-width:26px!important;
+      padding-left:2px!important;
+      padding-right:2px!important;
+      text-align:center!important;
+    }
+
+    .total-cell,
+    .match-row th:last-child{
+      width:48px!important;
+      min-width:48px!important;
+      max-width:60px!important;
+      text-align:center!important;
+      font-weight:900!important;
+    }
+
+    .seed-cell,
+    .match-row th:first-child{
+      width:38px!important;
+      min-width:38px!important;
+      max-width:38px!important;
+      text-align:center!important;
+    }
+
+    .team-cell{
+      width:115px!important;
+      min-width:115px!important;
+      max-width:115px!important;
+      text-align:left!important;
+    }
+
+    /* ช่องชื่อใหญ่ขึ้น */
+    .name-cell,
+    .player-name{
+      width:230px!important;
+      min-width:230px!important;
+      max-width:230px!important;
+      text-align:left!important;
+      font-weight:800!important;
+    }
+
+    .round-col.qf .name-cell,
+    .round-col.qf .player-name{
+      width:210px!important;
+      min-width:210px!important;
+      max-width:210px!important;
+    }
+
+    .round-col.sf .name-cell,
+    .round-col.sf .player-name{
+      width:180px!important;
+      min-width:180px!important;
+      max-width:180px!important;
+    }
+
+    .round-col.final .name-cell,
+    .round-col.final .player-name{
+      width:150px!important;
+      min-width:150px!important;
+      max-width:150px!important;
+    }
+
+    .status-cell{
+      width:58px!important;
+      min-width:58px!important;
+      max-width:58px!important;
+      text-align:center!important;
+    }
+
+    .r1-cell,
+    .r1r2-cell{
+      width:48px!important;
+      min-width:48px!important;
+      max-width:48px!important;
+      text-align:center!important;
+    }
+
+    .team-cell,
+    .name-cell,
+    .player-name,
+    .score-link{
+      white-space:normal!important;
+      word-break:break-word!important;
+      overflow-wrap:anywhere!important;
+      overflow:visible!important;
+      text-overflow:clip!important;
+    }
+
+    .score-link{
+      display:block!important;
+      color:#111827!important;
+      text-decoration:none!important;
+      cursor:pointer!important;
+      pointer-events:auto!important;
+      position:relative!important;
+      z-index:10!important;
+    }
+
+    .score-link:hover{
+      color:#2563eb!important;
+      text-decoration:underline!important;
+    }
+
+    .match-row tbody tr[data-athlete-id]{
+      cursor:pointer!important;
+    }
+
+    @media (max-width:900px){
+      .bracket-board,
+      .bracket-board.start-r16{
+        grid-template-columns:700px 520px 420px 340px!important;
+        overflow:visible!important;
+      }
+    }
+
+    @media print{
+      .round-col.r16 .match-box::after,
+      .round-col.qf .match-box::after,
+      .round-col.sf .match-box::after,
+      .round-col.qf .match-box::before,
+      .round-col.sf .match-box::before,
+      .round-col.final .match-box::before{
+        content:none!important;
+        display:none!important;
+        border:0!important;
+      }
+      .bracket-board,
+      .bracket-board.start-r16{
+        grid-template-columns:42% 27% 19% 10%!important;
+        gap:.8%!important;
+        width:100%!important;
+        overflow:visible!important;
+      }
+      .station-cell,
+      .match-row th:nth-last-child(6),
+      .match-row th:nth-last-child(5),
+      .match-row th:nth-last-child(4),
+      .match-row th:nth-last-child(3),
+      .match-row th:nth-last-child(2){
+        width:auto!important;
+        min-width:0!important;
+        max-width:none!important;
+      }
+      .name-cell,.player-name,
+      .round-col.qf .name-cell,.round-col.qf .player-name,
+      .round-col.sf .name-cell,.round-col.sf .player-name,
+      .round-col.final .name-cell,.round-col.final .player-name{
+        width:auto!important;
+        min-width:0!important;
+        max-width:none!important;
+      }
+    }
+
+
+    /* ===== USE SAME BRACKET SIZE AS USER SAMPLE + KEEP CURRENT LOGIC =====
+       ใช้ขนาด/สัดส่วน bracket แบบไฟล์ Shooting_tournament-main ที่ส่งมา
+       แต่คง macro, realtime, scorecard click, readonly helper และ logic ปัจจุบันไว้
+    */
+
+    .knockout-page{
+      padding:22px!important;
+      border-radius:24px!important;
+      overflow-x:auto!important;
+      overflow-y:visible!important;
+    }
+
+    .bracket-board,
+    .bracket-board.start-r16{
+      display:grid!important;
+      grid-template-columns:1.85fr 1.65fr 1.2fr 1fr!important;
+      gap:20px!important;
+      align-items:start!important;
+      overflow-x:auto!important;
+      overflow-y:visible!important;
+      padding:8px 4px 10px!important;
+      width:100%!important;
+      max-width:100%!important;
+    }
+
+    .bracket-board.start-qf{
+      grid-template-columns:1.7fr 1.25fr 1fr!important;
+    }
+
+    .bracket-board.start-sf{
+      grid-template-columns:1.45fr 1fr!important;
+    }
+
+    .round-col,
+    .round-col.r16,
+    .round-col.qf,
+    .round-col.sf,
+    .round-col.final{
+      display:block!important;
+      min-width:max-content!important;
+      width:auto!important;
+      align-content:start!important;
+      grid-template-rows:none!important;
+    }
+
+    .round-title{
+      margin:0 0 12px!important;
+      padding:12px 14px!important;
+      border-radius:16px!important;
+      font-size:1rem!important;
+      min-height:0!important;
+      height:auto!important;
+      box-shadow:0 3px 12px rgba(15,23,42,.04)!important;
+    }
+
+    .match-box{
+      padding:12px!important;
+      margin-top:0!important;
+      margin-bottom:24px!important;
+      border-radius:20px!important;
+      box-shadow:0 8px 24px rgba(15,23,42,.06)!important;
+      position:relative!important;
+    }
+
+    .match-head{
+      min-height:0!important;
+      margin-bottom:10px!important;
+      gap:8px!important;
+      flex-wrap:wrap!important;
+    }
+
+    .match-title{
+      height:auto!important;
+      padding:7px 10px!important;
+      border-radius:12px!important;
+      font-size:.9rem!important;
+      line-height:1.1!important;
+      margin-bottom:0!important;
+    }
+
+    .match-status{
+      height:auto!important;
+      min-height:30px!important;
+      min-width:80px!important;
+      padding:5px 9px!important;
+      border-radius:999px!important;
+      font-size:.76rem!important;
+      line-height:1.1!important;
+    }
+
+    .table-wrap{
+      overflow-x:auto!important;
+      overflow-y:visible!important;
+      border-radius:14px!important;
+    }
+
+    .match-row{
+      width:100%!important;
+      table-layout:auto!important;
+      border-collapse:separate!important;
+      border-spacing:0!important;
+      font-size:.8rem!important;
+      border-radius:14px!important;
+    }
+
+    .match-row th,
+    .match-row td{
+      padding:6px 7px!important;
+      height:auto!important;
+      line-height:1.15!important;
+      white-space:nowrap!important;
+      overflow:visible!important;
+      text-overflow:clip!important;
+      vertical-align:middle!important;
+    }
+
+    .match-row th{
+      font-size:.74rem!important;
+      font-weight:900!important;
+    }
+
+    .match-row .group-head th{
+      font-size:.72rem!important;
+    }
+
+    .player-name,
+    .name-cell{
+      text-align:left!important;
+      min-width:160px!important;
+      width:auto!important;
+      max-width:none!important;
+      font-weight:700!important;
+      white-space:normal!important;
+      word-break:break-word!important;
+      overflow-wrap:anywhere!important;
+    }
+
+    .team-cell{
+      min-width:90px!important;
+      width:auto!important;
+      max-width:none!important;
+      text-align:left!important;
+      white-space:normal!important;
+      word-break:break-word!important;
+      overflow-wrap:anywhere!important;
+    }
+
+    .station-cell{
+      min-width:28px!important;
+      width:auto!important;
+      max-width:none!important;
+      text-align:center!important;
+      padding-left:4px!important;
+      padding-right:4px!important;
+    }
+
+    .total-cell{
+      min-width:42px!important;
+      width:auto!important;
+      max-width:none!important;
+      font-weight:900!important;
+      text-align:center!important;
+    }
+
+    .seed-cell{
+      min-width:30px!important;
+      width:auto!important;
+      max-width:none!important;
+      text-align:center!important;
+    }
+
+    .status-cell{
+      min-width:56px!important;
+      width:auto!important;
+      max-width:none!important;
+      text-align:center!important;
+    }
+
+    .score-link{
+      display:block!important;
+      color:#0f172a!important;
+      text-decoration:none!important;
+      font-weight:800!important;
+      cursor:pointer!important;
+      pointer-events:auto!important;
+      position:relative!important;
+      z-index:10!important;
+    }
+
+    .score-link:hover{
+      color:#2563eb!important;
+      text-decoration:underline!important;
+    }
+
+    .match-row tbody tr[data-athlete-id],
+    .match-row tbody tr[data-scorecard-url]{
+      cursor:pointer!important;
+    }
+
+    /* เอาเส้นออกตามคำสั่งเดิม */
+    .round-col.r16 .match-box::after,
+    .round-col.qf .match-box::after,
+    .round-col.sf .match-box::after,
+    .round-col.qf .match-box::before,
+    .round-col.sf .match-box::before,
+    .round-col.final .match-box::before{
+      content:none!important;
+      display:none!important;
+      border:0!important;
+      width:0!important;
+      height:0!important;
+      pointer-events:none!important;
+    }
+
+    /* ใช้ชิดบนทั้งหมด ไม่ใช้กึ่งกลาง/ไม่ใช้ margin-top */
+    .qf-pos-1,.qf-pos-2,.qf-pos-3,.qf-pos-4,
+    .sf-pos-1,.sf-pos-2,.final-pos,
+    .top-sf-1,.top-sf-2,.top-final{
+      margin-top:0!important;
+      grid-row:auto!important;
+      align-self:start!important;
+    }
+
+    .bracket-board.start-r16 .round-col.qf,
+    .bracket-board.start-r16 .round-col.sf,
+    .bracket-board.start-r16 .round-col.final,
+    .bracket-board.start-qf .round-col.sf,
+    .bracket-board.start-qf .round-col.final,
+    .bracket-board.start-sf .round-col.final{
+      display:block!important;
+      grid-template-rows:none!important;
+    }
+
+    @media (max-width:1200px){
+      .bracket-board,
+      .bracket-board.start-r16,
+      .bracket-board.start-qf,
+      .bracket-board.start-sf{
+        grid-template-columns:1fr!important;
+        width:100%!important;
+        max-width:100%!important;
+      }
+
+      .round-col{
+        min-width:0!important;
+        width:100%!important;
+      }
+
+      .title-wrap h1{
+        font-size:1.6rem!important;
+      }
+    }
+
+    @media (max-width:640px){
+      .knockout-page{
+        padding:14px!important;
+        border-radius:18px!important;
+      }
+
+      .match-box{
+        padding:10px!important;
+        border-radius:16px!important;
+      }
+
+      .match-row{
+        font-size:.75rem!important;
+      }
+
+      .match-row th,
+      .match-row td{
+        padding:5px 6px!important;
+      }
+    }
+
+    @media print{
+      @page{size:A4 landscape;margin:4mm;}
+      .top-actions,.breadcrumb-bar,.combined-summary,.round-actions,.subtitle,.eyebrow{display:none!important;}
+      .knockout-page{padding:0!important;overflow:visible!important;background:#fff!important;}
+      .bracket-board,
+      .bracket-board.start-r16{
+        display:grid!important;
+        grid-template-columns:1.85fr 1.65fr 1.2fr 1fr!important;
+        gap:3mm!important;
+        overflow:visible!important;
+        width:100%!important;
+        max-width:100%!important;
+      }
+      .bracket-board.start-qf{grid-template-columns:1.7fr 1.25fr 1fr!important;}
+      .bracket-board.start-sf{grid-template-columns:1.45fr 1fr!important;}
+
+      .round-col{min-width:0!important;width:100%!important;}
+      .round-title{font-size:8px!important;padding:3px 4px!important;margin-bottom:2px!important;border-radius:4px!important;}
+      .match-box{padding:2px!important;margin-bottom:3px!important;border-radius:4px!important;box-shadow:none!important;}
+      .match-title{font-size:6px!important;padding:1px 3px!important;}
+      .match-status{font-size:5.5px!important;min-height:0!important;min-width:0!important;padding:1px 3px!important;}
+      .match-row{font-size:5.2px!important;table-layout:auto!important;}
+      .match-row th,.match-row td{padding:1px!important;line-height:1.05!important;}
+      .match-row th{font-size:5px!important;}
+      .player-name,.name-cell,.team-cell{min-width:0!important;width:auto!important;max-width:none!important;}
+    }
+
+
+    /* ===== FORCE ALL BRACKET COLUMNS TOP ALIGNED =====
+       ทุกคอลัมน์ R16 / QF / SF / Final ชิดบนทั้งหมด
+       ยกเลิก margin-top, grid-row, grid-template-rows, align-self ที่เคยดันลง
+    */
+    .bracket-board,
+    .bracket-board.start-r16,
+    .bracket-board.start-qf,
+    .bracket-board.start-sf{
+      align-items:start!important;
+      align-content:start!important;
+      justify-content:start!important;
+    }
+
+    .round-col,
+    .round-col.r16,
+    .round-col.qf,
+    .round-col.sf,
+    .round-col.final{
+      display:block!important;
+      align-self:start!important;
+      align-items:start!important;
+      align-content:start!important;
+      justify-self:start!important;
+      justify-content:start!important;
+      grid-template-rows:none!important;
+      min-height:0!important;
+      padding-top:0!important;
+      margin-top:0!important;
+    }
+
+    .round-title{
+      margin-top:0!important;
+    }
+
+    .match-box,
+    .round-col .match-box{
+      margin-top:0!important;
+    }
+
+    .qf-pos-1,
+    .qf-pos-2,
+    .qf-pos-3,
+    .qf-pos-4,
+    .sf-pos-1,
+    .sf-pos-2,
+    .final-pos,
+    .top-sf-1,
+    .top-sf-2,
+    .top-final{
+      margin-top:0!important;
+      grid-row:auto!important;
+      align-self:start!important;
+      transform:none!important;
+    }
+
+    .bracket-board.start-r16 .qf .qf-pos-1,
+    .bracket-board.start-r16 .qf .qf-pos-2,
+    .bracket-board.start-r16 .qf .qf-pos-3,
+    .bracket-board.start-r16 .qf .qf-pos-4,
+    .bracket-board.start-r16 .sf .sf-pos-1,
+    .bracket-board.start-r16 .sf .sf-pos-2,
+    .bracket-board.start-r16 .final .final-pos,
+    .bracket-board.start-qf .sf .sf-pos-1,
+    .bracket-board.start-qf .sf .sf-pos-2,
+    .bracket-board.start-qf .final .final-pos,
+    .bracket-board.start-sf .final .final-pos{
+      margin-top:0!important;
+      grid-row:auto!important;
+      align-self:start!important;
+      transform:none!important;
+    }
+
+    .bracket-board.start-r16 .round-col.qf,
+    .bracket-board.start-r16 .round-col.sf,
+    .bracket-board.start-r16 .round-col.final,
+    .bracket-board.start-qf .round-col.sf,
+    .bracket-board.start-qf .round-col.final,
+    .bracket-board.start-sf .round-col.final{
+      display:block!important;
+      grid-template-rows:none!important;
+      align-self:start!important;
+      align-content:start!important;
+      padding-top:0!important;
+      margin-top:0!important;
+    }
+
+    .bracket-export-clone .round-col,
+    .bracket-export-clone .qf-pos-1,
+    .bracket-export-clone .qf-pos-2,
+    .bracket-export-clone .qf-pos-3,
+    .bracket-export-clone .qf-pos-4,
+    .bracket-export-clone .sf-pos-1,
+    .bracket-export-clone .sf-pos-2,
+    .bracket-export-clone .final-pos{
+      display:block!important;
+      grid-template-rows:none!important;
+      margin-top:0!important;
+      grid-row:auto!important;
+      align-self:start!important;
+      transform:none!important;
+    }
+
+    @media print{
+      .round-col,
+      .round-col.qf,
+      .round-col.sf,
+      .round-col.final,
+      .qf-pos-1,
+      .qf-pos-2,
+      .qf-pos-3,
+      .qf-pos-4,
+      .sf-pos-1,
+      .sf-pos-2,
+      .final-pos{
+        display:block!important;
+        grid-template-rows:none!important;
+        margin-top:0!important;
+        grid-row:auto!important;
+        align-self:start!important;
+        transform:none!important;
+      }
+    }
+
+
+    /* ทีมที่เข้ารอบโดยตรง: ไม่แสดงคะแนน REF */
+    .direct-ref-empty{
+      color:transparent!important;
+    }
+    .direct-ref-empty::after{
+      content:""!important;
+    }
+
+
+    /* ซ่อน REF สำหรับผู้เข้ารอบตรงหรือไม่มีคะแนนรอบ 2 เพิ่ม */
+    .direct-ref-empty{
+      color:transparent!important;
+    }
+    .direct-ref-empty::before,
+    .direct-ref-empty::after{
+      content:""!important;
+    }
+
+
+    /* REF = รอบ 1 + รอบ 2, แต่ผู้เข้ารอบตรงไม่แสดง REF */
+    .direct-ref-empty{
+      color:transparent!important;
+    }
+    .direct-ref-empty::before,
+    .direct-ref-empty::after{
+      content:""!important;
+    }
+
+
+    /* S1-S5 ต้องแสดงคะแนน realtime จาก scorecard เสมอ ไม่ซ่อนตาม REF */
+    .station-cell{
+      color:inherit!important;
+      visibility:visible!important;
+      opacity:1!important;
+    }
+
+
+    /* REF = รอบ 1 + รอบ 2; ซ่อนเฉพาะคนเข้ารอบตรง ส่วน S1-S5 ต้องขึ้น realtime เสมอ */
+    .direct-ref-empty{
+      color:transparent!important;
+    }
+    .direct-ref-empty::before,
+    .direct-ref-empty::after{
+      content:""!important;
+    }
+    .station-cell,
+    .total-cell{
+      visibility:visible!important;
+      opacity:1!important;
+    }
+
   </style>
 
-  <div class="bracket-board">
+
+  {% macro render_match(item, round_key, title, total_label, show_qual=False, extra_class='') %}
+  <div class="match-box {{ extra_class }}">
+    <div class="match-head"><div class="match-title">{{ title }}</div><span class="match-status {{ item.status.key }}">{{ item.status.label }}</span></div>
+    <div class="table-wrap">
+      <table class="match-row {% if not show_qual %}compact-match-row{% endif %}">
+        <thead>
+          <tr class="group-head">
+            {% if show_qual %}<th colspan="6">ประวัติรอบคัดเลือก</th>{% else %}<th colspan="3">ผู้แข่งขัน</th>{% endif %}
+            <th colspan="6">{{ title }}</th>
+          </tr>
+          <tr>
+            {% if show_qual %}<th>Seed</th>{% endif %}
+            <th>สังกัด</th><th>ชื่อ</th><th>สถานะ</th>
+            {% if show_qual %}<th>Qr1</th><th>REF</th>{% endif %}
+            <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>SCORE</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in [item.a, item.b] %}
+          <tr
+            data-round="{{ round_key }}"
+            data-match="{{ item.match.match_no }}"
+            data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
+            {% if row.athlete %}data-athlete-id="{{ row.athlete.id }}" data-round-no="{{ item.round_no }}" data-scorecard-url="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}"{% endif %}
+            class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
+            {% if show_qual %}<td class="seed-cell">{{ row.seed }}</td>{% endif %}
+            <td class="team-cell">{{ row.team }}</td>
+            <td class="player-name name-cell">
+              {% if row.athlete %}
+                <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}" onclick="event.stopPropagation();">{{ row.name }}</a>
+              {% else %}
+                <span class="empty-slot">-</span>
+              {% endif %}
+            </td>
+            <td class="status-cell"><span class="row-status-pill {{ row.status }}">{{ row.status_label }}</span></td>
+            {% if show_qual %}
+              <td class="r1-cell">{{ row.r1 }}</td>
+              <td class="r1r2-cell {% if not row.show_ref_score %}direct-ref-empty{% endif %}">{% if row.show_ref_score %}{{ row.r1r2 }}{% endif %}</td>
+            {% endif %}
+            {% for sc in row.stations %}
+              <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ sc }}</td>
+            {% endfor %}
+            <td class="total-cell">{{ row.total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endmacro %}
+
+  <div class="bracket-board start-{{ start_round|lower }}">
+    {% if start_round == 'R16' %}
     <div class="round-col r16">
       <h2 class="round-title">Round of 16</h2>
+      <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=3) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
       {% for item in grouped.get('R16', []) %}
-      <div class="match-box">
-        <div class="match-title">R16 {{ item.match.match_no }}</div>
-        <div class="table-wrap">
-          <table class="match-row">
-            <thead>
-              <tr>
-                <th>SEED</th><th>TEAM</th><th>NAME</th><th>R1</th><th>R1+R2</th>
-                <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>R16 TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in [item.a, item.b] %}
-              <tr
-                data-round="R16"
-                data-match="{{ item.match.match_no }}"
-                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
-                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
-                <td class="seed-cell">{{ row.seed }}</td>
-                <td class="team-cell">{{ row.team }}</td>
-                <td class="player-name name-cell">
-                  {% if row.athlete %}
-                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
-                  {% else %}
-                    <span class="empty-slot">-</span>
-                  {% endif %}
-                </td>
-                <td class="r1-cell">{{ row.r1 }}</td>
-                <td class="r1r2-cell">{{ row.r1r2 }}</td>
-                {% for s in row.stations %}
-                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
-                {% endfor %}
-                <td class="total-cell">{{ row.total }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {{ render_match(item, 'R16', 'R16 ' ~ item.match.match_no, 'R16 TOTAL', start_round == 'R16') }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่รอบ 16 คน</p>
       {% endfor %}
     </div>
+    {% endif %}
 
+    {% if start_round in ['R16','QF'] %}
     <div class="round-col qf">
       <h2 class="round-title">Quarter Final</h2>
+      <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=4 if start_round == 'R16' else 3) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
       {% for item in grouped.get('QF', []) %}
-      <div class="match-box">
-        <div class="match-title">QF {{ item.match.match_no }}</div>
-        <div class="table-wrap">
-          <table class="match-row">
-            <thead>
-              <tr>
-                <th>SEED</th><th>TEAM</th><th>NAME</th><th>R1</th><th>R1+R2</th>
-                <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>QF TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in [item.a, item.b] %}
-              <tr
-                data-round="QF"
-                data-match="{{ item.match.match_no }}"
-                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
-                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
-                <td class="seed-cell">{{ row.seed }}</td>
-                <td class="team-cell">{{ row.team }}</td>
-                <td class="player-name name-cell">
-                  {% if row.athlete %}
-                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
-                  {% else %}
-                    <span class="empty-slot">-</span>
-                  {% endif %}
-                </td>
-                <td class="r1-cell">{{ row.r1 }}</td>
-                <td class="r1r2-cell">{{ row.r1r2 }}</td>
-                {% for s in row.stations %}
-                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
-                {% endfor %}
-                <td class="total-cell">{{ row.total }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {{ render_match(item, 'QF', 'QF ' ~ item.match.match_no, 'QF TOTAL', start_round == 'QF', 'qf-pos-' ~ loop.index) }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่ Quarter Final</p>
       {% endfor %}
     </div>
+    {% endif %}
 
+    {% if start_round in ['R16','QF','SF'] %}
     <div class="round-col sf">
       <h2 class="round-title">Semi Final</h2>
+      <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=5 if start_round == 'R16' else (4 if start_round == 'QF' else 3)) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
       {% for item in grouped.get('SF', []) %}
-      <div class="match-box top-sf-{{ loop.index }}">
-        <div class="match-title">SF {{ item.match.match_no }}</div>
-        <div class="table-wrap">
-          <table class="match-row">
-            <thead>
-              <tr>
-                <th>TEAM</th><th>NAME</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>SF TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in [item.a, item.b] %}
-              <tr
-                data-round="SF"
-                data-match="{{ item.match.match_no }}"
-                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
-                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
-                <td class="team-cell">{{ row.team }}</td>
-                <td class="player-name name-cell">
-                  {% if row.athlete %}
-                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
-                  {% else %}
-                    <span class="empty-slot">-</span>
-                  {% endif %}
-                </td>
-                {% for s in row.stations %}
-                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
-                {% endfor %}
-                <td class="total-cell">{{ row.total }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {{ render_match(item, 'SF', 'SF ' ~ item.match.match_no, 'SF TOTAL', start_round == 'SF', 'sf-pos-' ~ loop.index) }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่ Semi Final</p>
       {% endfor %}
     </div>
+    {% endif %}
 
     <div class="round-col final">
       <h2 class="round-title">Final</h2>
+      <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=6 if start_round == 'R16' else (5 if start_round == 'QF' else 4)) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
       {% for item in grouped.get('F', []) %}
-      <div class="match-box top-final">
-        <div class="match-title">Final</div>
-        <div class="table-wrap">
-          <table class="match-row">
-            <thead>
-              <tr>
-                <th>TEAM</th><th>NAME</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>FINAL TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in [item.a, item.b] %}
-              <tr
-                data-round="F"
-                data-match="{{ item.match.match_no }}"
-                data-slot="{% if loop.index == 1 %}a{% else %}b{% endif %}"
-                class="{% if item.winner and row.athlete and item.winner.id == row.athlete.id %}winner-row{% endif %}">
-                <td class="team-cell">{{ row.team }}</td>
-                <td class="player-name name-cell">
-                  {% if row.athlete %}
-                    <a class="score-link" href="{{ url_for('scorecard', athlete_id=row.athlete.id, round=item.round_no) }}">{{ row.name }}</a>
-                  {% else %}
-                    <span class="empty-slot">-</span>
-                  {% endif %}
-                </td>
-                {% for s in row.stations %}
-                  <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ s }}</td>
-                {% endfor %}
-                <td class="total-cell">{{ row.total }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {{ render_match(item, 'F', 'Final', 'FINAL TOTAL', False, 'final-pos') }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่ Final</p>
       {% endfor %}
@@ -604,8 +1568,116 @@
 
 {% block scripts %}
 <script>
+function downloadBracketImage(){
+  const node = document.getElementById('bracketExportArea');
+  if (!node) return;
+
+  const oldWidth = node.style.width;
+  const oldOverflow = node.style.overflow;
+  const board = node.querySelector('.bracket-board');
+  const oldBoardOverflow = board ? board.style.overflow : '';
+
+  node.classList.add('exporting-bracket');
+  node.style.width = Math.max(1800, node.scrollWidth) + 'px';
+  node.style.overflow = 'visible';
+  if (board) board.style.overflow = 'visible';
+
+  html2canvas(node, {
+    scale: 2,
+    backgroundColor: '#ffffff',
+    width: node.scrollWidth,
+    height: node.scrollHeight,
+    windowWidth: node.scrollWidth,
+    windowHeight: node.scrollHeight,
+    scrollX: 0,
+    scrollY: 0
+  }).then(canvas => {
+    const a = document.createElement('a');
+    a.download = `bracket-{{ event.id }}.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  }).catch(() => {
+    alert('บันทึกภาพไม่สำเร็จ ให้ใช้ปุ่มพิมพ์แล้วเลือก Save as PDF');
+  }).finally(() => {
+    node.classList.remove('exporting-bracket');
+    node.style.width = oldWidth;
+    node.style.overflow = oldOverflow;
+    if (board) board.style.overflow = oldBoardOverflow;
+  });
+}
+
+
+
+function buildScorecardUrl(athleteId, roundNo){
+  if (!athleteId || !roundNo) return '';
+  // ใช้ URL จาก Flask เป็นแม่แบบ: /athletes/0/scorecard?round=0
+  const template = `{{ url_for('scorecard', athlete_id=0, round=0) }}`;
+  return template
+    .replace(/\/0\/scorecard/, `/${athleteId}/scorecard`)
+    .replace(/round=0/, `round=${roundNo}`);
+}
+
+function goScorecard(athleteId, roundNo){
+  const url = buildScorecardUrl(athleteId, roundNo);
+  if (url) window.location.href = url;
+}
+
+function bindBracketScorecardClicks(){
+  document.querySelectorAll('.match-row tbody tr').forEach(row => {
+    if (row.dataset.scorecardBound === '1') return;
+    row.dataset.scorecardBound = '1';
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('a, button, input, select, textarea, label')) return;
+      const athleteId = row.dataset.athleteId;
+      const roundNo = row.dataset.roundNo;
+      if (athleteId && roundNo) goScorecard(athleteId, roundNo);
+      else if (row.dataset.scorecardUrl) window.location.href = row.dataset.scorecardUrl;
+    });
+  });
+
+  document.querySelectorAll('.score-link').forEach(link => {
+    if (link.dataset.scorecardBound === '1') return;
+    link.dataset.scorecardBound = '1';
+    link.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const row = link.closest('tr');
+      const athleteId = row?.dataset.athleteId;
+      const roundNo = row?.dataset.roundNo;
+      if (athleteId && roundNo) goScorecard(athleteId, roundNo);
+      else if (link.href) window.location.href = link.href;
+    });
+  });
+}
+
+
+function bracketScorecardRound(roundKey){
+  const startRound = '{{ start_round }}';
+  if (startRound === 'R16') {
+    if (roundKey === 'R16') return 3;
+    if (roundKey === 'QF') return 4;
+    if (roundKey === 'SF') return 5;
+    if (roundKey === 'F') return 6;
+  }
+  if (startRound === 'QF') {
+    if (roundKey === 'QF') return 3;
+    if (roundKey === 'SF') return 4;
+    if (roundKey === 'F') return 5;
+  }
+  if (startRound === 'SF') {
+    if (roundKey === 'SF') return 3;
+    if (roundKey === 'F') return 4;
+  }
+  return item?.round_no || 3;
+}
+
 function updateBracketGroup(roundKey, items){
   items.forEach(item => {
+    const statusBadge = document.querySelector(`tr[data-round="${roundKey}"][data-match="${item.match_no}"]`)?.closest('.match-box')?.querySelector('.match-status');
+    if (statusBadge && item.status) {
+      statusBadge.textContent = item.status.label || 'รอแข่งขัน';
+      statusBadge.className = `match-status ${item.status.key || 'waiting'}`;
+    }
     ["a", "b"].forEach(slot => {
       const row = document.querySelector(
         `tr[data-round="${roundKey}"][data-match="${item.match_no}"][data-slot="${slot}"]`
@@ -623,27 +1695,65 @@ function updateBracketGroup(roundKey, items){
       const r1Cell = row.querySelector(".r1-cell");
       const r1r2Cell = row.querySelector(".r1r2-cell");
       const totalCell = row.querySelector(".total-cell");
+      const statusPill = row.querySelector(".row-status-pill");
 
       if (seedCell) seedCell.textContent = rowData.seed ?? "";
       if (teamCell) teamCell.textContent = rowData.team ?? "";
       if (r1Cell) r1Cell.textContent = rowData.r1 ?? "";
-      if (r1r2Cell) r1r2Cell.textContent = rowData.r1r2 ?? "";
+      if (r1r2Cell) {
+        const shouldShowRef = rowData.show_ref_score === true;
+        r1r2Cell.textContent = shouldShowRef ? (rowData.r1r2 ?? "") : "";
+        r1r2Cell.classList.toggle("direct-ref-empty", !shouldShowRef);
+      }
       if (totalCell) totalCell.textContent = rowData.total ?? 0;
+      if (statusPill) {
+        statusPill.textContent = rowData.status_label || 'รอคิว';
+        statusPill.className = `row-status-pill ${rowData.status || 'waiting'}`;
+      }
+
+      const roundNo = item.round_no || bracketScorecardRound(roundKey);
+      const rowScorecardUrl = buildScorecardUrl(rowData.athlete_id, roundNo);
+      if (rowData.athlete_id && roundNo) {
+        row.dataset.athleteId = rowData.athlete_id;
+        row.dataset.roundNo = roundNo;
+        row.dataset.scorecardUrl = rowScorecardUrl;
+      } else {
+        row.removeAttribute('data-athlete-id');
+        row.removeAttribute('data-round-no');
+        row.removeAttribute('data-scorecard-url');
+      }
 
       if (nameCell) {
-        const link = nameCell.querySelector("a");
-        if (link && rowData.name != null) {
+        let link = nameCell.querySelector("a");
+        if (rowData.athlete_id && rowData.name) {
+          if (!link) {
+            nameCell.innerHTML = '';
+            link = document.createElement('a');
+            link.className = 'score-link';
+            nameCell.appendChild(link);
+          }
           link.textContent = rowData.name;
-        } else if (!link && rowData.name) {
-          nameCell.innerHTML = rowData.name;
+          link.href = rowScorecardUrl || '#';
+          link.dataset.scorecardBound = '';
+        } else if (rowData.name) {
+          if (link) {
+            link.textContent = rowData.name;
+            link.removeAttribute('href');
+          } else {
+            nameCell.textContent = rowData.name;
+          }
+        } else {
+          nameCell.innerHTML = '<span class="empty-slot">-</span>';
         }
       }
 
+      // S1-S5 ดึงจาก scorecard ของรอบ bracket ปัจจุบันแบบ realtime
       const stationCells = row.querySelectorAll(".station-cell");
       stationCells.forEach((cell, index) => {
-        cell.textContent = (rowData.stations && rowData.stations[index] != null)
+        const value = (Array.isArray(rowData.stations) && rowData.stations[index] != null)
           ? rowData.stations[index]
           : 0;
+        cell.textContent = value;
       });
     });
   });
@@ -656,16 +1766,22 @@ async function refreshBracketData(){
   bracketRefreshing = true;
 
   try {
-    const response = await fetch('{{ url_for("bracket_data", event_id=event.id) }}', {
-      headers: {'X-Requested-With': 'XMLHttpRequest'}
+    const response = await fetch(`{{ url_for("bracket_data", event_id=event.id) }}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {'X-Requested-With': 'XMLHttpRequest', 'Cache-Control': 'no-cache'}
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      console.error('bracket_data error', response.status);
+      return;
+    }
 
     const data = await response.json();
     if (data.R16) updateBracketGroup("R16", data.R16);
     if (data.QF) updateBracketGroup("QF", data.QF);
     if (data.SF) updateBracketGroup("SF", data.SF);
     if (data.F) updateBracketGroup("F", data.F);
+    bindBracketScorecardClicks();
+    bindBracketScorecardClicks();
   } catch (err) {
     console.error(err);
   } finally {
@@ -674,9 +1790,13 @@ async function refreshBracketData(){
 }
 
 setInterval(() => {
-  if (!document.hidden) refreshBracketData();
+  if (!document.hidden) {
+    bindBracketScorecardClicks();
+    refreshBracketData();
+  }
 }, 1000);
 
+bindBracketScorecardClicks();
 refreshBracketData();
 </script>
 {% endblock %}

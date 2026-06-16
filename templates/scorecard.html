@@ -315,6 +315,21 @@
     padding: 6px 8px;
   }
 
+  .finish-score-btn,
+  .signature-save-big {
+    min-height: 54px !important;
+    padding: 13px 22px !important;
+    font-size: 1.05rem !important;
+    font-weight: 900 !important;
+    border-radius: 14px !important;
+  }
+
+  .signature-open-btn {
+    min-height: 44px;
+    font-size: .9rem;
+    font-weight: 800;
+  }
+
   /* ===== FULLSCREEN SIGNATURE MODAL ===== */
 
   body.signature-modal-open {
@@ -409,12 +424,13 @@
     }
 
     .btn {
-      padding: 6px 8px;
-      font-size: .74rem;
+      min-height: 42px;
+      padding: 9px 12px;
+      font-size: .9rem;
     }
 
     .scorecard-sheet {
-      min-width: 1120px;
+      min-width: 1060px;
     }
 
     .scorecard-main-table th,
@@ -449,11 +465,43 @@
     }
 
     .signature-round-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .signature-col {
+      padding: 6px;
+    }
+
+    .sig-text-input {
+      height: 32px;
+      font-size: .72rem;
+      padding: 5px 6px;
+    }
+
+    .sig-action-row {
+      gap: 4px;
+      flex-wrap: nowrap;
+    }
+
+    .signature-open-btn,
+    .signature-clear-btn {
+      min-height: 42px;
+      padding: 8px 9px;
+      font-size: .76rem;
+      white-space: nowrap;
+    }
+
+    .finish-score-btn,
+    .signature-save-big,
+    #signatureModalSave {
+      min-height: 58px !important;
+      padding: 14px 24px !important;
+      font-size: 1.08rem !important;
     }
 
     .sig-preview-box {
-      height: 70px;
+      height: 62px;
     }
 
     .signature-modal-panel {
@@ -486,8 +534,9 @@
     }
 
     .btn {
-      padding: 6px 7px;
-      font-size: .7rem;
+      min-height: 42px;
+      padding: 9px 12px;
+      font-size: .9rem;
     }
 
     .scorecard-sheet {
@@ -721,12 +770,12 @@
         </tbody>
       </table>
 
-      <div class="scorecard-signatures scorecard-signatures-rounds">
-        {% for round_label in round_labels %}
-        {% set r = loop.index %}
+      <div class="scorecard-signatures scorecard-signatures-rounds current-round-only">
+        {% set r = round_no %}
+        {% set round_label = round_labels[round_no-1] if round_labels and round_labels|length >= round_no else ('รอบที่ ' ~ round_no) %}
         {% set sig = round_signatures.get(r) if round_signatures else None %}
-        <div class="signature-round-block {% if r == round_no %}active-sign-round{% endif %}">
-          <div class="signature-round-title">{{ round_label }}</div>
+        <div class="signature-round-block active-sign-round">
+          <div class="signature-round-title">ลายเซ็นเฉพาะ {{ round_label }}</div>
 
           <div class="signature-round-grid">
             <div class="signature-col">
@@ -734,96 +783,48 @@
               <input class="sig-text-input"
                      type="text"
                      name="referee_name_{{ r }}"
-                     value="{{ sig.referee_name if sig else '' }}"
-                     placeholder="พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้"
-                     {% if r != round_no %}readonly{% endif %}>
+                     value="{{ (sig.referee_name if sig else '') or '' }}"
+                     placeholder="พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้">
               <div class="sig-action-row">
-                <button type="button"
-                        class="btn secondary signature-open-btn {% if r != round_no %}locked-open-btn{% endif %}"
-                        data-target="ref_sig_{{ r }}"
-                        data-title="ลายเซ็นกรรมการตัดสิน - {{ round_label }}"
-                        {% if r != round_no %}disabled{% endif %}>เซ็นชื่อเต็มหน้าจอ</button>
-                <button type="button"
-                        class="btn secondary signature-clear-btn {% if r != round_no %}locked-open-btn{% endif %}"
-                        data-target="ref_sig_{{ r }}"
-                        {% if r != round_no %}disabled{% endif %}>ล้างลายเซ็น</button>
+                <button type="button" class="btn secondary signature-open-btn" data-target="ref_sig_{{ r }}" data-title="ลายเซ็นกรรมการตัดสิน - {{ round_label }}">เซ็นชื่อเต็มหน้าจอ</button>
+                <button type="button" class="btn secondary signature-clear-btn" data-target="ref_sig_{{ r }}">ล้างลายเซ็น</button>
               </div>
-              <div class="sig-preview-box {% if r != round_no %}locked-canvas{% endif %}" data-preview-wrap="ref_sig_{{ r }}">
-                <img class="sig-preview-image {% if not (sig and sig.referee_signature) %}hidden{% endif %}"
-                     data-preview-img="ref_sig_{{ r }}"
-                     src="{{ sig.referee_signature if sig and sig.referee_signature else '' }}"
-                     alt="ลายเซ็นกรรมการตัดสิน">
-                <div class="sig-preview-placeholder {% if sig and sig.referee_signature %}hidden{% endif %}" data-preview-placeholder="ref_sig_{{ r }}">
-                  แตะปุ่มเพื่อเปิดพื้นที่เซ็นเต็มหน้าจอ
-                </div>
+              <div class="sig-preview-box" data-preview-wrap="ref_sig_{{ r }}">
+                <img class="sig-preview-image {% if not (sig and sig.referee_signature) %}hidden{% endif %}" data-preview-img="ref_sig_{{ r }}" src="{{ (sig.referee_signature if sig and sig.referee_signature else '') or '' }}" alt="ลายเซ็นกรรมการตัดสิน">
+                <div class="sig-preview-placeholder {% if sig and sig.referee_signature %}hidden{% endif %}" data-preview-placeholder="ref_sig_{{ r }}">แตะปุ่มเพื่อเปิดพื้นที่เซ็นเต็มหน้าจอ</div>
               </div>
-              <input type="hidden" name="ref_sig_{{ r }}" id="ref_sig_{{ r }}" value="{{ sig.referee_signature if sig and sig.referee_signature else '' }}">
+              <input type="hidden" name="ref_sig_{{ r }}" id="ref_sig_{{ r }}" value="{{ (sig.referee_signature if sig and sig.referee_signature else '') or '' }}">
             </div>
 
             <div class="signature-col">
               <div class="signature-title text-align center">กรรมการบันทึกคะแนน</div>
-              <input class="sig-text-input"
-                     type="text"
-                     name="recorder_name_{{ r }}"
-                     value="{{ sig.recorder_name if sig else '' }}"
-                     placeholder="พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้"
-                     {% if r != round_no %}readonly{% endif %}>
+              <input class="sig-text-input" type="text" name="recorder_name_{{ r }}" value="{{ (sig.recorder_name if sig else '') or '' }}" placeholder="พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้">
               <div class="sig-action-row">
-                <button type="button"
-                        class="btn secondary signature-open-btn {% if r != round_no %}locked-open-btn{% endif %}"
-                        data-target="rec_sig_{{ r }}"
-                        data-title="ลายเซ็นกรรมการบันทึกคะแนน - {{ round_label }}"
-                        {% if r != round_no %}disabled{% endif %}>เซ็นชื่อเต็มหน้าจอ</button>
-                <button type="button"
-                        class="btn secondary signature-clear-btn {% if r != round_no %}locked-open-btn{% endif %}"
-                        data-target="rec_sig_{{ r }}"
-                        {% if r != round_no %}disabled{% endif %}>ล้างลายเซ็น</button>
+                <button type="button" class="btn secondary signature-open-btn" data-target="rec_sig_{{ r }}" data-title="ลายเซ็นกรรมการบันทึกคะแนน - {{ round_label }}">เซ็นชื่อเต็มหน้าจอ</button>
+                <button type="button" class="btn secondary signature-clear-btn" data-target="rec_sig_{{ r }}">ล้างลายเซ็น</button>
               </div>
-              <div class="sig-preview-box {% if r != round_no %}locked-canvas{% endif %}" data-preview-wrap="rec_sig_{{ r }}">
-                <img class="sig-preview-image {% if not (sig and sig.recorder_signature) %}hidden{% endif %}"
-                     data-preview-img="rec_sig_{{ r }}"
-                     src="{{ sig.recorder_signature if sig and sig.recorder_signature else '' }}"
-                     alt="ลายเซ็นกรรมการบันทึกคะแนน">
-                <div class="sig-preview-placeholder {% if sig and sig.recorder_signature %}hidden{% endif %}" data-preview-placeholder="rec_sig_{{ r }}">
-                  แตะปุ่มเพื่อเปิดพื้นที่เซ็นเต็มหน้าจอ
-                </div>
+              <div class="sig-preview-box" data-preview-wrap="rec_sig_{{ r }}">
+                <img class="sig-preview-image {% if not (sig and sig.recorder_signature) %}hidden{% endif %}" data-preview-img="rec_sig_{{ r }}" src="{{ (sig.recorder_signature if sig and sig.recorder_signature else '') or '' }}" alt="ลายเซ็นกรรมการบันทึกคะแนน">
+                <div class="sig-preview-placeholder {% if sig and sig.recorder_signature %}hidden{% endif %}" data-preview-placeholder="rec_sig_{{ r }}">แตะปุ่มเพื่อเปิดพื้นที่เซ็นเต็มหน้าจอ</div>
               </div>
-              <input type="hidden" name="rec_sig_{{ r }}" id="rec_sig_{{ r }}" value="{{ sig.recorder_signature if sig and sig.recorder_signature else '' }}">
+              <input type="hidden" name="rec_sig_{{ r }}" id="rec_sig_{{ r }}" value="{{ (sig.recorder_signature if sig and sig.recorder_signature else '') or '' }}">
             </div>
 
             <div class="signature-col">
               <div class="signature-title text-align">นักกีฬา</div>
-              <input class="sig-text-input"
-                     type="text"
-                     name="athlete_name_{{ r }}"
-                     value="{{ sig.athlete_name if sig else (athlete.name if r == round_no else '') }}"
-                     placeholder="พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้"
-                     {% if r != round_no %}readonly{% endif %}>
+              <input class="sig-text-input" type="text" name="athlete_name_{{ r }}" value="{{ (sig.athlete_name if sig and sig.athlete_name else athlete.name) or '' }}" placeholder="พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้">
               <div class="sig-action-row">
-                <button type="button"
-                        class="btn secondary signature-open-btn {% if r != round_no %}locked-open-btn{% endif %}"
-                        data-target="ath_sig_{{ r }}"
-                        data-title="ลายเซ็นนักกีฬา - {{ round_label }}"
-                        {% if r != round_no %}disabled{% endif %}>เซ็นชื่อเต็มหน้าจอ</button>
-                <button type="button"
-                        class="btn secondary signature-clear-btn {% if r != round_no %}locked-open-btn{% endif %}"
-                        data-target="ath_sig_{{ r }}"
-                        {% if r != round_no %}disabled{% endif %}>ล้างลายเซ็น</button>
+                <button type="button" class="btn secondary signature-open-btn" data-target="ath_sig_{{ r }}" data-title="ลายเซ็นนักกีฬา - {{ round_label }}">เซ็นชื่อเต็มหน้าจอ</button>
+                <button type="button" class="btn secondary signature-clear-btn" data-target="ath_sig_{{ r }}">ล้างลายเซ็น</button>
               </div>
-              <div class="sig-preview-box {% if r != round_no %}locked-canvas{% endif %}" data-preview-wrap="ath_sig_{{ r }}">
-                <img class="sig-preview-image {% if not (sig and sig.athlete_signature) %}hidden{% endif %}"
-                     data-preview-img="ath_sig_{{ r }}"
-                     src="{{ sig.athlete_signature if sig and sig.athlete_signature else '' }}"
-                     alt="ลายเซ็นนักกีฬา">
-                <div class="sig-preview-placeholder {% if sig and sig.athlete_signature %}hidden{% endif %}" data-preview-placeholder="ath_sig_{{ r }}">
-                  แตะปุ่มเพื่อเปิดพื้นที่เซ็นเต็มหน้าจอ
-                </div>
+              <div class="sig-preview-box" data-preview-wrap="ath_sig_{{ r }}">
+                <img class="sig-preview-image {% if not (sig and sig.athlete_signature) %}hidden{% endif %}" data-preview-img="ath_sig_{{ r }}" src="{{ (sig.athlete_signature if sig and sig.athlete_signature else '') or '' }}" alt="ลายเซ็นนักกีฬา">
+                <div class="sig-preview-placeholder {% if sig and sig.athlete_signature %}hidden{% endif %}" data-preview-placeholder="ath_sig_{{ r }}">แตะปุ่มเพื่อเปิดพื้นที่เซ็นเต็มหน้าจอ</div>
               </div>
-              <input type="hidden" name="ath_sig_{{ r }}" id="ath_sig_{{ r }}" value="{{ sig.athlete_signature if sig and sig.athlete_signature else '' }}">
+              <input type="hidden" name="ath_sig_{{ r }}" id="ath_sig_{{ r }}" value="{{ (sig.athlete_signature if sig and sig.athlete_signature else '') or '' }}">
             </div>
           </div>
         </div>
-        {% endfor %}
       </div>
 
       {% if not is_superadmin %}
@@ -835,7 +836,7 @@
     </div>
 
     <div class="toolbar" style="margin-top:16px;">
-      <button type="submit" name="action" value="finish" class="btn">จบการตี</button>
+      <button type="submit" name="action" value="finish" class="btn finish-score-btn">จบการตี</button>
     </div>
   </form>
 </section>
@@ -855,7 +856,7 @@
     </div>
     <div class="signature-modal-actions">
       <button type="button" class="btn secondary" id="signatureModalClear">ล้าง</button>
-      <button type="button" class="btn" id="signatureModalSave">บันทึก</button>
+      <button type="button" class="btn signature-save-big" id="signatureModalSave">บันทึกลายเซ็น</button>
     </div>
   </div>
 </div>
@@ -989,11 +990,34 @@
     signatureCtx.clearRect(0, 0, rect.width, rect.height);
     signatureDirty = false;
   });
+  function exportCompactSignatureDataUrl() {
+    // บันทึกลายเซ็นแบบย่อขนาดก่อนส่งฟอร์ม เพื่อกัน iPad ส่งข้อมูลใหญ่เกินจนบันทึกไม่ได้
+    const srcRect = signatureModalCanvas.getBoundingClientRect();
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = 900;
+    exportCanvas.height = 260;
+    const exportCtx = exportCanvas.getContext('2d');
+    exportCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+    exportCtx.lineCap = 'round';
+    exportCtx.lineJoin = 'round';
+    exportCtx.drawImage(
+      signatureModalCanvas,
+      0,
+      0,
+      signatureModalCanvas.width,
+      signatureModalCanvas.height,
+      0,
+      0,
+      exportCanvas.width,
+      exportCanvas.height
+    );
+    return exportCanvas.toDataURL('image/png');
+  }
+
   signatureModalSave.addEventListener('click', () => {
-    const rect = signatureModalCanvas.getBoundingClientRect();
     let dataUrl = '';
     if (signatureDirty) {
-      dataUrl = signatureModalCanvas.toDataURL('image/png');
+      dataUrl = exportCompactSignatureDataUrl();
     } else if (activeSignatureTarget) {
       dataUrl = document.getElementById(activeSignatureTarget)?.value || '';
     }

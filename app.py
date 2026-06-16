@@ -37,6 +37,21 @@ from openpyxl import Workbook, load_workbook
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "instance", "shooting.db")
 
+# ให้ SQLite เขียนได้หลังแตกไฟล์ ZIP บน Mac/Windows
+def ensure_sqlite_writable():
+    if os.environ.get("DATABASE_URL"):
+        return
+    try:
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        os.chmod(os.path.dirname(DB_PATH), 0o755)
+        if os.path.exists(DB_PATH):
+            os.chmod(DB_PATH, 0o666)
+    except Exception:
+        # ไม่ให้ระบบล่มเพราะ chmod บนบาง host ไม่รองรับ
+        pass
+
+ensure_sqlite_writable()
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 
@@ -253,7 +268,8 @@ def bracket_round_to_scorecard_round(round_name: str, event=None) -> int:
         return {"QF": 4, "SF": 5, "F": 6}[round_name]
     return {"QF": 3, "SF": 4, "F": 5}[round_name]
 
-def build_bracket_row_data(event, athlete, round_name):
+def build_bracket_row_data(event, athlete, round_name, seed_map=None):
+    seed_map = seed_map or {}
     if not athlete:
         return {
             "athlete_id": None,
@@ -262,15 +278,33 @@ def build_bracket_row_data(event, athlete, round_name):
             "name": "",
             "r1": "",
             "r1r2": "",
+            "show_ref_score": False,
+            "is_direct_qualifier": False,
             "stations": [0, 0, 0, 0, 0],
             "total": 0,
+            "status": "waiting",
+            "status_label": "รอคิว",
         }
 
     round_no = bracket_round_to_scorecard_round(round_name, event)
 
+    # ใช้ group ปัจจุบันของระบบ: direct = เข้ารอบตรงจากรอบ 1
+    progression_groups = get_progression_groups(event)
+    is_direct_qualifier = athlete.id in progression_groups.get("direct", set())
+
     r1_summary = summarize_round(athlete.id, 1)
     r2_summary = summarize_round(athlete.id, 2) if event.has_round_two else {"total": 0}
+
+    # S1-S5 และ SCORE ของ bracket ต้องดึงจาก scorecard รอบ bracket ปัจจุบันแบบ realtime
     current_summary = summarize_round(athlete.id, round_no) if round_no else {"by_station": {}, "total": 0}
+
+    r1_total = r1_summary.get("total", 0)
+    r2_total = r2_summary.get("total", 0) or 0
+
+    # REF = รอบ 1 + รอบ 2
+    # ซ่อน REF เฉพาะผู้เข้ารอบตรงจากรอบ 1 เท่านั้น
+    ref_total = r1_total + r2_total
+    show_ref_score = not is_direct_qualifier
 
     stations = []
     by_station = current_summary.get("by_station", {})
@@ -278,15 +312,21 @@ def build_bracket_row_data(event, athlete, round_name):
         station_data = by_station.get(station, {"total": 0})
         stations.append(station_data.get("total", 0))
 
+    round_status = athlete_round_status(athlete, round_no)
+
     return {
         "athlete_id": athlete.id,
-        "seed": "",
+        "seed": seed_map.get(athlete.id, ""),
         "team": athlete.affiliation or "",
         "name": athlete.name or "",
-        "r1": r1_summary["total"],
-        "r1r2": r1_summary["total"] + r2_summary["total"],
+        "r1": r1_total,
+        "r1r2": ref_total if show_ref_score else "",
+        "show_ref_score": show_ref_score,
+        "is_direct_qualifier": is_direct_qualifier,
         "stations": stations,
         "total": current_summary.get("total", 0),
+        "status": round_status,
+        "status_label": {"waiting": "รอคิว", "active": "กำลังตี", "finished": "ตีเสร็จแล้ว"}.get(round_status, "รอคิว"),
     }
 
 def ensure_schema() -> None:
@@ -483,6 +523,7 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
         "red_cards": red_cards,
         "by_station": by_station,
         "tiebreak_total": sum(e.score for e in tiebreak_entries),
+        "tiebreak_count": len(tiebreak_entries),
     }
     summary_cache[key] = result
     return result
@@ -539,7 +580,43 @@ def athlete_round_status(athlete: Athlete, round_no: int) -> str:
     return "waiting"
 
 
+def bracket_match_status(event: Event, match: BracketMatch) -> dict:
+    """สถานะของคู่ใน bracket จากลายเซ็น/เวลาเริ่มของนักกีฬาทั้ง 2 ฝั่ง"""
+    round_no = bracket_round_to_scorecard_round(match.round_name, event)
+    athlete_ids = [aid for aid in [match.athlete_a_id, match.athlete_b_id] if aid]
+    if not athlete_ids or len(athlete_ids) < 2:
+        return {"key": "waiting", "label": "รอคู่แข่งขัน"}
+    if match.winner_id:
+        return {"key": "finished", "label": "แข่งเสร็จ"}
+    statuses = []
+    for aid in athlete_ids:
+        sig = get_round_signature(aid, round_no)
+        if sig and sig.finished_at:
+            statuses.append("finished")
+        elif sig and sig.started_at:
+            statuses.append("active")
+        else:
+            statuses.append("waiting")
+    if any(status == "active" for status in statuses):
+        return {"key": "active", "label": "กำลังแข่งขัน"}
+    if all(status == "finished" for status in statuses):
+        return {"key": "ready_result", "label": "รอบันทึกผู้ชนะ"}
+    if any(status == "finished" for status in statuses):
+        return {"key": "active", "label": "กำลังแข่งขัน"}
+    return {"key": "waiting", "label": "รอแข่งขัน"}
+
+
 def ranking_key(item: dict):
+    """
+    สูตรจัดอันดับ Shooting ที่ใช้ในระบบ
+    1) คะแนนรวม / TOTAL มากกว่า
+    2) จำนวนคะแนน 5 มากกว่า
+    3) จำนวนคะแนน 3 มากกว่า
+    4) คะแนน Shoot-off 7 เมตรทุกสถานี (เมื่อมีการบันทึก)
+
+    หมายเหตุ: ตัดคะแนนสถานี 5 และสถานี 4 ออกจากสูตรแล้ว
+    เพื่อไม่ให้สถานีใดมีน้ำหนักมากกว่าสถานีอื่น
+    """
     return (
         item["total"],
         item["count_5"],
@@ -547,6 +624,89 @@ def ranking_key(item: dict):
         item["tiebreak_total"],
     )
 
+
+def apply_rank_by_tiebreak(rows: list[dict]) -> None:
+    """ใส่ Class/Rank หลังเรียงแล้ว โดยใช้กติกาจริง:
+    TOTAL -> จำนวน 5 -> จำนวน 3 -> Shoot-off score
+
+    ถ้ายังเท่ากันครบทุกตัวจึงให้ Class เดียวกัน ไม่ใช้ TOTAL อย่างเดียว
+    """
+    for idx, row in enumerate(rows):
+        if idx == 0:
+            row["rank"] = 1
+        else:
+            prev = rows[idx - 1]
+            row["rank"] = prev["rank"] if ranking_key(row) == ranking_key(prev) else idx + 1
+        row["ordinal_rank"] = idx + 1
+
+
+
+
+def bracket_size(event: Event) -> int:
+    """จำนวนคนรอบ Knockout จาก label เช่น รอบ 16/8/4"""
+    label = (event.next_round_label or "")
+    if "16" in label:
+        return 16
+    if "4" in label or "รอง" in label:
+        return 4
+    return 8
+
+
+def direct_quota(event: Event) -> int:
+    """จำนวนคนที่เข้ารอบตรงจากรอบแรก
+
+    ต้องยึดค่าที่ผู้ใช้กรอกในอีเวนต์ก่อน เช่น
+    - รอบ 16 กรอกผ่านรอบแรก 8 = ต้องเป็น 8 จริง
+    - รอบ 8 กรอกผ่านรอบแรก 4 = ต้องเป็น 4 จริง
+
+    ถ้าอีเวนต์เก่าไม่ได้กรอก direct_qualifiers จึงค่อย fallback เป็นครึ่งหนึ่งของ bracket
+    """
+    size = bracket_size(event)
+    configured = int(event.direct_qualifiers or 0)
+    if configured > 0:
+        return min(configured, size)
+    if event.has_round_two:
+        return max(size // 2, 0)
+    return size
+
+
+def round2_advancer_quota(event: Event) -> int:
+    """จำนวนคนที่ผ่านจากรอบ 2 เข้า Knockout
+
+    ต้องยึดค่าที่ผู้ใช้กรอกจริง เช่น รอบ 16 ถ้ากรอกให้ผ่านจากรอบ 2 = 8
+    ก็ต้องใช้ 8 ไม่ใช่คำนวณเหลือเองจนเพี้ยน
+    """
+    if not event.has_round_two:
+        return 0
+    size = bracket_size(event)
+    configured = int(event.round_two_advancers or 0)
+    remaining = max(size - direct_quota(event), 0)
+    if configured > 0:
+        return min(configured, size)
+    return remaining
+
+
+def round1_total_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
+    """สิทธิ์ตีรอบ 2 ใช้กติกาตามเอกสาร: ถ้าคะแนนรวมเท่ากับคนลำดับสุดท้าย ได้ตีรอบ 2 ทั้งหมด
+    ไม่ใช้ 5/3 มาตัดสิทธิ์ตีรอบสอง เพราะรอบสองคือการคัดต่อ ไม่ใช่ตัดเข้า Knockout
+    """
+    if not cutoff_count or cutoff_count <= 0:
+        return set()
+    if not rows:
+        return set()
+    if len(rows) <= cutoff_count:
+        return {row["athlete"].id for row in rows}
+    cutoff_total = rows[cutoff_count - 1].get("total", 0)
+    return {row["athlete"].id for row in rows if row.get("total", 0) >= cutoff_total}
+
+
+def apply_sequential_rank(rows: list[dict], start: int = 1) -> None:
+    """ใช้กับ Overview รอบ 2/Seed: ต้องไม่มีลำดับซ้ำ"""
+    for idx, row in enumerate(rows, start=start):
+        row["rank"] = idx
+        row["ordinal_rank"] = idx
+        row["display_rank"] = idx
+        row["view_order"] = idx
 
 def build_round_ranking(event: Event, round_no: int) -> List[dict]:
     cache = _request_cache()
@@ -560,9 +720,13 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
     round2_display_map = {}
     if round_no == 2:
         round1_rows = build_round_ranking(event, 1)
+        direct_ids_for_r2 = exact_cut_ids(round1_rows, direct_quota(event))
+        direct_pending_ids_for_r2 = unresolved_tie_ids(round1_rows, direct_quota(event))
         round2_source_rows = [
             row for row in round1_rows
-            if row["rank"] > event.direct_qualifiers and is_round_two_candidate(event, row["athlete"])
+            if row["athlete"].id not in direct_ids_for_r2
+            and row["athlete"].id not in direct_pending_ids_for_r2
+            and is_round_two_candidate(event, row["athlete"])
         ]
         round2_source_rows.sort(key=lambda row: (
             row["total"], row["count_5"], row["count_3"], row["tiebreak_total"], row["athlete"].start_order,
@@ -586,6 +750,7 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             "count_5": summary["count_5"],
             "count_3": summary["count_3"],
             "tiebreak_total": summary["tiebreak_total"],
+            "tiebreak_count": summary.get("tiebreak_count", 0),
             "status": athlete_round_status(athlete, round_no),
             "by_station": summary["by_station"],
             "red_cards": summary["red_cards"],
@@ -597,12 +762,7 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             row.update(round2_display_map[athlete.id])
         rows.append(row)
     rows.sort(key=ranking_key, reverse=True)
-    for idx, row in enumerate(rows):
-        if idx == 0:
-            row["rank"] = 1
-            continue
-        prev = rows[idx - 1]
-        row["rank"] = prev["rank"] if ranking_key(row) == ranking_key(prev) else idx + 1
+    apply_rank_by_tiebreak(rows)
     if has_request_context():
         cache[cache_key] = rows
     return rows
@@ -613,19 +773,21 @@ def round_two_candidate_ids(event: Event) -> set[int]:
     cache_key = ("round_two_candidate_ids", event.id)
     if has_request_context() and cache_key in cache:
         return cache[cache_key]
+
     ids: set[int] = set()
     if event.has_round_two and event.round_two_cutoff_rank:
-        cutoff = event.round_two_cutoff_rank
-        direct = event.direct_qualifiers
+        cutoff = int(event.round_two_cutoff_rank or 0)
+        direct = direct_quota(event)
         round1_rows = build_round_ranking(event, 1)
-        if cutoff > direct:
-            cutoff_row = next((row for row in round1_rows if row["rank"] == cutoff), None)
-            if cutoff_row:
-                target_score = cutoff_row["total"]
-                ids = {
-                    row["athlete"].id for row in round1_rows
-                    if row["rank"] > direct and row["total"] >= target_score
-                }
+
+        # สิทธิ์ตีรอบ 2 ตามกติกา: คนถัดจากเข้ารอบตรงจนถึงลำดับที่ตั้งไว้
+        # ถ้าคนลำดับสุดท้ายของสิทธิ์รอบ 2 คะแนนรวมเท่ากัน ให้ได้ตีรอบ 2 ทั้งหมด
+        # แต่ถ้ามี Shoot-off ที่เส้นเข้ารอบตรงอยู่ ให้รอผลก่อน ไม่ดันกลุ่มนั้นไปเป็นรอบ 2
+        direct_ids = exact_cut_ids(round1_rows, direct)
+        direct_shoot_ids = unresolved_tie_ids(round1_rows, direct)
+        cutoff_ids = round1_total_cut_ids(round1_rows, cutoff)
+        ids = cutoff_ids - direct_ids - direct_shoot_ids
+
     if has_request_context():
         cache[cache_key] = ids
     return ids
@@ -698,16 +860,14 @@ def sync_round_two_candidates(event: Event) -> None:
 def build_round_two_start_list(event: Event) -> list[dict]:
     round1_rows = build_round_ranking(event, 1)
 
-    direct_ids = {
-        r["athlete"].id
-        for r in round1_rows
-        if r["rank"] <= event.direct_qualifiers
-    }
+    direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
+    direct_pending_ids = unresolved_tie_ids(round1_rows, direct_quota(event))
 
     candidates = [
         r for r in round1_rows
         if is_round_two_candidate(event, r["athlete"])
         and r["athlete"].id not in direct_ids
+        and r["athlete"].id not in direct_pending_ids
     ]
 
     # คะแนนรอบ 1 น้อยสุด ได้ตีก่อน
@@ -721,13 +881,39 @@ def build_round_two_start_list(event: Event) -> list[dict]:
 
     return candidates
 
+
+def sort_round_two_rows_for_start(rows: list[dict]) -> list[dict]:
+    """เรียงลำดับการตีรอบ 2 ตาม display_order: คะแนนรอบ 1 น้อยสุดตีก่อน"""
+    return sorted(
+        rows,
+        key=lambda row: (
+            row.get("display_order") if row.get("display_order") is not None else 999999,
+            row["athlete"].start_order if row["athlete"].start_order is not None else 999999,
+            row["athlete"].id,
+        )
+    )
+
 def build_combined_qualifiers(event: Event) -> List[dict]:
     cache = _request_cache()
     cache_key = ("combined_qualifiers", event.id)
     if has_request_context() and cache_key in cache:
         return cache[cache_key]
     round1_rows = build_round_ranking(event, 1)
-    direct_rows = [r for r in round1_rows if r["rank"] <= event.direct_qualifiers]
+    direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
+    direct_pending_ids = unresolved_tie_ids(round1_rows, direct_quota(event))
+    direct_rows = []
+    for row in round1_rows:
+        if row["athlete"].id in direct_ids:
+            direct_rows.append({
+                **row,
+                "round1_total": row["total"],
+                "round2_total": None,
+                "round1_by_station": row.get("by_station", {}),
+                "round2_by_station": None,
+                "combined_total": row["total"],
+            })
+    for idx, row in enumerate(direct_rows, start=1):
+        row["seed"] = idx
     if not event.has_round_two:
         return direct_rows
 
@@ -743,23 +929,378 @@ def build_combined_qualifiers(event: Event) -> List[dict]:
             "count_5": (round1_row["count_5"] if round1_row else 0) + row["count_5"],
             "count_3": (round1_row["count_3"] if round1_row else 0) + row["count_3"],
             "tiebreak_total": (round1_row["tiebreak_total"] if round1_row else 0) + row["tiebreak_total"],
+            "tiebreak_count": (round1_row.get("tiebreak_count", 0) if round1_row else 0) + row.get("tiebreak_count", 0),
             "round1_total": round1_total,
             "round2_total": row["total"],
+            "round1_by_station": (round1_row.get("by_station", {}) if round1_row else {}),
+            "round2_by_station": row.get("by_station", {}),
         })
     combined_rows.sort(key=ranking_key, reverse=True)
-    for idx, row in enumerate(combined_rows):
-        if idx == 0:
-            row["rank"] = 1
+    apply_sequential_rank(combined_rows, start=1)
+
+    # คัดผู้ผ่านจากรอบ 2 ต้องเอาตามจำนวนที่ตั้งไว้จริง ๆ
+    # ถ้าคะแนนเท่ากันที่เส้นตัด ให้ตัดสินตาม TOTAL -> จำนวน 5 -> จำนวน 3 -> Shoot-off
+    # ห้ามขยาย bracket เองเพราะจะทำให้ตั้ง 8 คน แต่หลุดเป็น 9/16 คน
+    advancer_limit = max(round2_advancer_quota(event), 0)
+
+    def base_tie_key(row):
+        return (row["combined_total"], row["count_5"], row["count_3"])
+
+    shoot_off_ids = unresolved_tie_ids(combined_rows, advancer_limit)
+    passed_ids = exact_cut_ids(combined_rows, advancer_limit)
+
+    seed_no = len(direct_rows) + 1
+    for row in combined_rows:
+        aid = row["athlete"].id
+        row["shoot_off_required"] = aid in shoot_off_ids
+        if row["shoot_off_required"]:
+            row["seed"] = None
+            row["passed_cut"] = False
+        elif aid in passed_ids:
+            row["seed"] = seed_no
+            row["passed_cut"] = True
+            seed_no += 1
         else:
-            prev = combined_rows[idx - 1]
-            row["rank"] = prev["rank"] if ranking_key(row) == ranking_key(prev) else idx + 1
-    for idx, row in enumerate(combined_rows[:event.round_two_advancers]):
-        row["seed"] = event.direct_qualifiers + idx + 1
+            row["seed"] = None
+            row["passed_cut"] = False
     result = direct_rows + combined_rows
     if has_request_context():
         cache[cache_key] = result
     return result
 
+
+
+
+def base_shootoff_key(row: dict) -> tuple:
+    """เกณฑ์ก่อนรอบพิเศษ: TOTAL -> จำนวน 5 -> จำนวน 3
+
+    ถ้า 3 ตัวนี้ยังเท่ากัน แปลว่า "ยังจัดลำดับจริงไม่ได้"
+    ต้องยิง Shoot-off ยกเว้นกรณีเส้นสุดท้ายของสิทธิ์ไปตีรอบ 2 ซึ่งกติกาให้ไปตีได้ทั้งหมด
+    """
+    return (
+        row.get("combined_total", row.get("total", 0)),
+        row.get("count_5", 0),
+        row.get("count_3", 0),
+    )
+
+
+def tiebreak_done_key(row: dict) -> tuple:
+    """ใช้ดูว่ารอบพิเศษตัดสินได้หรือยัง
+
+    ต้องบันทึกจำนวนเที่ยวเท่ากันทุกคนก่อน แล้วจึงเอาคะแนนรอบพิเศษมาแยกอันดับ
+    """
+    return (row.get("tiebreak_count", 0), row.get("tiebreak_total", 0))
+
+
+def cutoff_shootoff_ids(rows: list[dict], cutoff_count: int) -> set[int]:
+    """คืน athlete_id ที่ต้อง Shoot-off เฉพาะเส้นตัดจริง
+
+    เงื่อนไข:
+    1) ตัดตามจำนวนที่ตั้งไว้จริง เช่น 8 คนคือ 8 คน
+    2) ถ้าอันดับสุดท้ายกับคนถัดไปไม่เท่ากันตาม TOTAL -> 5 -> 3 = ไม่ต้อง Shoot-off
+    3) ถ้าเท่ากัน ให้ทั้งกลุ่มที่มี key เดียวกันต้อง Shoot-off พร้อมกัน
+    4) ถ้าบันทึก Shoot-off ครบทุกคนแล้วและคะแนนเที่ยวพิเศษต่างกัน = ตัดสินได้ ไม่ขึ้น Shoot-off
+    5) ถ้าบันทึกยังไม่ครบ หรือบันทึกครบแล้วยังเท่ากัน = ยังขึ้น Shoot-off เพื่อให้ตีต่อ
+    """
+    if not cutoff_count or cutoff_count <= 0 or len(rows) <= cutoff_count:
+        return set()
+
+    cut_row = rows[cutoff_count - 1]
+    next_row = rows[cutoff_count]
+    base_key = base_shootoff_key(cut_row)
+    if base_key != base_shootoff_key(next_row):
+        return set()
+
+    group = [row for row in rows if base_shootoff_key(row) == base_key]
+    if len(group) < 2:
+        return set()
+
+    # กลุ่มต้องคร่อมเส้นตัดเท่านั้น ไม่ใช่เสมอกันภายในกลุ่มที่ผ่านหมด/ตกรอบหมด
+    group_ids = {row["athlete"].id for row in group}
+    above_ids = {row["athlete"].id for row in rows[:cutoff_count]}
+    below_ids = {row["athlete"].id for row in rows[cutoff_count:]}
+    if not (group_ids & above_ids and group_ids & below_ids):
+        return set()
+
+    counts = [row.get("tiebreak_count", 0) for row in group]
+    totals = [row.get("tiebreak_total", 0) for row in group]
+
+    # ต้องตีพร้อมกันทุกคนในกลุ่ม ถ้ามีคนใดยังไม่ได้บันทึก หรือจำนวนเที่ยวไม่เท่ากัน ให้ยังขึ้นทั้งกลุ่ม
+    if min(counts) == 0 or len(set(counts)) > 1:
+        return group_ids
+
+    # บันทึกครบเท่ากันแล้ว ถ้าคะแนน Shoot-off ยังเท่ากัน ให้ตีต่อ
+    if len(set(totals)) == 1:
+        return group_ids
+
+    # คะแนน Shoot-off ต่างกันแล้ว ตัดสินได้
+    return set()
+
+
+def unresolved_tie_ids(rows: list[dict], scope_count: int | None = None) -> set[int]:
+    """หากเสมอหลัง TOTAL -> 5 -> 3 แล้วต้องเรียงลำดับจริง ให้ส่งไป Shoot-off
+
+    scope_count ระบุจำนวนอันดับที่มีผล เช่น direct quota หรือจำนวนที่ผ่านจากรอบ 2
+    ถ้ากลุ่มเสมอแตะอยู่ใน scope จะถือว่ายังตัดสินอันดับไม่ได้
+    ข้อยกเว้นสิทธิ์ตีรอบ 2 รอบแรกยังใช้ round1_total_cut_ids แยกต่างหาก
+    """
+    if not rows:
+        return set()
+    scoped_ids = None
+    if scope_count is not None:
+        if scope_count <= 0:
+            return set()
+        scoped_ids = {row["athlete"].id for row in rows[:min(scope_count, len(rows))]}
+
+    groups: dict[tuple, list[dict]] = {}
+    for row in rows:
+        groups.setdefault(base_shootoff_key(row), []).append(row)
+
+    result: set[int] = set()
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        group_ids = {row["athlete"].id for row in group}
+        if scoped_ids is not None and not (group_ids & scoped_ids):
+            continue
+
+        counts = [row.get("tiebreak_count", 0) for row in group]
+        totals = [row.get("tiebreak_total", 0) for row in group]
+
+        # ยังไม่ได้ตีครบทุกคน หรือจำนวนเที่ยวไม่เท่ากัน = ต้อง Shoot-off / ตีต่อ
+        if min(counts) == 0 or len(set(counts)) > 1:
+            result.update(group_ids)
+            continue
+
+        # ตีครบเท่ากันแล้วแต่คะแนนพิเศษยังเท่ากัน = ต้องตีต่อ
+        if len(set(totals)) == 1:
+            result.update(group_ids)
+
+    return result
+
+
+
+
+def overview_unresolved_shootoff_ids(rows: list[dict], scope_count: int | None = None, round_no: int | None = None) -> set[int]:
+    """หาแถวที่ต้องยิง Shoot-off ในหน้า Overview
+
+    กติกาที่ใช้:
+    - เรียงด้วย TOTAL -> จำนวน 5 -> จำนวน 3 ทันที
+    - ถ้า 3 ตัวนี้ยังเท่ากัน แปลว่ายังจัดลำดับจริงไม่ได้
+    - ถ้ากลุ่มนั้นอยู่ในช่วงที่ต้องใช้จัดอันดับ/เข้า seed ให้ขึ้นปุ่ม Shoot-off
+    - ต้องกดจบการตีของทุกคนในกลุ่มก่อน จึงขึ้น Shoot-off
+    - ถ้าบันทึก Shoot-off ไม่ครบทุกคน หรือจำนวนเที่ยวไม่เท่ากัน ยังถือว่ายังตัดสินไม่ได้
+    """
+    if not rows:
+        return set()
+
+    scoped_ids = None
+    if scope_count is not None:
+        if scope_count <= 0:
+            return set()
+        # กลุ่มที่ชนหรืออยู่ในช่วง scope ต้องถูกตรวจทั้งกลุ่ม ไม่ใช่แค่คนใน slice
+        scoped_ids = {row["athlete"].id for row in rows[:min(scope_count, len(rows))]}
+
+    groups: dict[tuple, list[dict]] = {}
+    for row in rows:
+        groups.setdefault(base_shootoff_key(row), []).append(row)
+
+    result: set[int] = set()
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        group_ids = {row["athlete"].id for row in group}
+        if scoped_ids is not None and not (group_ids & scoped_ids):
+            continue
+        if round_no is not None:
+            # ขึ้นเมื่อคนในกลุ่มนี้ตีจบครบ ไม่ต้องรอทั้งตาราง
+            if not all(athlete_round_status(row["athlete"], round_no) == "finished" for row in group):
+                continue
+
+        counts = [row.get("tiebreak_count", 0) for row in group]
+        totals = [row.get("tiebreak_total", 0) for row in group]
+
+        # ยังไม่มีผลรอบพิเศษครบทุกคน หรือจำนวนเที่ยวไม่เท่ากัน = ต้องยิง/ยิงต่อ
+        if min(counts) == 0 or len(set(counts)) > 1:
+            result.update(group_ids)
+            continue
+
+        # ยิงรอบพิเศษครบเท่ากันแล้ว แต่คะแนนพิเศษยังเท่ากัน = ต้องยิงต่อ
+        if len(set(totals)) == 1:
+            result.update(group_ids)
+
+    return result
+
+def exact_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
+    """เลือกผู้ผ่านแบบจำนวนตายตัว และไม่ปล่อยอันดับที่ยังเสมอเข้าไปก่อน
+
+    ใช้กับเข้ารอบตรง/ผ่านจากรอบ 2/สร้าง bracket:
+    ต้องเรียงลำดับจริงด้วย TOTAL -> 5 -> 3 -> Shoot-off
+    ถ้ากลุ่มเสมอแตะตำแหน่งที่มีผล ให้รอ Shoot-off ก่อน
+
+    ข้อยกเว้นสิทธิ์ตีรอบ 2 จากรอบแรกไม่ได้ใช้ฟังก์ชันนี้ แต่ใช้ round1_total_cut_ids
+    เพื่อให้คนที่คะแนนรวมเท่าลำดับสุดท้ายของสิทธิ์รอบ 2 ได้ตีทั้งหมดตามเอกสาร
+    """
+    if not cutoff_count or cutoff_count <= 0:
+        return set()
+    if not rows:
+        return set()
+    if len(rows) <= cutoff_count:
+        pending = unresolved_tie_ids(rows, len(rows))
+        return {row["athlete"].id for row in rows if row["athlete"].id not in pending}
+    pending = unresolved_tie_ids(rows, cutoff_count)
+    return {row["athlete"].id for row in rows[:cutoff_count] if row["athlete"].id not in pending}
+
+def shootoff_group_ids(rows: list[dict], athlete_id: int) -> list[int]:
+    target = next((row for row in rows if row["athlete"].id == athlete_id), None)
+    if not target:
+        return [athlete_id]
+    key = base_shootoff_key(target)
+    return [row["athlete"].id for row in rows if base_shootoff_key(row) == key]
+
+
+def _all_rows_finished_for_round(rows: list[dict], round_no: int) -> bool:
+    """กันไม่ให้ขึ้น Shoot-off ก่อนกรรมการกดบันทึก/จบการตี"""
+    if not rows:
+        return False
+    return all(athlete_round_status(row["athlete"], round_no) == "finished" for row in rows if row.get("athlete"))
+
+
+def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
+    """ตรวจ Shoot-off สำหรับ Overview
+
+    รอบ 1:
+    - ใช้ TOTAL -> 5 -> 3 เพื่อจัดลำดับทุกคน
+    - ถ้ายังเท่ากันในกลุ่มที่มีผลต่อ "เข้ารอบตรง" ต้อง Shoot-off
+    - ข้อยกเว้นมีแค่เส้นสุดท้ายของสิทธิ์ตีรอบ 2: ถ้าคะแนนรวมเท่ากัน ให้ได้ตีรอบ 2 ทั้งหมด
+
+    รอบ 2:
+    - ต้องไม่มีลำดับซ้ำ เพราะต้องเอาไปเป็น Seed ต่อ
+    - ใช้ SUM(R1+R2) -> จำนวน 5 รวม -> จำนวน 3 รวม
+    - ถ้ายังเท่ากันหลังกลุ่มนั้นกดจบการตีครบ ให้ขึ้น Shoot-off ทันที
+    """
+    if round_no == 1:
+        rows = build_round_ranking(event, 1)
+        return overview_unresolved_shootoff_ids(rows, direct_quota(event), round_no=1)
+
+    if round_no == 2 and event.has_round_two:
+        rows = [r for r in build_round_two_overview_rows(event) if not r.get("is_round2_direct_placeholder")]
+        rows.sort(key=lambda row: (
+            -row.get("combined_total", row.get("total", 0)),
+            -row.get("count_5", 0),
+            -row.get("count_3", 0),
+            -row.get("tiebreak_total", 0),
+            row.get("display_order") if row.get("display_order") is not None else 999999,
+            row["athlete"].id,
+        ))
+        # รอบ 2 ต้องจัดอันดับจริงทุกคนที่ตีจบแล้ว ไม่ให้มี Class ซ้ำ
+        return overview_unresolved_shootoff_ids(rows, None, round_no=2)
+
+    return set()
+
+def build_round_two_overview_rows(event: Event) -> List[dict]:
+    """หน้า Overview รอบ 2 แบบ Official + realtime
+
+    แสดงรายชื่อทันทีตั้งแต่เปิดรอบ 2 โดยไม่ต้องรอคีย์ครบ
+    รูปแบบข้อมูลในแต่ละแถวเก็บทั้งรอบ 1 และรอบ 2 เพื่อให้ตารางเดียวแสดง:
+    Qualification Round 1 / Qualification Round 2 / SUM / RANKING
+    """
+    round1_rows = build_round_ranking(event, 1)
+    direct_limit = direct_quota(event)
+    lane_count = max(event.lane_count or 1, 1)
+
+    direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
+    direct_pending_ids = unresolved_tie_ids(round1_rows, direct_quota(event))
+    direct_rows = []
+    for row in round1_rows:
+        if row["athlete"].id in direct_ids:
+            direct_row = {**row}
+            direct_row["round_no"] = 2
+            direct_row["round1_total"] = row["total"]
+            direct_row["round2_total"] = None
+            direct_row["combined_total"] = row["total"]
+            direct_row["round1_by_station"] = row.get("by_station", {})
+            direct_row["round2_by_station"] = None
+            direct_row["is_round2_direct_placeholder"] = True
+            direct_row["display_order"] = "-"
+            direct_row["display_lane_no"] = "-"
+            direct_row["display_lane_order"] = "-"
+            direct_row["status"] = "direct"
+            direct_rows.append(direct_row)
+
+    # Overview รอบ 2 ต้องไม่มีลำดับซ้ำ: แสดงลำดับจริงตามตำแหน่งหลังตัดสินด้วย TOTAL -> 5 -> 3 -> Shoot-off
+    for idx, direct_row in enumerate(direct_rows, start=1):
+        direct_row["rank"] = idx
+        direct_row["ordinal_rank"] = idx
+        direct_row["view_order"] = idx
+        direct_row["display_rank"] = idx
+
+    # รายชื่อรอบ 2 ต้องมาจากสิทธิ์หลังรอบ 1 ไม่ใช่จากลายเซ็น/คะแนนรอบ 2
+    round2_source_rows = [
+        row for row in round1_rows
+        if row["athlete"].id not in direct_ids
+        and row["athlete"].id not in direct_pending_ids
+        and is_round_two_candidate(event, row["athlete"])
+    ]
+    # ลำดับตีรอบ 2: คะแนนรอบ 1 น้อยสุดก่อน
+    round2_source_rows.sort(key=lambda row: (
+        row["total"], row["count_5"], row["count_3"], row["tiebreak_total"],
+        row["athlete"].start_order if row["athlete"].start_order is not None else 999999,
+        row["athlete"].id,
+    ))
+
+    round2_rows = []
+    for idx, source_row in enumerate(round2_source_rows, start=1):
+        athlete = source_row["athlete"]
+        r2 = summarize_round(athlete.id, 2)
+        combined_total = source_row["total"] + r2["total"]
+        row = {
+            "athlete": athlete,
+            "round_no": 2,
+            # หน้า Overview รอบ 2:
+            # total = คะแนนรอบ 2 อย่างเดียว
+            # combined_total = คะแนนรอบ 1 + รอบ 2
+            "total": r2["total"],
+            "combined_total": combined_total,
+            "round1_total": source_row["total"],
+            "round2_total": r2["total"],
+            "count_5": source_row["count_5"] + r2["count_5"],
+            "count_3": source_row["count_3"] + r2["count_3"],
+            "tiebreak_total": source_row["tiebreak_total"] + r2["tiebreak_total"],
+            "tiebreak_count": source_row.get("tiebreak_count", 0) + r2.get("tiebreak_count", 0),
+            "status": athlete_round_status(athlete, 2),
+            "by_station": r2["by_station"],
+            "round1_by_station": source_row.get("by_station", {}),
+            "round2_by_station": r2["by_station"],
+            "red_cards": r2["red_cards"],
+            "display_order": idx,
+            "display_lane_no": ((idx - 1) % lane_count) + 1,
+            "display_lane_order": ((idx - 1) // lane_count) + 1,
+            "round1_rank": source_row["rank"],
+            "is_round2_direct_placeholder": False,
+        }
+        round2_rows.append(row)
+
+    # Realtime ด้านล่างกลุ่มเข้ารอบตรง: SUM มากขึ้นก่อน, แล้ว 5, 3, shoot-off
+    round2_rows.sort(key=lambda row: (
+        -row["combined_total"],
+        -row["count_5"],
+        -row["count_3"],
+        -row["tiebreak_total"],
+        row["display_order"],
+        row["athlete"].id,
+    ))
+    # รอบ 2 ต้องเรียงเป็นลำดับจริง ไม่มี Class ซ้ำ
+    # ถ้ายังเสมอกันหลัง TOTAL -> 5 -> 3 ระบบจะขึ้น Shoot-off ที่เส้นตัด แต่อันดับในตารางยังแสดงตามตำแหน่งเพื่อไม่ให้สับสน
+    base = len(direct_rows)
+    for idx, row in enumerate(round2_rows, start=1):
+        real_rank = base + idx
+        row["rank"] = real_rank
+        row["ordinal_rank"] = real_rank
+        row["display_rank"] = real_rank
+        row["view_order"] = real_rank
+
+    return direct_rows + round2_rows
 
 def scorecard_print_positions() -> dict:
     return {
@@ -806,15 +1347,17 @@ def get_progression_groups(event: Event) -> dict:
     if has_request_context() and cache_key in cache:
         return cache[cache_key]
     round1_rows = build_round_ranking(event, 1)
-    direct_ids = {r["athlete"].id for r in round1_rows if r["rank"] <= event.direct_qualifiers}
+    direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
     round2_candidate_ids = set()
     passed_round2_ids = set()
     eliminated_ids = set()
     if event.has_round_two:
         round2_candidate_ids = round_two_candidate_ids(event) - direct_ids
         combined = build_combined_qualifiers(event)
-        advancers = combined[event.direct_qualifiers:event.direct_qualifiers + event.round_two_advancers]
-        passed_round2_ids = {r["athlete"].id for r in advancers}
+        passed_round2_ids = {
+            r["athlete"].id for r in combined
+            if r.get("round2_total") is not None and r.get("passed_cut")
+        }
     for athlete in event.athletes:
         aid = athlete.id
         if aid in direct_ids:
@@ -846,41 +1389,52 @@ def configured_bracket_start_round(event: Event) -> str:
 
 
 def ensure_bracket(event: Event) -> list[BracketMatch]:
-    matches = BracketMatch.query.filter_by(event_id=event.id).order_by(BracketMatch.round_name, BracketMatch.match_no).all()
+    """สร้างตาราง bracket ล่วงหน้าทุกรอบถึงรอบชิง
+
+    - หน้าประกบคู่จะเห็นช่องรอครบตั้งแต่ต้น เช่น R16 -> QF -> SF -> Final
+    - ยังไม่ดึงชื่อขึ้นรอบถัดไปจนกว่าจะบันทึกผู้ชนะ แต่กล่องรอจะแสดงไว้แล้ว
+    - ไม่ขยายจำนวนคนเองจากกรณีคะแนนเท่ากันที่เส้นตัด
+    """
     desired_round = configured_bracket_start_round(event)
-
-    # Older code chose the bracket from the current number of available seeds.
-    # That made a configured Round of 16 silently appear as Quarter Final.
-    # Rebuild only a not-yet-started stale bracket; never delete an active one.
-    if matches:
-        existing_rounds = {match.round_name for match in matches}
-        initial_round = "R16" if "R16" in existing_rounds else ("QF" if "QF" in existing_rounds else "SF")
-        if initial_round != desired_round and not any(match.winner_id for match in matches):
-            BracketMatch.query.filter_by(event_id=event.id).delete(synchronize_session=False)
-            db.session.commit()
-            matches = []
-        else:
-            return matches
-
     qualifiers = build_combined_qualifiers(event)
-    seed_count = event.direct_qualifiers + (event.round_two_advancers if event.has_round_two else 0)
-    seeds = qualifiers[:seed_count]
+    seeds = [row for row in qualifiers if row.get("seed")]
+    seed_total = len(seeds)
+    if seed_total > 4 and desired_round == "SF":
+        desired_round = "QF"
+
+    existing = BracketMatch.query.filter_by(event_id=event.id).all()
+    existing_rounds = {m.round_name for m in existing}
+    initial_round = "R16" if "R16" in existing_rounds else ("QF" if "QF" in existing_rounds else ("SF" if "SF" in existing_rounds else None))
+    if existing and initial_round != desired_round and not any(m.winner_id for m in existing):
+        BracketMatch.query.filter_by(event_id=event.id).delete(synchronize_session=False)
+        db.session.commit()
+        existing = []
+
     orders = {
         "R16": [(1,16),(8,9),(5,12),(4,13),(3,14),(6,11),(7,10),(2,15)],
         "QF": [(1,8),(4,5),(3,6),(2,7)],
         "SF": [(1,4),(2,3)],
+        "F": [(1,2)],
     }
-    for idx, (a, b) in enumerate(orders[desired_round], start=1):
-        arow = seeds[a - 1] if len(seeds) >= a else None
-        brow = seeds[b - 1] if len(seeds) >= b else None
-        db.session.add(BracketMatch(
-            event_id=event.id,
-            round_name=desired_round,
-            match_no=idx,
-            athlete_a_id=arow["athlete"].id if arow else None,
-            athlete_b_id=brow["athlete"].id if brow else None,
-        ))
-    db.session.commit()
+    rounds_after = {"R16": ["R16", "QF", "SF", "F"], "QF": ["QF", "SF", "F"], "SF": ["SF", "F"]}
+    existing_keys = {(m.round_name, m.match_no): m for m in BracketMatch.query.filter_by(event_id=event.id).all()}
+    changed = False
+    for round_name in rounds_after.get(desired_round, [desired_round, "F"]):
+        for idx, pair in enumerate(orders[round_name], start=1):
+            if (round_name, idx) in existing_keys:
+                continue
+            a_id = b_id = None
+            if round_name == desired_round:
+                a, b = pair
+                arow = seeds[a - 1] if len(seeds) >= a else None
+                brow = seeds[b - 1] if len(seeds) >= b else None
+                a_id = arow["athlete"].id if arow else None
+                b_id = brow["athlete"].id if brow else None
+            db.session.add(BracketMatch(event_id=event.id, round_name=round_name, match_no=idx, athlete_a_id=a_id, athlete_b_id=b_id))
+            changed = True
+    if changed:
+        db.session.commit()
+    maybe_advance_bracket(event)
     return BracketMatch.query.filter_by(event_id=event.id).order_by(BracketMatch.round_name, BracketMatch.match_no).all()
 
 
@@ -891,19 +1445,25 @@ def maybe_advance_bracket(event: Event) -> None:
     sf = sorted([m for m in matches if m.round_name == "SF"], key=lambda m: m.match_no)
     fn = sorted([m for m in matches if m.round_name == "F"], key=lambda m: m.match_no)
     changed = False
-    if r16 and all(m.winner_id for m in r16) and not qf:
+
+    def fill_match(match, a_id, b_id):
+        nonlocal changed
+        if match and match.winner_id is None:
+            if match.athlete_a_id != a_id or match.athlete_b_id != b_id:
+                match.athlete_a_id = a_id
+                match.athlete_b_id = b_id
+                changed = True
+
+    if r16 and len(r16) >= 8 and qf and all(m.winner_id for m in r16):
         pairings = [(r16[0].winner_id, r16[1].winner_id), (r16[2].winner_id, r16[3].winner_id), (r16[4].winner_id, r16[5].winner_id), (r16[6].winner_id, r16[7].winner_id)]
-        for idx,(a,b) in enumerate(pairings, start=1):
-            db.session.add(BracketMatch(event_id=event.id, round_name="QF", match_no=idx, athlete_a_id=a, athlete_b_id=b))
-        changed = True
-    if qf and all(m.winner_id for m in qf) and not sf:
+        for idx, (a, b) in enumerate(pairings):
+            fill_match(qf[idx], a, b)
+    if qf and len(qf) >= 4 and sf and all(m.winner_id for m in qf):
         pairings = [(qf[0].winner_id, qf[1].winner_id), (qf[2].winner_id, qf[3].winner_id)]
-        for idx,(a,b) in enumerate(pairings, start=1):
-            db.session.add(BracketMatch(event_id=event.id, round_name="SF", match_no=idx, athlete_a_id=a, athlete_b_id=b))
-        changed = True
-    if sf and all(m.winner_id for m in sf) and not fn:
-        db.session.add(BracketMatch(event_id=event.id, round_name="F", match_no=1, athlete_a_id=sf[0].winner_id, athlete_b_id=sf[1].winner_id))
-        changed = True
+        for idx, (a, b) in enumerate(pairings):
+            fill_match(sf[idx], a, b)
+    if sf and len(sf) >= 2 and fn and all(m.winner_id for m in sf):
+        fill_match(fn[0], sf[0].winner_id, sf[1].winner_id)
     if changed:
         db.session.commit()
 
@@ -927,22 +1487,49 @@ def sync_match_winner_from_scores(match: BracketMatch) -> None:
 
 def build_bracket_match_row(event: Event, athlete: Athlete | None, round_name: str, seed_map: dict[int, int]) -> dict:
     if not athlete:
-        base = {"athlete": None, "team": "-", "name": "-", "r1": "-", "r1r2": "-", "stations": ["-"]*5, "total": "-", "seed": ""}
-        return base
+        return {
+            "athlete": None,
+            "athlete_id": None,
+            "team": "-",
+            "name": "-",
+            "r1": "-",
+            "r1r2": "",
+            "show_ref_score": False,
+            "is_direct_qualifier": False,
+            "stations": ["-"] * 5,
+            "total": "-",
+            "seed": "",
+            "status": "waiting",
+            "status_label": "รอคิว",
+        }
+
+    progression_groups = get_progression_groups(event)
+    is_direct_qualifier = athlete.id in progression_groups.get("direct", set())
+
     r1 = summarize_round(athlete.id, 1)["total"]
     r2 = summarize_round(athlete.id, 2)["total"] if event.has_round_two else 0
+    ref_total = r1 + (r2 or 0)
+    show_ref_score = not is_direct_qualifier
+
     round_no = bracket_round_to_scorecard_round(round_name, event)
     current = summarize_round(athlete.id, round_no)
+    round_status = athlete_round_status(athlete, round_no)
+
     return {
         "athlete": athlete,
+        "athlete_id": athlete.id,
         "team": athlete.affiliation,
         "name": athlete.name,
         "r1": r1,
-        "r1r2": r1 + r2,
+        "r1r2": ref_total if show_ref_score else "",
+        "show_ref_score": show_ref_score,
+        "is_direct_qualifier": is_direct_qualifier,
         "stations": [current["by_station"][station]["total"] for station in STATIONS],
         "total": current["total"],
         "seed": seed_map.get(athlete.id, ""),
         "round_no": round_no,
+        "status": round_status,
+        "status_label": {"waiting": "รอคิว", "active": "กำลังตี", "finished": "ตีเสร็จแล้ว"}.get(round_status, "รอคิว"),
     }
 
 def generate_next_bib_no(event_id: int) -> str:
@@ -1255,18 +1842,57 @@ def randomize_athletes(event_id: int):
     return redirect(url_for("manage_athletes", event_id=event.id))
 
 
+
 @app.route("/events/<int:event_id>/overview")
 def event_overview(event_id: int):
     event = Event.query.get_or_404(event_id)
     round_no = int(request.args.get("round", 1))
     if round_no == 2 and event.has_round_two:
         sync_round_two_candidates(event)
-    rows = build_round_ranking(event, round_no)
+    if round_no == 2 and event.has_round_two:
+        rows = build_round_two_overview_rows(event)
+    else:
+        rows = build_round_ranking(event, round_no)
     groups = get_progression_groups(event)
+    shoot_off_ids = overview_shootoff_ids(event, round_no)
     for row in rows:
         aid = row["athlete"].id
-        row["progress_class"] = ("qualified-direct" if aid in groups["direct"] else ("qualified-round2" if aid in groups["round2_passed"] else ("round2-candidate" if aid in groups["round2_candidates"] else ("eliminated" if aid in groups["eliminated"] else ""))))
-    combined_rows = build_combined_qualifiers(event) if round_no == 2 and event.has_round_two else []
+        row["shoot_off_required"] = aid in shoot_off_ids
+        row["shoot_off_group_ids"] = shootoff_group_ids(rows, aid) if row["shoot_off_required"] else [aid]
+        if row["shoot_off_required"]:
+            row["progress_class"] = "shoot-off-required"
+        elif round_no == 1:
+            # หน้า Overview รอบ 1 แยกแค่เข้ารอบตรง/ได้สิทธิ์ตีรอบ 2 ก่อน ไม่ลงสี Knockout ที่นี่
+            row["progress_class"] = "qualified-direct" if aid in groups["direct"] else ("round2-candidate" if aid in groups["round2_candidates"] else "")
+        else:
+            row["progress_class"] = ("qualified-round2" if aid in groups["round2_passed"] else ("eliminated" if aid in groups["eliminated"] else ""))
+        row["cut_line_after"] = False
+
+    # เส้นแบ่งกลุ่มสำคัญบนหน้า Overview
+    # รอบ 1: แยกคนเข้ารอบตรงออกจากคนมีสิทธิ์ตีรอบ 2
+    # รอบ 2: ขีดใต้คนสุดท้ายที่ผ่านจากรอบ 2 เข้า Bracket
+    if round_no == 1:
+        last_direct_idx = None
+        last_round2_candidate_idx = None
+        for idx, row in enumerate(rows):
+            aid = row["athlete"].id
+            if aid in groups["direct"]:
+                last_direct_idx = idx
+            if aid in groups["round2_candidates"]:
+                last_round2_candidate_idx = idx
+        if last_direct_idx is not None and last_direct_idx < len(rows) - 1:
+            rows[last_direct_idx]["cut_line_after"] = True
+        if last_round2_candidate_idx is not None and last_round2_candidate_idx < len(rows) - 1:
+            rows[last_round2_candidate_idx]["cut_line_after"] = True
+    elif round_no == 2:
+        last_passed_idx = None
+        for idx, row in enumerate(rows):
+            if row["athlete"].id in groups["round2_passed"]:
+                last_passed_idx = idx
+        if last_passed_idx is not None and last_passed_idx < len(rows) - 1:
+            rows[last_passed_idx]["cut_line_after"] = True
+
+    combined_rows = []
     return render_template(
         "overview.html",
         event=event,
@@ -1285,8 +1911,36 @@ def overview_data(event_id: int):
     round_no = int(request.args.get("round", 1))
     if round_no == 2 and event.has_round_two:
         sync_round_two_candidates(event)
-    rows = build_round_ranking(event, round_no)
+    if round_no == 2 and event.has_round_two:
+        rows = build_round_two_overview_rows(event)
+    else:
+        rows = build_round_ranking(event, round_no)
     groups = get_progression_groups(event)
+    shoot_off_ids = overview_shootoff_ids(event, round_no)
+    for row in rows:
+        row["shoot_off_required"] = row["athlete"].id in shoot_off_ids
+        row["shoot_off_group_ids"] = shootoff_group_ids(rows, row["athlete"].id) if row["shoot_off_required"] else [row["athlete"].id]
+        row["cut_line_after"] = False
+    if round_no == 1:
+        last_direct_idx = None
+        last_round2_candidate_idx = None
+        for idx, row in enumerate(rows):
+            aid = row["athlete"].id
+            if aid in groups["direct"]:
+                last_direct_idx = idx
+            if aid in groups["round2_candidates"]:
+                last_round2_candidate_idx = idx
+        if last_direct_idx is not None and last_direct_idx < len(rows) - 1:
+            rows[last_direct_idx]["cut_line_after"] = True
+        if last_round2_candidate_idx is not None and last_round2_candidate_idx < len(rows) - 1:
+            rows[last_round2_candidate_idx]["cut_line_after"] = True
+    elif round_no == 2:
+        last_passed_idx = None
+        for idx, row in enumerate(rows):
+            if row["athlete"].id in groups["round2_passed"]:
+                last_passed_idx = idx
+        if last_passed_idx is not None and last_passed_idx < len(rows) - 1:
+            rows[last_passed_idx]["cut_line_after"] = True
     payload = []
     for row in rows:
         stations = {}
@@ -1298,9 +1952,18 @@ def overview_data(event_id: int):
                 "9": row["by_station"][station]["distances"].get(9, 0),
                 "total": row["by_station"][station]["total"],
             }
+        round1_stations = None
+        round2_stations = None
+        if round_no == 2 and event.has_round_two:
+            round1_stations = {str(st): (row.get("round1_by_station") or {}).get(st, {}).get("total", 0) for st in STATIONS}
+            if row.get("round2_by_station") is not None:
+                round2_stations = {str(st): row["round2_by_station"].get(st, {}).get("total", 0) for st in STATIONS}
+            else:
+                round2_stations = {str(st): None for st in STATIONS}
         aid = row["athlete"].id
         payload.append({
             "rank": row["rank"],
+            "display_rank": row.get("display_rank", row["rank"]),
             "name": row["athlete"].name,
             "affiliation": row["athlete"].affiliation,
             "start_order": row["athlete"].start_order,
@@ -1310,12 +1973,58 @@ def overview_data(event_id: int):
             "display_lane_no": row.get("display_lane_no", row["athlete"].lane_no),
             "display_lane_order": row.get("display_lane_order", row["athlete"].lane_order),
             "status": row["status"],
-            "total": row["total"],
+            "total": row.get("round2_total", row["total"]) if round_no == 2 and event.has_round_two and not row.get("is_round2_direct_placeholder") else row["total"],
+            "round1_total": row.get("round1_total"),
+            "round2_total": row.get("round2_total"),
+            "combined_total": row.get("combined_total", row["total"]),
+            "round1_stations": round1_stations,
+            "round2_stations": round2_stations,
             "athlete_id": row["athlete"].id,
-            "progress_class": ("qualified-direct" if aid in groups["direct"] else ("qualified-round2" if aid in groups["round2_passed"] else ("round2-candidate" if aid in groups["round2_candidates"] else ("eliminated" if aid in groups["eliminated"] else "")))),
+            "progress_class": ("shoot-off-required" if row.get("shoot_off_required") else (("qualified-direct" if aid in groups["direct"] else ("round2-candidate" if aid in groups["round2_candidates"] else "")) if round_no == 1 else ("qualified-round2" if aid in groups["round2_passed"] else ("eliminated" if aid in groups["eliminated"] else "")))),
+            "shoot_off_required": row.get("shoot_off_required", False),
+            "shoot_off_group_ids": row.get("shoot_off_group_ids", [row["athlete"].id]),
+            "is_round2_direct_placeholder": row.get("is_round2_direct_placeholder", False),
+            "cut_line_after": row.get("cut_line_after", False),
+            # ใช้สำหรับเรียงแถว realtime: รอบ 1 ต้องเรียงตามคะแนน/Rank, รอบ 2 ใช้ view_order ที่ build_round_two_overview_rows กำหนด
+            "view_order": row.get("view_order", row["rank"]),
             "stations": stations,
         })
     return jsonify(payload)
+
+
+@app.route("/events/<int:event_id>/overview-stats")
+def overview_stats(event_id: int):
+    """สถิติ 5/3 สำหรับเปิดดูประกอบการจัดลำดับ โดยไม่ทำให้ตาราง Overview หลักรก"""
+    event = Event.query.get_or_404(event_id)
+    round_no = int(request.args.get("round", 1))
+
+    if round_no == 2 and event.has_round_two:
+        rows = [r for r in build_round_two_overview_rows(event) if not r.get("is_round2_direct_placeholder")]
+    else:
+        rows = build_round_ranking(event, 1)
+
+    # เรียงตามกติกาจริงที่ใช้ประกอบอันดับ: TOTAL -> 5 -> 3 -> Shoot-off
+    rows = sorted(rows, key=lambda r: (
+        -r.get("combined_total", r.get("total", 0)),
+        -r.get("count_5", 0),
+        -r.get("count_3", 0),
+        -r.get("tiebreak_total", 0),
+        r.get("display_order") if r.get("display_order") is not None else 999999,
+        r["athlete"].id,
+    ))
+
+    data = []
+    for idx, row in enumerate(rows, start=1):
+        data.append({
+            "rank": idx,
+            "name": row["athlete"].name,
+            "affiliation": row["athlete"].affiliation or "-",
+            "total": row.get("combined_total", row.get("total", 0)),
+            "count_5": row.get("count_5", 0),
+            "count_3": row.get("count_3", 0),
+            "status": ("ต้องตี Shoot-off" if row.get("shoot_off_required") else ""),
+        })
+    return jsonify(data)
 
 
 @app.route("/api/scorecard/<int:athlete_id>/autosave", methods=["POST"])
@@ -1566,6 +2275,43 @@ def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
     }
 
 
+def athletes_for_scorecard_round(event: Event, round_no: int, selected_ids: list[int] | None = None) -> list[Athlete]:
+    query = Athlete.query.filter_by(event_id=event.id)
+    if selected_ids:
+        query = query.filter(Athlete.id.in_(selected_ids))
+    athletes = query.order_by(Athlete.start_order, Athlete.id).all()
+
+    if round_no == 2 and event.has_round_two:
+        rows = build_round_ranking(event, 2)
+        rows = sort_round_two_rows_for_start(rows)
+        selected_set = set(selected_ids or [])
+        ordered = [row["athlete"] for row in rows if (not selected_set or row["athlete"].id in selected_set)]
+        return ordered
+
+    if round_no >= 3:
+        round_name = None
+        for key in ["R16", "QF", "SF", "F"]:
+            try:
+                if bracket_round_to_scorecard_round(key, event) == round_no:
+                    round_name = key
+                    break
+            except KeyError:
+                continue
+        if round_name:
+            ensure_bracket(event)
+            maybe_advance_bracket(event)
+            matches = BracketMatch.query.filter_by(event_id=event.id, round_name=round_name).order_by(BracketMatch.match_no).all()
+            ordered_ids = []
+            for match in matches:
+                for aid in [match.athlete_a_id, match.athlete_b_id]:
+                    if aid and aid not in ordered_ids:
+                        ordered_ids.append(aid)
+            athlete_by_id = {a.id: a for a in athletes}
+            return [athlete_by_id[aid] for aid in ordered_ids if aid in athlete_by_id]
+
+    return athletes
+
+
 @app.route("/events/<int:event_id>/scorecards-print-select", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "superadmin")
@@ -1573,13 +2319,7 @@ def scorecards_print_select(event_id: int):
     event = Event.query.get_or_404(event_id)
     round_no = int(request.values.get("round", 1))
 
-    athletes = Athlete.query.filter_by(event_id=event.id).order_by(
-        Athlete.start_order,
-        Athlete.id
-    ).all()
-
-    if round_no == 2 and event.has_round_two:
-        athletes = [a for a in athletes if is_round_two_candidate(event, a)]
+    athletes = athletes_for_scorecard_round(event, round_no)
 
     if request.method == "POST":
         print_mode = request.form.get("print_mode", "selected")
@@ -1632,14 +2372,7 @@ def scorecards_print_bulk(event_id: int):
             if raw_id.isdigit():
                 selected_ids.append(int(raw_id))
 
-    query = Athlete.query.filter_by(event_id=event.id)
-    if selected_ids:
-        query = query.filter(Athlete.id.in_(selected_ids))
-
-    athletes = query.order_by(Athlete.start_order, Athlete.id).all()
-
-    if round_no == 2 and event.has_round_two:
-        athletes = [a for a in athletes if is_round_two_candidate(event, a)]
+    athletes = athletes_for_scorecard_round(event, round_no, selected_ids if selected_ids else None)
 
     print_items = [
         build_scorecard_print_context(athlete, round_no)
@@ -1755,15 +2488,48 @@ def tiebreak(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
     round_no = int(request.args.get("round", 1))
     if request.method == "POST":
-        TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete()
+        # ไม่ลบของเดิม: หากยังเท่ากัน ให้กลับมาตีเที่ยวพิเศษเพิ่มได้เรื่อย ๆ
         for station_no in STATIONS:
             score = int(request.form.get(f"tb_{station_no}", 0) or 0)
             db.session.add(TieBreakEntry(athlete_id=athlete.id, round_no=round_no, station_no=station_no, score=score))
         db.session.commit()
-        flash("บันทึกผลเที่ยวพิเศษแล้ว", "success")
+        clear_request_cache()
+        flash("บันทึกผลเที่ยวพิเศษแล้ว ถ้ายังเท่ากันให้บันทึกเที่ยวพิเศษเพิ่มอีกครั้ง", "success")
         return redirect(url_for("event_overview", event_id=athlete.event_id, round=round_no))
-    existing = {e.station_no: e.score for e in TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).all()}
-    return render_template("tiebreak.html", athlete=athlete, round_no=round_no, existing=existing)
+    entries = TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).all()
+    existing = {station: sum(e.score for e in entries if e.station_no == station) for station in STATIONS}
+    return render_template("tiebreak.html", athlete=athlete, round_no=round_no, existing=existing, athletes=[athlete], event=athlete.event)
+
+
+@app.route("/events/<int:event_id>/tiebreak", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def event_tiebreak(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    round_no = int(request.args.get("round", 1))
+    raw_ids = request.values.get("ids", "")
+    athlete_ids = []
+    for part in raw_ids.replace(" ", "").split(','):
+        if part.isdigit():
+            athlete_ids.append(int(part))
+    athletes = Athlete.query.filter(Athlete.event_id == event.id, Athlete.id.in_(athlete_ids)).order_by(Athlete.start_order, Athlete.id).all() if athlete_ids else []
+    if not athletes:
+        flash("กรุณาเลือกนักกีฬาที่ต้องตี Shoot-off อย่างน้อย 2 คน", "warning")
+        return redirect(url_for("event_overview", event_id=event.id, round=round_no))
+    if request.method == "POST":
+        for athlete in athletes:
+            for station_no in STATIONS:
+                score = int(request.form.get(f"tb_{athlete.id}_{station_no}", 0) or 0)
+                db.session.add(TieBreakEntry(athlete_id=athlete.id, round_no=round_no, station_no=station_no, score=score))
+        db.session.commit()
+        clear_request_cache()
+        flash("บันทึก Shoot-off พร้อมกันแล้ว ถ้ายังเท่ากันให้เลือกกลุ่มเดิมแล้วบันทึกเพิ่ม", "success")
+        return redirect(url_for("event_overview", event_id=event.id, round=round_no))
+    existing = {}
+    for athlete in athletes:
+        entries = TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).all()
+        existing[athlete.id] = {station: sum(e.score for e in entries if e.station_no == station) for station in STATIONS}
+    return render_template("tiebreak.html", event=event, athletes=athletes, athlete=athletes[0], round_no=round_no, existing=existing, bulk_mode=True, ids=','.join(str(a.id) for a in athletes))
 
 
 @app.route("/events/<int:event_id>/bracket")
@@ -1774,7 +2540,7 @@ def bracket(event_id: int):
     maybe_advance_bracket(event)
     matches = BracketMatch.query.filter_by(event_id=event.id).order_by(BracketMatch.round_name, BracketMatch.match_no).all()
     athlete_map = {a.id: a for a in event.athletes}
-    seed_map = {row["athlete"].id: idx for idx, row in enumerate(qualifiers, start=1) if row.get("athlete")}
+    seed_map = {row["athlete"].id: row.get("seed") for row in qualifiers if row.get("athlete") and row.get("seed")}
     grouped = {"R16": [], "QF": [], "SF": [], "F": []}
     for m in matches:
         a = athlete_map.get(m.athlete_a_id)
@@ -1785,8 +2551,11 @@ def bracket(event_id: int):
             "b": build_bracket_match_row(event, b, m.round_name, seed_map),
             "winner": athlete_map.get(m.winner_id),
             "round_no": bracket_round_to_scorecard_round(m.round_name, event),
+            "status": bracket_match_status(event, m),
         })
-    return render_template("bracket.html", event=event, grouped=grouped)
+    combined_rows = build_combined_qualifiers(event) if event.has_round_two else qualifiers
+    start_round = configured_bracket_start_round(event)
+    return render_template("bracket.html", event=event, grouped=grouped, combined_rows=combined_rows, start_round=start_round)
 
 
 @app.route("/matches/<int:match_id>/winner", methods=["POST"])
@@ -1831,14 +2600,18 @@ def bracket_data(event_id: int):
     ).all()
 
     athlete_map = {a.id: a for a in event.athletes}
+    qualifiers = build_combined_qualifiers(event)
+    seed_map = {row["athlete"].id: row.get("seed", idx) for idx, row in enumerate(qualifiers, start=1) if row.get("athlete") and row.get("seed")}
 
     grouped = {"R16": [], "QF": [], "SF": [], "F": []}
     for m in matches:
         grouped.setdefault(m.round_name, []).append({
             "match_no": m.match_no,
+            "round_no": bracket_round_to_scorecard_round(m.round_name, event),
             "winner_id": m.winner_id,
-            "a": build_bracket_row_data(event, athlete_map.get(m.athlete_a_id), m.round_name),
-            "b": build_bracket_row_data(event, athlete_map.get(m.athlete_b_id), m.round_name),
+            "status": bracket_match_status(event, m),
+            "a": build_bracket_row_data(event, athlete_map.get(m.athlete_a_id), m.round_name, seed_map),
+            "b": build_bracket_row_data(event, athlete_map.get(m.athlete_b_id), m.round_name, seed_map),
         })
 
     return jsonify(grouped)
