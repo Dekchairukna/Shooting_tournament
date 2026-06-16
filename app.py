@@ -211,7 +211,7 @@ class ScoreSignature(db.Model):
 
 
 class TieBreakEntry(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     athlete_id = db.Column(db.Integer, db.ForeignKey("athlete.id"), nullable=False)
     round_no = db.Column(db.Integer, nullable=False)
     station_no = db.Column(db.Integer, nullable=False)
@@ -353,6 +353,16 @@ def ensure_schema() -> None:
         if "bracket_match" not in tables:
             conn.exec_driver_sql("CREATE TABLE bracket_match (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, round_name VARCHAR(20) NOT NULL, match_no INTEGER NOT NULL, athlete_a_id INTEGER, athlete_b_id INTEGER, winner_id INTEGER)")
 
+
+
+def next_manual_id(model):
+    """Fallback สำหรับ PostgreSQL table เก่าที่ id ไม่มี sequence/default"""
+    try:
+        max_id = db.session.query(db.func.max(model.id)).scalar() or 0
+        return int(max_id) + 1
+    except Exception:
+        db.session.rollback()
+        return None
 
 def event_theme(category: str) -> str:
     return {
@@ -2517,11 +2527,38 @@ def event_tiebreak(event_id: int):
         flash("กรุณาเลือกนักกีฬาที่ต้องตี Shoot-off อย่างน้อย 2 คน", "warning")
         return redirect(url_for("event_overview", event_id=event.id, round=round_no))
     if request.method == "POST":
+        entries_data = []
         for athlete in athletes:
             for station_no in STATIONS:
                 score = int(request.form.get(f"tb_{athlete.id}_{station_no}", 0) or 0)
-                db.session.add(TieBreakEntry(athlete_id=athlete.id, round_no=round_no, station_no=station_no, score=score))
-        db.session.commit()
+                entries_data.append({
+                    "athlete_id": athlete.id,
+                    "round_no": round_no,
+                    "station_no": station_no,
+                    "score": score,
+                })
+
+        try:
+            for item in entries_data:
+                db.session.add(TieBreakEntry(**item))
+            db.session.commit()
+        except Exception as exc:
+            # PostgreSQL บางฐานที่ย้ายมาจาก SQLite มี tie_break_entry.id เป็น NOT NULL
+            # แต่ไม่มี default sequence ทำให้ INSERT แล้ว id เป็น null
+            db.session.rollback()
+            msg = str(exc).lower()
+            if "tie_break_entry" in msg and ("null value in column" in msg or "not-null constraint" in msg):
+                next_id = next_manual_id(TieBreakEntry)
+                if next_id is None:
+                    raise
+                for item in entries_data:
+                    item["id"] = next_id
+                    next_id += 1
+                    db.session.add(TieBreakEntry(**item))
+                db.session.commit()
+            else:
+                raise
+
         clear_request_cache()
         flash("บันทึก Shoot-off พร้อมกันแล้ว ถ้ายังเท่ากันให้เลือกกลุ่มเดิมแล้วบันทึกเพิ่ม", "success")
         return redirect(url_for("event_overview", event_id=event.id, round=round_no))

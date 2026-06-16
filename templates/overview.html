@@ -1429,6 +1429,54 @@
   color: transparent !important;
 }
 
+
+
+/* ===== TOTAL2 ROUND2 ONLY FINAL PATCH =====
+   Total1 = รอบ 1
+   Total2 = รอบ 2 เท่านั้น
+   SUM = รอบ 1 + รอบ 2
+*/
+.qualification-table.overview-round-2 thead th.round1-history-col,
+.qualification-table.overview-round-2 tbody td.r1-total,
+.qualification-table.overview-round-2 tbody td.round1-history-col{
+  background:#fef08a !important;
+  color:#991b1b !important;
+  font-weight:1000 !important;
+}
+
+.qualification-table.overview-round-2 thead th.round2-total-head,
+.qualification-table.overview-round-2 tbody td.round2-total-cell{
+  background:#fff7ed !important;
+  color:#9a3412 !important;
+  font-weight:1000 !important;
+}
+
+.qualification-table.overview-round-2 thead th.sum-head,
+.qualification-table.overview-round-2 tbody td.sum-total-cell{
+  background:#fef08a !important;
+  color:#991b1b !important;
+  font-weight:1000 !important;
+}
+
+/* คนเข้ารอบตรง: Total1 ยังมีเลขเหมือนทุกคน */
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.r1-total,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.round1-history-col{
+  background:#fef08a !important;
+  color:#991b1b !important;
+}
+
+/* คนเข้ารอบตรง: Total2 เป็นเทา เพราะไม่ได้ตีรอบ 2 */
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.round2-total-cell{
+  background:#737373 !important;
+  color:transparent !important;
+}
+
+/* คนเข้ารอบตรง: SUM เป็นเทาตามที่สั่ง แต่ยังเก็บค่ารวมไว้ใน DOM */
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.sum-total-cell{
+  background:#737373 !important;
+  color:transparent !important;
+}
+
 </style>
 
 <div class="overview-page">
@@ -1553,9 +1601,9 @@
                 <td class="score-total-col station-total" data-station="{{ station }}" data-distance="total">{{ row.by_station[station].total }}</td>
                 {% endif %}
               {% endfor %}
-              <td class="overall-total round2-total-cell">{{ '-' if round_no == 2 and event.has_round_two and row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else row.total }}</td>
+              <td class="overall-total round2-total-cell">{{ '-' if round_no == 2 and event.has_round_two and row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else (row.round2_total if round_no == 2 and event.has_round_two and row.round2_total is defined else row.total) }}</td>
               {% if round_no == 2 and event.has_round_two %}
-              <td class="sum-total-cell">{% if not (row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder) %}{{ row.combined_total }}{% endif %}</td>
+              <td class="sum-total-cell">{{ row.combined_total }}</td>
               {% endif %}
               <td class="overall-rank">{{ row.display_rank if round_no == 2 and event.has_round_two and row.display_rank is defined else row.rank }}</td>
               <td>
@@ -1641,8 +1689,8 @@
       if (laneOrder) laneOrder.textContent = item.display_lane_order ?? item.lane_order ?? '-';
       if (aff) aff.textContent = item.affiliation;
       if (name) name.textContent = item.name;
-      if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.total ?? 0);
-      if (sumTotal) sumTotal.textContent = item.is_round2_direct_placeholder ? '' : (item.combined_total ?? item.total ?? 0);
+      if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.round2_total ?? item.total ?? 0);
+      if (sumTotal) sumTotal.textContent = item.combined_total ?? ((item.round1_total ?? 0) + (item.round2_total ?? item.total ?? 0));
       if (rank) rank.textContent = item.rank;
       const statusCell = row.querySelector('td:last-child');
       if (statusCell) {
@@ -1653,8 +1701,8 @@
 
       if (item.round1_stations || item.round2_stations) {
         if (row.querySelector('.r1-total')) row.querySelector('.r1-total').textContent = item.round1_total ?? item.combined_total ?? 0;
-        if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.total ?? 0);
-        if (sumTotal) sumTotal.textContent = item.is_round2_direct_placeholder ? '' : (item.combined_total ?? item.total ?? 0);
+        if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.round2_total ?? item.total ?? 0);
+        if (sumTotal) sumTotal.textContent = item.combined_total ?? ((item.round1_total ?? 0) + (item.round2_total ?? item.total ?? 0));
         if (rank) rank.textContent = item.display_rank ?? item.rank;
       }
       if (!item.is_round2_direct_placeholder) {
