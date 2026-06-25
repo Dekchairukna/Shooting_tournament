@@ -1,0 +1,324 @@
+{% extends 'base.html' %}
+{% block title %}Results Approved{% endblock %}
+{% block content %}
+<style>
+.results-approved-page{background:#f1f5f9;color:#111;font-family:"Times New Roman",serif;counter-reset:ra-page;}
+.ra-toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 16px;align-items:center;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;}
+.ra-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 14px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;font-weight:900;text-decoration:none;box-shadow:0 4px 10px rgba(15,23,42,.05);}
+.ra-btn.primary{background:#1d4ed8;color:#fff;border-color:#1d4ed8;}
+.ra-btn.warn{background:#f59e0b;color:#111827;border-color:#f59e0b;}
+.ra-sheet{width:210mm;min-height:297mm;margin:0 auto 18px;padding:15mm 12mm 16mm;background:#fff;box-shadow:0 8px 30px rgba(15,23,42,.12);page-break-after:always;position:relative;overflow:hidden;counter-increment:ra-page;}
+.ra-sheet.landscape{width:297mm;min-height:210mm;padding:8mm 8mm 12mm;}
+.ra-sheet::after{content:counter(ra-page) " | Page";position:absolute;left:8mm;bottom:5mm;font-size:12px;color:#222;}
+.ra-approved{position:absolute;right:12mm;bottom:14mm;font-size:16px;font-weight:700;letter-spacing:.01em;}
+.ra-approved.inline{position:static;margin-top:12mm;text-align:right;}
+.ra-logo-row{display:flex;align-items:center;justify-content:center;gap:18mm;margin-bottom:9mm;}
+.ra-logo-row img{max-height:18mm;max-width:38mm;object-fit:contain;}
+.ra-top-right{position:absolute;right:14mm;top:18mm;text-align:right;font-size:14px;line-height:1.55;font-weight:700;}
+.ra-left-logo{position:absolute;left:12mm;top:16mm;width:33mm;}
+.ra-cover{text-align:center;}
+.ra-cover .main-logo{width:52mm;margin:12mm auto 9mm;display:block;}
+.ra-cover .title-xl{font-size:28px;font-weight:900;line-height:1.35;margin:7mm 0;}
+.ra-cover .title-xxl{font-size:34px;font-weight:900;line-height:1.25;margin:18mm 0 8mm;}
+.ra-cover .date{font-size:18px;font-weight:700;margin:10mm 0;}
+.ra-cover .host{font-size:18px;font-weight:900;margin:7mm 0 20mm;}
+.ra-cover .bottom-logos{display:flex;justify-content:center;align-items:center;gap:16mm;margin:18mm 0;}
+.ra-cover .bottom-logos img{max-height:18mm;max-width:38mm;object-fit:contain;}
+.ra-head{text-align:center;margin-bottom:12mm;}
+.ra-head .competition{font-size:18px;font-weight:900;margin:1mm 0 12mm;}
+.ra-head h1{font-size:28px;margin:0 0 5mm;font-weight:900;line-height:1.15;}
+.ra-head h2{font-size:22px;margin:0 0 5mm;font-weight:900;line-height:1.15;}
+.ra-head h3{font-size:16px;margin:0;font-weight:900;line-height:1.3;}
+.ra-big-event-title{text-align:center;font-size:30px;font-weight:900;margin:22mm 0 8mm;}
+.ra-date-center{text-align:center;font-size:18px;font-weight:900;margin-bottom:14mm;}
+.ra-official-title{text-align:center;font-size:18px;font-weight:900;margin:16mm 0 7mm;line-height:1.25;white-space:pre-line;}
+.ra-official-name{text-align:center;font-size:17px;font-weight:900;margin:0 0 16mm;}
+.ra-table{width:100%;border-collapse:collapse;margin:6mm auto 0;font-size:15px;}
+.ra-table th,.ra-table td{border:1px solid #222;padding:6px 7px;vertical-align:middle;text-align:center;}
+.ra-table th{background:#d9d9d9;font-weight:900;}
+.ra-table td.left,.ra-table th.left{text-align:left;}
+.ra-table.clean th,.ra-table.clean td{border-left:none;border-right:none;border-top:none;padding:9px 8px;}
+.ra-table.clean th{border-top:1px solid #222;border-bottom:1px solid #222;background:#d9d9d9;}
+.ra-table.clean td{border-bottom:none;}
+.ra-country-table{width:72%;font-size:18px;}
+.ra-country-table th,.ra-country-table td{height:12mm;}
+.ra-summary-table{font-size:17px;}
+.ra-summary-table th,.ra-summary-table td{height:12mm;}
+.ra-station-table{font-size:8.5px;line-height:1.05;table-layout:fixed;margin-top:5mm;}
+.ra-station-table th,.ra-station-table td{padding:2px 2px;}
+.ra-station-table .country-col{width:26mm;}
+.ra-station-table .name-col{width:48mm;}
+.ra-station-table .rank-col{width:10mm;}
+.ra-station-table .mini{font-size:7px;font-weight:700;line-height:1.15;}
+.ra-station-table .station-img{height:15mm;display:block;margin:0 auto 1mm;}
+.ra-total{background:#f4cccc!important;color:#c00000!important;font-weight:900;}
+.ra-rank-cell{background:#d9ead3!important;font-weight:900;}
+.ra-qualified-box{margin:0 auto 5mm;width:90%;border:1px solid #222;border-collapse:collapse;font-size:11px;}
+.ra-qualified-box td{border:1px solid #222;padding:4px 6px;text-align:center;}
+.ra-qualified-box .label{font-size:18px;font-weight:900;color:#8b0069;}
+.ra-section-left{font-size:23px;font-weight:900;margin:18mm 0 5mm;}
+.ra-match-table{width:95%;margin:5mm auto 11mm;font-size:17px;}
+.ra-medal-table{font-size:17px;margin-top:15mm;}
+.ra-medal-table td{height:22mm;border-left:none;border-right:none;}
+.ra-medal-table th{border-left:none;border-right:none;}
+.ra-faint-note{text-align:center;color:#64748b;font-family:system-ui,sans-serif;margin-top:10mm;}
+@media print{
+  @page{size:A4 portrait;margin:0;}
+  body{background:#fff!important;}
+  .ra-toolbar,.navbar-custom,.flashes{display:none!important;}
+  .container-main{padding:0!important;margin:0!important;max-width:none!important;}
+  .ra-sheet{box-shadow:none;margin:0;page-break-after:always;}
+  .ra-sheet.landscape{page:ra-landscape;}
+  @page ra-landscape{size:A4 landscape;margin:0;}
+}
+</style>
+
+<div class="results-approved-page">
+  <div class="ra-toolbar">
+    <a class="ra-btn" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">← กลับ Overview</a>
+    {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
+      <a class="ra-btn warn" href="{{ url_for('results_approved_settings', event_id=event.id) }}">⚙ ตั้งค่า Results Approved / กรรมการ</a>
+    {% endif %}
+    <a class="ra-btn primary" href="{{ url_for('results_approved_docx', event_id=event.id) }}">ดาวน์โหลด DOCX</a>
+    <button class="ra-btn" onclick="window.print()">พิมพ์ / Save PDF</button>
+    <span class="text-muted">SEA Games Style: {{ event_title }}</span>
+  </div>
+
+  <section class="ra-sheet ra-cover">
+    <img class="main-logo" src="{{ url_for('static', filename=logos.cover_main) }}" alt="logo">
+    <div class="title-xl">SEA GAMES<br>THAILAND</div>
+    <div class="date">{{ date_line }}</div>
+    <div class="host">{{ host_line }}</div>
+    <div class="title-xxl">PÉTANQUE</div>
+    <div class="bottom-logos">
+      <img src="{{ url_for('static', filename=logos.cover_bottom_1) }}" alt="Logo 1">
+      <img src="{{ url_for('static', filename=logos.cover_bottom_2) }}" alt="Logo 2">
+      <img src="{{ url_for('static', filename=logos.cover_bottom_3) }}" alt="Logo 3">
+    </div>
+    <div class="title-xxl" style="margin-top:22mm">RESULTS</div>
+    <div style="font-size:14px;font-weight:800;">APPROVED</div>
+  </section>
+
+  {% if setting.show_official_pages %}
+  <section class="ra-sheet">
+    <div class="ra-logo-row">
+      <img src="{{ url_for('static', filename=logos.header_1) }}" alt="Header Logo 1">
+      <img src="{{ url_for('static', filename=logos.header_2) }}" alt="Header Logo 2">
+      <img src="{{ url_for('static', filename=logos.header_3) }}" alt="Header Logo 3">
+      <img src="{{ url_for('static', filename=logos.header_4) }}" alt="Header Logo 4">
+    </div>
+    <div class="ra-head"><div class="competition">{{ competition_title }}</div></div>
+    <div class="ra-official-title">{{ setting.president_title }}</div>
+    <div class="ra-official-name">{{ setting.president_name or ' ' }}</div>
+    <div class="ra-official-title">{{ setting.technical_title }}</div>
+    <div class="ra-official-name">{{ setting.technical_name or ' ' }}</div>
+    <div class="ra-official-title" style="font-size:24px;margin-top:8mm">UMPIRE</div>
+    <table class="ra-table" style="font-size:15px;">
+      <thead><tr><th style="width:14%">NO</th><th>FAMILY NAME - GIVEN NAME</th><th style="width:28%">FEDERATION</th></tr></thead>
+      <tbody>
+      {% if umpire_rows %}
+        {% for r in umpire_rows %}<tr><td>{{ r.no }}</td><td class="left">{{ r.name }}</td><td>{{ r.federation }}</td></tr>{% endfor %}
+      {% else %}
+        {% for i in range(1,9) %}<tr><td>{{ i }}</td><td class="left">&nbsp;</td><td>&nbsp;</td></tr>{% endfor %}
+      {% endif %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="ra-sheet">
+    <div class="ra-logo-row">
+      <img src="{{ url_for('static', filename=logos.header_1) }}" alt="Header Logo 1">
+      <img src="{{ url_for('static', filename=logos.header_2) }}" alt="Header Logo 2">
+      <img src="{{ url_for('static', filename=logos.header_3) }}" alt="Header Logo 3">
+      <img src="{{ url_for('static', filename=logos.header_4) }}" alt="Header Logo 4">
+    </div>
+    <div class="ra-big-event-title">1. {{ event_title }}</div>
+    <div class="ra-date-center">{{ date_line }}</div>
+    <table class="ra-table ra-country-table">
+      <thead><tr><th>NO.</th><th>{{ country_label }}</th></tr></thead>
+      <tbody>
+      {% for r in entry_countries %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+
+  <section class="ra-sheet">
+    <div class="ra-logo-row">
+      <img src="{{ url_for('static', filename=logos.header_1) }}" alt="Header Logo 1">
+      <img src="{{ url_for('static', filename=logos.header_2) }}" alt="Header Logo 2">
+      <img src="{{ url_for('static', filename=logos.header_3) }}" alt="Header Logo 3">
+      <img src="{{ url_for('static', filename=logos.header_4) }}" alt="Header Logo 4">
+    </div>
+    <div class="ra-head">
+      <h1>NAME LISTS</h1>
+      <h2>{{ event_title }}</h2>
+    </div>
+    <table class="ra-table clean">
+      <thead><tr><th>NO.</th><th>{{ country_label }}</th><th>FAMILY NAME</th><th>GIVEN NAME</th></tr></thead>
+      <tbody>
+      {% for r in name_rows %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td><td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+
+  <section class="ra-sheet">
+    <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
+    <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
+    <div class="ra-date-center" style="margin-top:52mm;">{{ date_line }}</div>
+    <div class="ra-section-left">{{ event_title }}</div>
+    <div class="ra-section-left" style="margin-top:0;">QUALIFICATION ROUND 1</div>
+    <table class="ra-table ra-summary-table">
+      <thead><tr><th>NO.</th><th>{{ country_label }}</th><th>LANE</th><th>POINTS</th><th>RANK<br>(QF1)</th></tr></thead>
+      <tbody>
+      {% for r in qf1_rows %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.points }}</td><td>{{ r.rank }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+
+  <section class="ra-sheet landscape">
+    <div class="ra-logo-row" style="margin-bottom:1mm;gap:11mm;">
+      <img src="{{ url_for('static', filename=logos.header_2) }}" alt="Header Logo 2">
+      <img src="{{ url_for('static', filename=logos.header_1) }}" alt="Header Logo 1">
+      <img src="{{ url_for('static', filename=logos.header_3) }}" alt="Header Logo 3">
+      <img src="{{ url_for('static', filename=logos.header_4) }}" alt="Header Logo 4">
+    </div>
+    <div class="ra-head" style="margin-bottom:1mm;">
+      <h1 style="color:#e60000;">{{ event_title }}</h1>
+      <h2>Qualification Shooting</h2>
+      <h3>{{ date_line }}</h3>
+    </div>
+    <table class="ra-table ra-station-table">
+      <thead>
+        <tr>
+          <th rowspan="3" class="rank-col">Rank</th><th rowspan="3" class="country-col">{{ country_label|title }}</th><th rowspan="3" class="name-col">Name</th>
+          {% for s in stations %}<th colspan="5">Atelier {{ s }}</th>{% endfor %}
+          <th rowspan="3">Total</th><th rowspan="3">Rank</th>
+        </tr>
+        <tr>
+          {% for s in stations %}
+            <th colspan="5"><img class="station-img" src="{{ url_for('static', filename='station_' ~ s ~ '.png') }}" alt="station {{ s }}"><div class="mini">Carreau: 5 p<br>Réussi: 3 p<br>Touché: 1 p<br>Manqué: 0 p</div></th>
+          {% endfor %}
+        </tr>
+        <tr>
+          {% for s in stations %}<th>6M</th><th>7M</th><th>8M</th><th>9M</th><th>Tot.</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in qf1_detail_rows %}
+        <tr>
+          <td>{{ r.rank }}</td><td class="left">{{ r.country }}</td><td class="left">{{ r.name }}</td>
+          {% for sg in r.station_groups %}{% for v in sg["values"] %}<td>{{ v }}</td>{% endfor %}<td class="ra-total">{{ sg.total }}</td>{% endfor %}
+          <td class="ra-total">{{ r.total }}</td><td class="ra-rank-cell">{{ r.rank }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+
+  {% if qf2_rows %}
+  <section class="ra-sheet">
+    <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
+    <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
+    <div class="ra-date-center" style="margin-top:52mm;">{{ date_line }}</div>
+    <div class="ra-section-left">{{ event_title }}</div>
+    <div class="ra-section-left" style="margin-top:0;">QUALIFICATION ROUND 2</div>
+    <table class="ra-table ra-summary-table">
+      <thead><tr><th>RANK<br>(QF1)</th><th>{{ country_label }}</th><th>LANE</th><th colspan="3">POINTS</th><th>RANK<br>(QF2)</th></tr><tr><th></th><th></th><th></th><th>R1</th><th>R2</th><th>TOTAL</th><th></th></tr></thead>
+      <tbody>
+      {% for r in qf2_rows %}<tr><td>{{ r.qf1_rank }}</td><td>{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.r1 }}</td><td>{{ r.r2 }}</td><td class="ra-total">{{ r.total }}</td><td>{{ r.qf2_rank }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+
+  <section class="ra-sheet landscape">
+    <div class="ra-logo-row" style="margin-bottom:1mm;gap:11mm;">
+      <img src="{{ url_for('static', filename=logos.header_2) }}" alt="Header Logo 2">
+      <img src="{{ url_for('static', filename=logos.header_1) }}" alt="Header Logo 1">
+      <img src="{{ url_for('static', filename=logos.header_3) }}" alt="Header Logo 3">
+      <img src="{{ url_for('static', filename=logos.header_4) }}" alt="Header Logo 4">
+    </div>
+    <div class="ra-head" style="margin-bottom:2mm;">
+      <h1 style="color:#e60000;">{{ event_title }}</h1>
+      <h2>Qualification Shooting Round 2</h2>
+      <h3>{{ date_line }}</h3>
+    </div>
+    {% if direct_rows %}
+      <table class="ra-qualified-box">
+        <tr><td colspan="4" class="label">Qualified to 1/2 final</td></tr>
+        {% for r in direct_rows %}<tr><td>{{ r.athlete.affiliation|upper }}</td><td class="left">{{ r.athlete.name|upper }}</td><td>{{ r.round1_total }}</td><td>{{ r.round1_rank }}</td></tr>{% endfor %}
+      </table>
+    {% endif %}
+    <table class="ra-table ra-station-table">
+      <thead>
+        <tr>
+          <th rowspan="3" class="rank-col">QF1</th><th rowspan="3" class="country-col">{{ country_label|title }}</th><th rowspan="3" class="name-col">Name</th>
+          {% for s in stations %}<th colspan="5">Atelier {{ s }}</th>{% endfor %}
+          <th rowspan="3">R1</th><th rowspan="3">R2</th><th rowspan="3">Total</th><th rowspan="3">Rank</th>
+        </tr>
+        <tr>
+          {% for s in stations %}<th colspan="5"><img class="station-img" src="{{ url_for('static', filename='station_' ~ s ~ '.png') }}" alt="station {{ s }}"><div class="mini">Carreau: 5 p<br>Réussi: 3 p<br>Touché: 1 p<br>Manqué: 0 p</div></th>{% endfor %}
+        </tr>
+        <tr>{% for s in stations %}<th>6M</th><th>7M</th><th>8M</th><th>9M</th><th>Tot.</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+      {% for r in qf2_detail_rows %}
+        <tr>
+          <td>{{ r.qf1_rank }}</td><td class="left">{{ r.country }}</td><td class="left">{{ r.name }}</td>
+          {% for sg in r.station_groups %}{% for v in sg["values"] %}<td>{{ v }}</td>{% endfor %}<td class="ra-total">{{ sg.total }}</td>{% endfor %}
+          <td>{{ r.r1 }}</td><td>{{ r.r2 }}</td><td class="ra-total">{{ r.total }}</td><td class="ra-rank-cell">{{ r.qf2_rank }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+  {% endif %}
+
+  {% if semifinal_rows or final_rows or other_ko_rows %}
+  <section class="ra-sheet">
+    <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
+    <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
+    <div class="ra-date-center" style="margin-top:48mm;">{{ date_line }}</div>
+    <div class="ra-section-left">{{ event_title }}</div>
+    {% for r in semifinal_rows %}
+      {% if loop.first %}<div class="ra-section-left" style="margin-top:0;">SEMIFINAL ROUND</div>{% endif %}
+      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th><th>RANK</th><th>{{ country_label }}</th><th>POINTS</th></tr></thead><tbody>
+        <tr><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td><td>{{ r.rank_a }}</td><td>{{ r.country_a }}</td><td>{{ r.points_a }}</td></tr>
+        <tr><td>{{ r.rank_b }}</td><td>{{ r.country_b }}</td><td>{{ r.points_b }}</td></tr>
+      </tbody></table>
+    {% endfor %}
+    {% for r in final_rows %}
+      {% if loop.first %}<div class="ra-section-left" style="margin-top:8mm;">FINAL ROUND</div>{% endif %}
+      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th><th>{{ country_label }}</th><th>POINTS</th></tr></thead><tbody>
+        <tr><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td><td>{{ r.country_a }}</td><td>{{ r.points_a }}</td></tr>
+        <tr><td>{{ r.country_b }}</td><td>{{ r.points_b }}</td></tr>
+      </tbody></table>
+    {% endfor %}
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+  {% endif %}
+
+  <section class="ra-sheet">
+    <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
+    <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
+    <div class="ra-head" style="margin-top:38mm;">
+      <h1>RANKING RESULT</h1>
+      <h2>{{ event_title }}</h2>
+      <h3>{{ date_line }}</h3>
+    </div>
+    <table class="ra-table ra-medal-table clean">
+      <thead><tr><th>MEDAL</th><th>{{ country_label }}</th><th>FAMILY NAME</th><th>GIVEN NAME</th></tr></thead>
+      <tbody>
+      {% for r in medal_rows %}<tr><td><b>{{ r.medal }}</b></td><td>{{ r.country }}</td><td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+</div>
+{% endblock %}

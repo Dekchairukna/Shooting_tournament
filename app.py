@@ -6,6 +6,7 @@ from io import BytesIO
 from datetime import date, datetime
 from functools import wraps
 from typing import Dict, List, Tuple
+from types import SimpleNamespace
 from flask import jsonify
 
 from flask import (
@@ -32,6 +33,7 @@ from flask_login import (
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 from openpyxl import Workbook, load_workbook
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -228,6 +230,33 @@ class BracketMatch(db.Model):
     winner_id = db.Column(db.Integer, nullable=True)
 
 
+class ResultsApprovedSetting(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("event.id"), unique=True, nullable=False)
+    competition_title = db.Column(db.String(255), nullable=True)
+    host_line = db.Column(db.String(255), nullable=True)
+    date_line = db.Column(db.String(255), nullable=True)
+    location_line = db.Column(db.String(255), nullable=True)
+    country_label = db.Column(db.String(80), nullable=False, default="COUNTRY")
+    president_title = db.Column(db.String(255), nullable=True)
+    president_name = db.Column(db.String(255), nullable=True)
+    technical_title = db.Column(db.String(255), nullable=True)
+    technical_name = db.Column(db.String(255), nullable=True)
+    umpires_text = db.Column(db.Text, nullable=True)
+    approved_text = db.Column(db.String(255), nullable=False, default="……………………………APPROVED")
+    show_official_pages = db.Column(db.Boolean, nullable=False, default=True)
+    cover_main_logo_path = db.Column(db.String(255), nullable=True)
+    cover_bottom_logo_1_path = db.Column(db.String(255), nullable=True)
+    cover_bottom_logo_2_path = db.Column(db.String(255), nullable=True)
+    cover_bottom_logo_3_path = db.Column(db.String(255), nullable=True)
+    header_logo_1_path = db.Column(db.String(255), nullable=True)
+    header_logo_2_path = db.Column(db.String(255), nullable=True)
+    header_logo_3_path = db.Column(db.String(255), nullable=True)
+    header_logo_4_path = db.Column(db.String(255), nullable=True)
+    side_logo_path = db.Column(db.String(255), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 @login_manager.user_loader
 def load_user(user_id: str):
     return User.query.get(int(user_id))
@@ -354,6 +383,7 @@ def ensure_schema() -> None:
             "score_signature",
             "tie_break_entry",
             "bracket_match",
+            "results_approved_setting",
         ]
         with db.engine.begin() as conn:
             for table in tables:
@@ -372,6 +402,20 @@ def ensure_schema() -> None:
                 conn.exec_driver_sql(
                     f'ALTER SEQUENCE "{seq}" OWNED BY "{table}".id'
                 )
+            # เพิ่มคอลัมน์สำหรับอัปโหลดโลโก้ Results Approved ในฐานข้อมูลเดิม
+            ra_logo_columns = {
+                "cover_main_logo_path": "VARCHAR(255)",
+                "cover_bottom_logo_1_path": "VARCHAR(255)",
+                "cover_bottom_logo_2_path": "VARCHAR(255)",
+                "cover_bottom_logo_3_path": "VARCHAR(255)",
+                "header_logo_1_path": "VARCHAR(255)",
+                "header_logo_2_path": "VARCHAR(255)",
+                "header_logo_3_path": "VARCHAR(255)",
+                "header_logo_4_path": "VARCHAR(255)",
+                "side_logo_path": "VARCHAR(255)",
+            }
+            for col, col_type in ra_logo_columns.items():
+                conn.exec_driver_sql(f'ALTER TABLE "results_approved_setting" ADD COLUMN IF NOT EXISTS {col} {col_type}')
         return
 
     # SQLite migration เดิม
@@ -412,6 +456,23 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN lane_order INTEGER")
         if "start_order" not in athlete_columns:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN start_order INTEGER")
+
+        # Results Approved: คอลัมน์เก็บ path โลโก้ที่อัปโหลดเอง
+        ra_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(results_approved_setting)").fetchall()}
+        ra_logo_columns = {
+            "cover_main_logo_path": "VARCHAR(255)",
+            "cover_bottom_logo_1_path": "VARCHAR(255)",
+            "cover_bottom_logo_2_path": "VARCHAR(255)",
+            "cover_bottom_logo_3_path": "VARCHAR(255)",
+            "header_logo_1_path": "VARCHAR(255)",
+            "header_logo_2_path": "VARCHAR(255)",
+            "header_logo_3_path": "VARCHAR(255)",
+            "header_logo_4_path": "VARCHAR(255)",
+            "side_logo_path": "VARCHAR(255)",
+        }
+        for col, col_type in ra_logo_columns.items():
+            if col not in ra_columns:
+                conn.exec_driver_sql(f"ALTER TABLE results_approved_setting ADD COLUMN {col} {col_type}")
 
 
 def event_theme(category: str | None) -> str:
@@ -676,18 +737,17 @@ def ranking_key(item: dict):
 
 
 def apply_rank_by_tiebreak(rows: list[dict]) -> None:
-    """ใส่ Class/Rank หลังเรียงแล้ว โดยใช้กติกาจริง:
-    TOTAL -> จำนวน 5 -> จำนวน 3 -> Shoot-off score
+    """ใส่อันดับแบบต่อเนื่อง 1..คนสุดท้าย หลัง sort ด้วยกติกาจริงแล้ว
 
-    ถ้ายังเท่ากันครบทุกตัวจึงให้ Class เดียวกัน ไม่ใช้ TOTAL อย่างเดียว
+    กติกาใหม่ของระบบ: หน้า Overview ห้ามแสดง Class/Rank ซ้ำเอง
+    ถ้า TOTAL -> จำนวน 5 -> จำนวน 3 ยังเท่ากันในช่วงที่มีผล
+    จะให้ระบบขึ้น Shoot-off เพื่อแยกอันดับแทน
     """
-    for idx, row in enumerate(rows):
-        if idx == 0:
-            row["rank"] = 1
-        else:
-            prev = rows[idx - 1]
-            row["rank"] = prev["rank"] if ranking_key(row) == ranking_key(prev) else idx + 1
-        row["ordinal_rank"] = idx + 1
+    for idx, row in enumerate(rows, start=1):
+        row["rank"] = idx
+        row["ordinal_rank"] = idx
+        row["display_rank"] = idx
+        row["view_order"] = idx
 
 
 
@@ -748,6 +808,44 @@ def round1_total_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
         return {row["athlete"].id for row in rows}
     cutoff_total = rows[cutoff_count - 1].get("total", 0)
     return {row["athlete"].id for row in rows if row.get("total", 0) >= cutoff_total}
+
+
+def apply_round1_round2_cutoff_display_rank(event: Event, rows: list[dict]) -> None:
+    """แสดงลำดับซ้ำได้เฉพาะกลุ่มสุดท้ายที่ได้สิทธิ์ตีรอบ 2
+
+    กติกา: ภาพรวมรอบ 1 ต้องเรียง 1..คนสุดท้าย ไม่ให้ซ้ำเอง
+    ยกเว้นถ้ามีรอบ 2 และคะแนนรวมเท่ากับคนสุดท้ายของสิทธิ์รอบ 2
+    กลุ่มนั้นให้ได้สิทธิ์ตีรอบ 2 ทั้งหมด และแสดง Class เป็นเลขเส้นตัดเดียวกันได้
+    ส่วนลำดับจริงยังเก็บไว้ใน ordinal_rank สำหรับเรียงแถว/คำนวณต่อ
+    """
+    if not rows:
+        return
+    for idx, row in enumerate(rows, start=1):
+        row["rank"] = idx
+        row["ordinal_rank"] = idx
+        row["display_rank"] = idx
+        row["view_order"] = idx
+
+    if not event.has_round_two or not event.round_two_cutoff_rank:
+        return
+
+    cutoff = int(event.round_two_cutoff_rank or 0)
+    direct = direct_quota(event)
+    if cutoff <= direct or cutoff <= 0 or len(rows) < cutoff:
+        return
+
+    cutoff_total = rows[cutoff - 1].get("total", 0)
+    final_total_indexes = [
+        idx for idx, row in enumerate(rows)
+        if idx >= direct and row.get("total", 0) == cutoff_total
+    ]
+    if len(final_total_indexes) < 2 or (cutoff - 1) not in final_total_indexes:
+        return
+
+    for idx in final_total_indexes:
+        rows[idx]["rank"] = cutoff
+        rows[idx]["display_rank"] = cutoff
+        rows[idx]["view_order"] = rows[idx].get("ordinal_rank", idx + 1)
 
 
 def apply_sequential_rank(rows: list[dict], start: int = 1) -> None:
@@ -813,6 +911,8 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
         rows.append(row)
     rows.sort(key=ranking_key, reverse=True)
     apply_rank_by_tiebreak(rows)
+    if round_no == 1:
+        apply_round1_round2_cutoff_display_rank(event, rows)
     if has_request_context():
         cache[cache_key] = rows
     return rows
@@ -967,7 +1067,19 @@ def build_combined_qualifiers(event: Event) -> List[dict]:
     if not event.has_round_two:
         return direct_rows
 
-    round2_rows = build_round_ranking(event, 2)
+    candidate_ids = round_two_candidate_ids(event) - direct_ids - direct_pending_ids
+    finished_candidate_ids = {
+        aid for aid in candidate_ids
+        if athlete_round_status(Athlete.query.get(aid), 2) == "finished"
+    }
+    all_round2_candidates_finished = bool(candidate_ids) and candidate_ids == finished_candidate_ids
+
+    # รวมผลรอบ 2 เพื่อใช้คัดเข้า Bracket เฉพาะคนที่ตีจบแล้วเท่านั้น
+    # กันไม่ให้คนที่ระบบสร้าง Signature ไว้แต่ยังไม่ได้ตี ถูกจัดผ่าน/ตกรอบก่อนเวลา
+    round2_rows = [
+        row for row in build_round_ranking(event, 2)
+        if row["athlete"].id in finished_candidate_ids
+    ]
     combined_rows = []
     for row in round2_rows:
         round1_row = next((r for r in round1_rows if r["athlete"].id == row["athlete"].id), None)
@@ -978,8 +1090,14 @@ def build_combined_qualifiers(event: Event) -> List[dict]:
             "combined_total": round1_total + row["total"],
             "count_5": (round1_row["count_5"] if round1_row else 0) + row["count_5"],
             "count_3": (round1_row["count_3"] if round1_row else 0) + row["count_3"],
-            "tiebreak_total": (round1_row["tiebreak_total"] if round1_row else 0) + row["tiebreak_total"],
-            "tiebreak_count": (round1_row.get("tiebreak_count", 0) if round1_row else 0) + row.get("tiebreak_count", 0),
+            # เมื่อคัดจากรอบ 2 ใช้ SUM(R1+R2) -> 5รวม -> 3รวม -> Shoot-off รอบ 2
+            # ไม่บวก Shoot-off รอบ 1 เข้ามา เพราะรอบ 1 เป็นคนละเหตุผล/คนละเที่ยว
+            "tiebreak_total": row["tiebreak_total"],
+            "tiebreak_count": row.get("tiebreak_count", 0),
+            "round1_tiebreak_total": (round1_row.get("tiebreak_total", 0) if round1_row else 0),
+            "round1_tiebreak_count": (round1_row.get("tiebreak_count", 0) if round1_row else 0),
+            "round2_tiebreak_total": row["tiebreak_total"],
+            "round2_tiebreak_count": row.get("tiebreak_count", 0),
             "round1_total": round1_total,
             "round2_total": row["total"],
             "round1_by_station": (round1_row.get("by_station", {}) if round1_row else {}),
@@ -996,8 +1114,12 @@ def build_combined_qualifiers(event: Event) -> List[dict]:
     def base_tie_key(row):
         return (row["combined_total"], row["count_5"], row["count_3"])
 
-    shoot_off_ids = unresolved_tie_ids(combined_rows, advancer_limit)
-    passed_ids = exact_cut_ids(combined_rows, advancer_limit)
+    if all_round2_candidates_finished:
+        shoot_off_ids = unresolved_tie_ids(combined_rows, advancer_limit)
+        passed_ids = exact_cut_ids(combined_rows, advancer_limit)
+    else:
+        shoot_off_ids = set()
+        passed_ids = set()
 
     seed_no = len(direct_rows) + 1
     for row in combined_rows:
@@ -1201,12 +1323,18 @@ def exact_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
     pending = unresolved_tie_ids(rows, cutoff_count)
     return {row["athlete"].id for row in rows[:cutoff_count] if row["athlete"].id not in pending}
 
-def shootoff_group_ids(rows: list[dict], athlete_id: int) -> list[int]:
+def shootoff_group_ids(rows: list[dict], athlete_id: int, round_no: int | None = None) -> list[int]:
     target = next((row for row in rows if row["athlete"].id == athlete_id), None)
     if not target:
         return [athlete_id]
     key = base_shootoff_key(target)
-    return [row["athlete"].id for row in rows if base_shootoff_key(row) == key]
+    group = [row for row in rows if base_shootoff_key(row) == key]
+    if round_no is not None:
+        # ปุ่ม Shoot-off ต้องส่งเฉพาะคนในกลุ่มที่ตีจบรอบนั้นแล้ว
+        # กันรอบ 2 ไปพ่วงคนรอคิว/คนเข้ารอบตรง ทำให้บันทึกแล้วดูเหมือนไม่เข้า
+        group = [row for row in group if athlete_round_status(row["athlete"], round_no) == "finished"]
+    ids = [row["athlete"].id for row in group]
+    return ids or [athlete_id]
 
 
 def _all_rows_finished_for_round(rows: list[dict], round_no: int) -> bool:
@@ -1214,6 +1342,74 @@ def _all_rows_finished_for_round(rows: list[dict], round_no: int) -> bool:
     if not rows:
         return False
     return all(athlete_round_status(row["athlete"], round_no) == "finished" for row in rows if row.get("athlete"))
+
+
+def round1_overview_unresolved_shootoff_ids(event: Event, rows: list[dict]) -> set[int]:
+    """หา Shoot-off รอบ 1 ตามกติกาใหม่ของครูรัก
+
+    - ตรวจเฉพาะช่วงที่มีผล: ตั้งแต่อันดับบนสุดถึงเส้นสิทธิ์ตีรอบ 2
+      ถ้าไม่มีรอบ 2 ให้ตรวจเฉพาะเส้นเข้ารอบตรง/Knockout
+    - ถ้า TOTAL -> 5 -> 3 ยังเท่ากันในช่วงนั้น ให้ Shoot-off เพื่อแยกอันดับ
+    - ยกเว้นกลุ่มคะแนนรวมเท่าคนสุดท้ายของสิทธิ์ตีรอบ 2 ให้ได้ตีรอบ 2 ทั้งหมด
+    - คนที่ต่ำกว่าเส้นรอบ 2 แล้ว ไม่ต้อง Shoot-off
+    """
+    if not rows:
+        return set()
+
+    direct = direct_quota(event)
+    if event.has_round_two and event.round_two_cutoff_rank:
+        scope_count = int(event.round_two_cutoff_rank or 0)
+    else:
+        scope_count = direct
+    if scope_count <= 0:
+        return set()
+    scope_count = min(scope_count, len(rows))
+
+    final_round2_total = None
+    if event.has_round_two and event.round_two_cutoff_rank and len(rows) >= scope_count and scope_count > direct:
+        final_round2_total = rows[scope_count - 1].get("total", 0)
+
+    groups: dict[tuple, list[tuple[int, dict]]] = {}
+    for idx, row in enumerate(rows):
+        groups.setdefault(base_shootoff_key(row), []).append((idx, row))
+
+    result: set[int] = set()
+    for indexed_group in groups.values():
+        if len(indexed_group) < 2:
+            continue
+        positions = [idx for idx, _ in indexed_group]
+        if not any(idx < scope_count for idx in positions):
+            # ต่ำกว่าเส้นรอบ 2/เส้นเข้ารอบแล้ว ไม่ต้อง Shoot-off
+            continue
+
+        group_rows = [row for _, row in indexed_group]
+
+        # ข้อยกเว้นเดียว: กลุ่มคะแนนรวมเท่าคนสุดท้ายของสิทธิ์ตีรอบ 2
+        # และไม่ได้คร่อมเส้นเข้ารอบตรง ให้ได้ตีรอบ 2 ทั้งหมด ไม่ต้อง Shoot-off
+        if final_round2_total is not None:
+            same_last_round2_total = all(row.get("total", 0) == final_round2_total for row in group_rows)
+            touches_round2_last_line = any(idx >= scope_count - 1 for idx in positions)
+            does_not_touch_direct_line = min(positions) >= direct
+            if same_last_round2_total and touches_round2_last_line and does_not_touch_direct_line:
+                continue
+
+        # ขึ้นเมื่อคนในกลุ่มตีจบครบแล้ว ไม่ขึ้นก่อนกรรมการกดจบ
+        if not all(athlete_round_status(row["athlete"], 1) == "finished" for row in group_rows):
+            continue
+
+        counts = [row.get("tiebreak_count", 0) for row in group_rows]
+        totals = [row.get("tiebreak_total", 0) for row in group_rows]
+
+        # ยังไม่ได้ยิงรอบพิเศษครบ หรือจำนวนเที่ยวไม่เท่ากัน = ต้องยิง/ยิงต่อ
+        if min(counts) == 0 or len(set(counts)) > 1:
+            result.update(row["athlete"].id for row in group_rows)
+            continue
+
+        # ยิงครบเท่ากันแล้วแต่คะแนนพิเศษยังเท่ากัน = ต้องยิงต่อ
+        if len(set(totals)) == 1:
+            result.update(row["athlete"].id for row in group_rows)
+
+    return result
 
 
 def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
@@ -1231,10 +1427,15 @@ def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
     """
     if round_no == 1:
         rows = build_round_ranking(event, 1)
-        return overview_unresolved_shootoff_ids(rows, direct_quota(event), round_no=1)
+        return round1_overview_unresolved_shootoff_ids(event, rows)
 
     if round_no == 2 and event.has_round_two:
-        rows = [r for r in build_round_two_overview_rows(event) if not r.get("is_round2_direct_placeholder")]
+        rows = [
+            r for r in build_round_two_overview_rows(event)
+            if not r.get("is_round2_direct_placeholder")
+            and r.get("round2_has_played")
+            and athlete_round_status(r["athlete"], 2) == "finished"
+        ]
         rows.sort(key=lambda row: (
             -row.get("combined_total", row.get("total", 0)),
             -row.get("count_5", 0),
@@ -1243,7 +1444,7 @@ def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
             row.get("display_order") if row.get("display_order") is not None else 999999,
             row["athlete"].id,
         ))
-        # รอบ 2 ต้องจัดอันดับจริงทุกคนที่ตีจบแล้ว ไม่ให้มี Class ซ้ำ
+        # รอบ 2 จัดอันดับ/ตรวจ Shoot-off เฉพาะคนที่ตีจบแล้ว ไม่ลากคนที่ยังรอคิวมาคิด
         return overview_unresolved_shootoff_ids(rows, None, round_no=2)
 
     return set()
@@ -1316,8 +1517,14 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             "round2_total": r2["total"],
             "count_5": source_row["count_5"] + r2["count_5"],
             "count_3": source_row["count_3"] + r2["count_3"],
-            "tiebreak_total": source_row["tiebreak_total"] + r2["tiebreak_total"],
-            "tiebreak_count": source_row.get("tiebreak_count", 0) + r2.get("tiebreak_count", 0),
+            # รอบ 2 ต้องใช้ Shoot-off ของรอบ 2 เท่านั้นในการแยกอันดับ SUM
+            # ห้ามเอา Shoot-off รอบ 1 มาบวก เพราะจะทำให้กดบันทึก Shoot-off รอบ 2 แล้วระบบยังมองว่าเที่ยวไม่เท่ากัน/ไม่ถูกบันทึก
+            "tiebreak_total": r2["tiebreak_total"],
+            "tiebreak_count": r2.get("tiebreak_count", 0),
+            "round1_tiebreak_total": source_row.get("tiebreak_total", 0),
+            "round1_tiebreak_count": source_row.get("tiebreak_count", 0),
+            "round2_tiebreak_total": r2["tiebreak_total"],
+            "round2_tiebreak_count": r2.get("tiebreak_count", 0),
             "status": athlete_round_status(athlete, 2),
             "by_station": r2["by_station"],
             "round1_by_station": source_row.get("by_station", {}),
@@ -1331,8 +1538,23 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
         }
         round2_rows.append(row)
 
-    # Realtime ด้านล่างกลุ่มเข้ารอบตรง: SUM มากขึ้นก่อน, แล้ว 5, 3, shoot-off
-    round2_rows.sort(key=lambda row: (
+    # หน้า R2 ต้องเรียงคิวก่อน: คะแนนรอบ 1 ต่ำสุดในกลุ่มรอบ 2 ได้ตีก่อน
+    # เมื่อมีคนเริ่มตี/มีคะแนนแล้ว จึงจัดอันดับเฉพาะคนที่ตีแล้วไว้ด้านบน
+    played_rows = []
+    waiting_rows = []
+    for row in round2_rows:
+        has_played = (
+            row["status"] in {"active", "finished"}
+            or row.get("round2_total", 0) > 0
+            or row.get("tiebreak_count", 0) > 0
+        )
+        row["round2_has_played"] = has_played
+        if has_played:
+            played_rows.append(row)
+        else:
+            waiting_rows.append(row)
+
+    played_rows.sort(key=lambda row: (
         -row["combined_total"],
         -row["count_5"],
         -row["count_3"],
@@ -1340,17 +1562,29 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
         row["display_order"],
         row["athlete"].id,
     ))
-    # รอบ 2 ต้องเรียงเป็นลำดับจริง ไม่มี Class ซ้ำ
-    # ถ้ายังเสมอกันหลัง TOTAL -> 5 -> 3 ระบบจะขึ้น Shoot-off ที่เส้นตัด แต่อันดับในตารางยังแสดงตามตำแหน่งเพื่อไม่ให้สับสน
+    waiting_rows.sort(key=lambda row: (
+        row["display_order"],
+        row["athlete"].start_order if row["athlete"].start_order is not None else 999999,
+        row["athlete"].id,
+    ))
+
     base = len(direct_rows)
-    for idx, row in enumerate(round2_rows, start=1):
+    for idx, row in enumerate(played_rows, start=1):
         real_rank = base + idx
         row["rank"] = real_rank
         row["ordinal_rank"] = real_rank
         row["display_rank"] = real_rank
         row["view_order"] = real_rank
 
-    return direct_rows + round2_rows
+    waiting_base = base + len(played_rows)
+    for idx, row in enumerate(waiting_rows, start=1):
+        real_rank = waiting_base + idx
+        row["rank"] = real_rank
+        row["ordinal_rank"] = real_rank
+        row["display_rank"] = real_rank
+        row["view_order"] = real_rank
+
+    return direct_rows + played_rows + waiting_rows
 
 def scorecard_print_positions() -> dict:
     return {
@@ -1908,7 +2142,7 @@ def event_overview(event_id: int):
     for row in rows:
         aid = row["athlete"].id
         row["shoot_off_required"] = aid in shoot_off_ids
-        row["shoot_off_group_ids"] = shootoff_group_ids(rows, aid) if row["shoot_off_required"] else [aid]
+        row["shoot_off_group_ids"] = shootoff_group_ids(rows, aid, round_no) if row["shoot_off_required"] else [aid]
         if row["shoot_off_required"]:
             row["progress_class"] = "shoot-off-required"
         elif round_no == 1:
@@ -1969,7 +2203,7 @@ def overview_data(event_id: int):
     shoot_off_ids = overview_shootoff_ids(event, round_no)
     for row in rows:
         row["shoot_off_required"] = row["athlete"].id in shoot_off_ids
-        row["shoot_off_group_ids"] = shootoff_group_ids(rows, row["athlete"].id) if row["shoot_off_required"] else [row["athlete"].id]
+        row["shoot_off_group_ids"] = shootoff_group_ids(rows, row["athlete"].id, round_no) if row["shoot_off_required"] else [row["athlete"].id]
         row["cut_line_after"] = False
     if round_no == 1:
         last_direct_idx = None
@@ -2034,6 +2268,7 @@ def overview_data(event_id: int):
             "shoot_off_required": row.get("shoot_off_required", False),
             "shoot_off_group_ids": row.get("shoot_off_group_ids", [row["athlete"].id]),
             "is_round2_direct_placeholder": row.get("is_round2_direct_placeholder", False),
+            "round2_has_played": row.get("round2_has_played", False),
             "cut_line_after": row.get("cut_line_after", False),
             # ใช้สำหรับเรียงแถว realtime: รอบ 1 ต้องเรียงตามคะแนน/Rank, รอบ 2 ใช้ view_order ที่ build_round_two_overview_rows กำหนด
             "view_order": row.get("view_order", row["rank"]),
@@ -2464,7 +2699,7 @@ def activate_scorecard(athlete_id: int):
 @role_required("admin", "superadmin")
 def tiebreak(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
-    round_no = int(request.args.get("round", 1))
+    round_no = int(request.values.get("round", request.args.get("round", 1)) or 1)
     if request.method == "POST":
         # ไม่ลบของเดิม: หากยังเท่ากัน ให้กลับมาตีเที่ยวพิเศษเพิ่มได้เรื่อย ๆ
         for station_no in STATIONS:
@@ -2484,7 +2719,7 @@ def tiebreak(athlete_id: int):
 @role_required("admin", "superadmin")
 def event_tiebreak(event_id: int):
     event = Event.query.get_or_404(event_id)
-    round_no = int(request.args.get("round", 1))
+    round_no = int(request.values.get("round", request.args.get("round", 1)) or 1)
     raw_ids = request.values.get("ids", "")
     athlete_ids = []
     for part in raw_ids.replace(" ", "").split(','):
@@ -2620,6 +2855,754 @@ def bracket_data(event_id: int):
         })
 
     return jsonify(grouped)
+
+
+# =========================
+
+# Results Approved report (SEA Games style)
+# =========================
+def _ra_text(value, default="") -> str:
+    if value is None:
+        return default
+    return str(value)
+
+
+def _ra_event_title(event: Event) -> str:
+    raw = " ".join([event.event_group or "", event.category or "", event.name or ""]).strip()
+    return (raw or event.name or "PÉTANQUE SHOOTING").upper()
+
+
+def _ra_date_text(event: Event) -> str:
+    try:
+        return event.competition_date.strftime("%d %B %Y").upper()
+    except Exception:
+        return _ra_text(event.competition_date, "")
+
+
+def _ra_default_setting(event: Event) -> SimpleNamespace:
+    return SimpleNamespace(
+        event_id=event.id,
+        competition_title=(event.name or "33rd SEA GAMES THAILAND 2025").upper(),
+        host_line=(event.location or "THAILAND : THE KINGDOM OF THAILAND").upper(),
+        date_line=_ra_date_text(event),
+        location_line=(event.location or "").upper(),
+        country_label="COUNTRY",
+        president_title="PRESIDENT OF WORLD PÉTANQUE AND BOULES FEDERATION",
+        president_name="",
+        technical_title="F.I.P.J.P VICE PRESIDENT OF\nPÉTANQUE TECHNICAL DELEGATE",
+        technical_name="",
+        umpires_text="",
+        approved_text="……………………………APPROVED",
+        show_official_pages=True,
+        cover_main_logo_path=None,
+        cover_bottom_logo_1_path=None,
+        cover_bottom_logo_2_path=None,
+        cover_bottom_logo_3_path=None,
+        header_logo_1_path=None,
+        header_logo_2_path=None,
+        header_logo_3_path=None,
+        header_logo_4_path=None,
+        side_logo_path=None,
+    )
+
+
+def get_results_approved_setting(event: Event, create: bool = False):
+    setting = ResultsApprovedSetting.query.filter_by(event_id=event.id).first()
+    if setting:
+        return setting
+    default = _ra_default_setting(event)
+    if not create:
+        return default
+    setting = ResultsApprovedSetting(
+        event_id=event.id,
+        competition_title=default.competition_title,
+        host_line=default.host_line,
+        date_line=default.date_line,
+        location_line=default.location_line,
+        country_label=default.country_label,
+        president_title=default.president_title,
+        president_name=default.president_name,
+        technical_title=default.technical_title,
+        technical_name=default.technical_name,
+        umpires_text=default.umpires_text,
+        approved_text=default.approved_text,
+        show_official_pages=default.show_official_pages,
+        cover_main_logo_path=default.cover_main_logo_path,
+        cover_bottom_logo_1_path=default.cover_bottom_logo_1_path,
+        cover_bottom_logo_2_path=default.cover_bottom_logo_2_path,
+        cover_bottom_logo_3_path=default.cover_bottom_logo_3_path,
+        header_logo_1_path=default.header_logo_1_path,
+        header_logo_2_path=default.header_logo_2_path,
+        header_logo_3_path=default.header_logo_3_path,
+        header_logo_4_path=default.header_logo_4_path,
+        side_logo_path=default.side_logo_path,
+    )
+    db.session.add(setting)
+    db.session.commit()
+    return setting
+
+
+def _ra_setting_text(setting, attr: str, default: str = "") -> str:
+    value = getattr(setting, attr, None)
+    return _ra_text(value, default).strip() or default
+
+
+RESULTS_APPROVED_LOGO_FIELDS = {
+    "cover_main_logo": "cover_main_logo_path",
+    "cover_bottom_logo_1": "cover_bottom_logo_1_path",
+    "cover_bottom_logo_2": "cover_bottom_logo_2_path",
+    "cover_bottom_logo_3": "cover_bottom_logo_3_path",
+    "header_logo_1": "header_logo_1_path",
+    "header_logo_2": "header_logo_2_path",
+    "header_logo_3": "header_logo_3_path",
+    "header_logo_4": "header_logo_4_path",
+    "side_logo": "side_logo_path",
+}
+
+RESULTS_APPROVED_LOGO_DEFAULTS = {
+    "cover_main": "results_approved_assets/thailand2025.png",
+    "cover_bottom_1": "results_approved_assets/fipjp.png",
+    "cover_bottom_2": "results_approved_assets/wpbf.png",
+    "cover_bottom_3": "results_approved_assets/absc.png",
+    "header_1": "results_approved_assets/absc.png",
+    "header_2": "results_approved_assets/thailand2025.png",
+    "header_3": "results_approved_assets/wpbf.png",
+    "header_4": "results_approved_assets/fipjp.png",
+    "side": "results_approved_assets/thailand2025.png",
+}
+
+ALLOWED_RESULTS_LOGO_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+
+
+def _ra_logo_value(setting, attr: str, default: str) -> str:
+    value = getattr(setting, attr, None)
+    value = _ra_text(value).strip()
+    return value or default
+
+
+def _ra_logo_map(setting) -> dict:
+    return {
+        "cover_main": _ra_logo_value(setting, "cover_main_logo_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_main"]),
+        "cover_bottom_1": _ra_logo_value(setting, "cover_bottom_logo_1_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_bottom_1"]),
+        "cover_bottom_2": _ra_logo_value(setting, "cover_bottom_logo_2_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_bottom_2"]),
+        "cover_bottom_3": _ra_logo_value(setting, "cover_bottom_logo_3_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_bottom_3"]),
+        "header_1": _ra_logo_value(setting, "header_logo_1_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_1"]),
+        "header_2": _ra_logo_value(setting, "header_logo_2_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_2"]),
+        "header_3": _ra_logo_value(setting, "header_logo_3_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_3"]),
+        "header_4": _ra_logo_value(setting, "header_logo_4_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_4"]),
+        "side": _ra_logo_value(setting, "side_logo_path", RESULTS_APPROVED_LOGO_DEFAULTS["side"]),
+    }
+
+
+def _ra_save_uploaded_logo(event_id: int, field_name: str) -> str | None:
+    uploaded = request.files.get(field_name)
+    if not uploaded or not uploaded.filename:
+        return None
+    original = secure_filename(uploaded.filename)
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    if ext not in ALLOWED_RESULTS_LOGO_EXTENSIONS:
+        flash(f"ไฟล์โลโก้ {field_name} ต้องเป็น png, jpg, jpeg, webp หรือ gif", "danger")
+        return None
+    upload_dir = os.path.join(BASE_DIR, "static", "uploads", "results_approved", f"event_{event_id}")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{field_name}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}.{ext}"
+    uploaded.save(os.path.join(upload_dir, filename))
+    return f"uploads/results_approved/event_{event_id}/{filename}"
+
+
+def _ra_static_abs_path(static_filename: str | None) -> str | None:
+    static_filename = _ra_text(static_filename).strip()
+    if not static_filename:
+        return None
+    path = os.path.join(BASE_DIR, "static", *static_filename.split("/"))
+    return path if os.path.exists(path) else None
+
+
+def _ra_docx_add_center_image(doc, static_filename: str | None, width_inches: float = 1.35):
+    path = _ra_static_abs_path(static_filename)
+    if not path:
+        return None
+    try:
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Inches
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.add_run().add_picture(path, width=Inches(width_inches))
+        return p
+    except Exception:
+        return None
+
+
+def _ra_docx_add_logo_row(doc, static_filenames: list[str], width_inches: float = 0.75):
+    paths = [_ra_static_abs_path(x) for x in static_filenames if x]
+    paths = [p for p in paths if p]
+    if not paths:
+        return None
+    try:
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Inches
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for idx, path in enumerate(paths):
+            run = p.add_run()
+            run.add_picture(path, width=Inches(width_inches))
+            if idx != len(paths) - 1:
+                p.add_run("     ")
+        return p
+    except Exception:
+        return None
+
+
+def _ra_split_name(full_name: str) -> tuple[str, str]:
+    parts = [p for p in _ra_text(full_name).strip().split() if p]
+    if len(parts) >= 2:
+        return parts[0].upper(), " ".join(parts[1:]).upper()
+    if parts:
+        return "", parts[0].upper()
+    return "", ""
+
+
+def _ra_umpire_rows(setting) -> list[dict]:
+    text = _ra_setting_text(setting, "umpires_text", "")
+    rows = []
+    for idx, line in enumerate([ln.strip() for ln in text.splitlines() if ln.strip()], start=1):
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) >= 2:
+            name, federation = parts[0], parts[1]
+        else:
+            name, federation = line, ""
+        rows.append({"no": idx, "name": name.upper(), "federation": federation.upper()})
+    return rows
+
+
+def _ra_station_cells(summary: dict) -> list[int]:
+    cells = []
+    by_station = summary.get("by_station", {}) if summary else {}
+    for station_no in STATIONS:
+        cells.append(int(by_station.get(station_no, {}).get("total", 0) or 0))
+    return cells
+
+
+def _ra_distance_cells(summary: dict) -> list[int]:
+    cells = []
+    by_station = summary.get("by_station", {}) if summary else {}
+    for station_no in STATIONS:
+        distances = by_station.get(station_no, {}).get("distances", {})
+        for distance_m in DISTANCES:
+            cells.append(int(distances.get(distance_m, 0) or 0))
+        cells.append(int(by_station.get(station_no, {}).get("total", 0) or 0))
+    return cells
+
+
+def _ra_station_groups(summary: dict) -> list[dict]:
+    groups = []
+    by_station = summary.get("by_station", {}) if summary else {}
+    for station_no in STATIONS:
+        station = by_station.get(station_no, {})
+        distances = station.get("distances", {}) if station else {}
+        values = [int(distances.get(distance_m, 0) or 0) for distance_m in DISTANCES]
+        groups.append({
+            "station": station_no,
+            "values": values,
+            "total": int(station.get("total", 0) or 0),
+        })
+    return groups
+
+
+def _ra_athlete_rank(row: dict | None) -> str:
+    if not row:
+        return ""
+    return _ra_text(row.get("display_rank") or row.get("ordinal_rank") or row.get("rank") or "")
+
+
+def _ra_loser(match: BracketMatch):
+    if not match or not match.winner_id:
+        return None
+    if match.athlete_a_id == match.winner_id:
+        return Athlete.query.get(match.athlete_b_id) if match.athlete_b_id else None
+    if match.athlete_b_id == match.winner_id:
+        return Athlete.query.get(match.athlete_a_id) if match.athlete_a_id else None
+    return None
+
+
+def _ra_match_score(event: Event, match: BracketMatch, athlete_id: int | None) -> int | str:
+    if not athlete_id:
+        return ""
+    round_no = bracket_round_to_scorecard_round(match.round_name, event)
+    return summarize_round(athlete_id, round_no).get("total", 0)
+
+
+def _ra_build_medal_rows(event: Event, bracket_matches: list[BracketMatch], fallback_rows: list[dict]) -> list[dict]:
+    final = next((m for m in bracket_matches if m.round_name == "F"), None)
+    semis = [m for m in bracket_matches if m.round_name == "SF"]
+    medals = []
+
+    if final and final.winner_id:
+        gold = Athlete.query.get(final.winner_id)
+        silver = _ra_loser(final)
+        if gold:
+            medals.append({"medal": "GOLD", "athlete": gold})
+        if silver:
+            medals.append({"medal": "SILVER", "athlete": silver})
+        for semi in sorted(semis, key=lambda m: m.match_no):
+            bronze = _ra_loser(semi)
+            if bronze:
+                medals.append({"medal": "BRONZE", "athlete": bronze})
+
+    if medals:
+        return medals[:4]
+
+    labels = ["GOLD", "SILVER", "BRONZE", "BRONZE"]
+    fallback = []
+    for idx, row in enumerate(fallback_rows[:4]):
+        athlete = row.get("athlete") if isinstance(row, dict) else None
+        if athlete:
+            fallback.append({"medal": labels[idx] if idx < len(labels) else "", "athlete": athlete})
+    return fallback
+
+
+def build_results_approved_context(event: Event) -> dict:
+    """เตรียมข้อมูลรายงาน Results Approved SEA Games style จากข้อมูลจริงในระบบ"""
+    preload_event_score_data(event)
+    setting = get_results_approved_setting(event)
+    country_label = _ra_setting_text(setting, "country_label", "COUNTRY").upper()
+    approved_text = _ra_setting_text(setting, "approved_text", "……………………………APPROVED")
+    athletes = sorted(event.athletes, key=lambda a: (a.start_order or 999999, a.id))
+
+    round1_ranking = build_round_ranking(event, 1)
+    round1_by_id = {row["athlete"].id: row for row in round1_ranking}
+
+    entry_countries = []
+    seen_country = set()
+    for athlete in athletes:
+        country = (athlete.affiliation or "").upper()
+        key = country.strip().lower()
+        if key and key not in seen_country:
+            seen_country.add(key)
+            entry_countries.append({"no": len(entry_countries) + 1, "country": country})
+
+    name_rows = []
+    qf1_rows = []
+    qf1_detail_rows = []
+    for athlete in athletes:
+        family, given = _ra_split_name(athlete.name)
+        name_rows.append({
+            "no": athlete.start_order,
+            "country": (athlete.affiliation or "").upper(),
+            "family_name": family,
+            "given_name": given,
+            "name": (athlete.name or "").upper(),
+        })
+        row = round1_by_id.get(athlete.id)
+        summary = summarize_round(athlete.id, 1)
+        rank = _ra_athlete_rank(row)
+        qf1_rows.append({
+            "no": athlete.start_order,
+            "country": (athlete.affiliation or "").upper(),
+            "name": (athlete.name or "").upper(),
+            "lane": athlete.lane_no,
+            "points": summary.get("total", 0),
+            "rank": rank,
+        })
+        qf1_detail_rows.append({
+            "rank": rank,
+            "country": (athlete.affiliation or "").upper(),
+            "name": (athlete.name or "").upper(),
+            "station_groups": _ra_station_groups(summary),
+            "stations": _ra_station_cells(summary),
+            "distance_cells": _ra_distance_cells(summary),
+            "total": summary.get("total", 0),
+        })
+
+    qf2_rows = []
+    qf2_detail_rows = []
+    direct_rows = []
+    if event.has_round_two:
+        overview_r2 = build_round_two_overview_rows(event)
+        direct_rows = [row for row in overview_r2 if row.get("is_round2_direct_placeholder")]
+        round2_rows = [row for row in overview_r2 if not row.get("is_round2_direct_placeholder")]
+        round2_rows = sorted(round2_rows, key=lambda row: (row.get("display_order") if isinstance(row.get("display_order"), int) else 999999, row["athlete"].id))
+        for row in round2_rows:
+            athlete = row["athlete"]
+            r2_summary = summarize_round(athlete.id, 2)
+            qf2_rows.append({
+                "qf1_rank": row.get("round1_rank") or _ra_athlete_rank(round1_by_id.get(athlete.id)),
+                "country": (athlete.affiliation or "").upper(),
+                "name": (athlete.name or "").upper(),
+                "lane": row.get("display_lane_no", ""),
+                "r1": row.get("round1_total", 0),
+                "r2": row.get("round2_total", 0),
+                "total": row.get("combined_total", 0),
+                "qf2_rank": _ra_athlete_rank(row),
+            })
+            qf2_detail_rows.append({
+                "qf1_rank": row.get("round1_rank") or _ra_athlete_rank(round1_by_id.get(athlete.id)),
+                "country": (athlete.affiliation or "").upper(),
+                "name": (athlete.name or "").upper(),
+                "station_groups": _ra_station_groups(r2_summary),
+                "stations": _ra_station_cells(r2_summary),
+                "distance_cells": _ra_distance_cells(r2_summary),
+                "r1": row.get("round1_total", 0),
+                "r2": row.get("round2_total", 0),
+                "total": row.get("combined_total", 0),
+                "qf2_rank": _ra_athlete_rank(row),
+            })
+
+    bracket_matches = BracketMatch.query.filter_by(event_id=event.id).order_by(BracketMatch.round_name, BracketMatch.match_no).all()
+    bracket_round_order = {"R16": 1, "QF": 2, "SF": 3, "F": 4}
+    bracket_matches = sorted(bracket_matches, key=lambda m: (bracket_round_order.get(m.round_name, 99), m.match_no))
+    try:
+        fallback_qualifiers = build_combined_qualifiers(event)
+    except Exception:
+        fallback_qualifiers = round1_ranking
+    seed_map = {}
+    for idx, row in enumerate(fallback_qualifiers or [], start=1):
+        athlete = row.get("athlete") if isinstance(row, dict) else None
+        if athlete:
+            seed_map[athlete.id] = idx
+
+    bracket_rows = []
+    for match in bracket_matches:
+        athlete_a = Athlete.query.get(match.athlete_a_id) if match.athlete_a_id else None
+        athlete_b = Athlete.query.get(match.athlete_b_id) if match.athlete_b_id else None
+        bracket_rows.append({
+            "round_name": match.round_name,
+            "round_label": {"R16": "ROUND OF 16", "QF": "QUARTERFINAL ROUND", "SF": "SEMIFINAL ROUND", "F": "FINAL ROUND"}.get(match.round_name, match.round_name),
+            "match_no": match.match_no,
+            "lane": match.match_no,
+            "athlete_a": athlete_a,
+            "athlete_b": athlete_b,
+            "rank_a": seed_map.get(match.athlete_a_id, ""),
+            "rank_b": seed_map.get(match.athlete_b_id, ""),
+            "country_a": (athlete_a.affiliation if athlete_a else "").upper(),
+            "country_b": (athlete_b.affiliation if athlete_b else "").upper(),
+            "name_a": (athlete_a.name if athlete_a else "").upper(),
+            "name_b": (athlete_b.name if athlete_b else "").upper(),
+            "points_a": _ra_match_score(event, match, match.athlete_a_id),
+            "points_b": _ra_match_score(event, match, match.athlete_b_id),
+            "winner_id": match.winner_id,
+        })
+
+    medal_rows = _ra_build_medal_rows(event, bracket_matches, fallback_qualifiers or round1_ranking)
+    medal_rows_out = []
+    for r in medal_rows:
+        athlete = r["athlete"]
+        family, given = _ra_split_name(athlete.name)
+        medal_rows_out.append({
+            "medal": r["medal"],
+            "athlete": athlete,
+            "country": (athlete.affiliation or "").upper(),
+            "family_name": family,
+            "given_name": given,
+        })
+
+    return {
+        "event": event,
+        "setting": setting,
+        "competition_title": _ra_setting_text(setting, "competition_title", event.name).upper(),
+        "host_line": _ra_setting_text(setting, "host_line", event.location).upper(),
+        "date_line": _ra_setting_text(setting, "date_line", _ra_date_text(event)).upper(),
+        "location_line": _ra_setting_text(setting, "location_line", event.location).upper(),
+        "country_label": country_label,
+        "approved_text": approved_text,
+        "event_title": _ra_event_title(event),
+        "event_date_text": _ra_setting_text(setting, "date_line", _ra_date_text(event)).upper(),
+        "athletes": athletes,
+        "entry_countries": entry_countries,
+        "name_rows": name_rows,
+        "umpire_rows": _ra_umpire_rows(setting),
+        "qf1_rows": qf1_rows,
+        "qf1_detail_rows": qf1_detail_rows,
+        "direct_rows": direct_rows,
+        "qf2_rows": qf2_rows,
+        "qf2_detail_rows": qf2_detail_rows,
+        "bracket_rows": bracket_rows,
+        "semifinal_rows": [r for r in bracket_rows if r["round_name"] == "SF"],
+        "final_rows": [r for r in bracket_rows if r["round_name"] == "F"],
+        "other_ko_rows": [r for r in bracket_rows if r["round_name"] not in {"SF", "F"}],
+        "medal_rows": medal_rows_out,
+        "logos": _ra_logo_map(setting),
+        "stations": STATIONS,
+        "distances": DISTANCES,
+    }
+
+
+def _ra_docx_set_cell_text(cell, text, bold=False, align="center", size_pt=9):
+    cell.text = ""
+    p = cell.paragraphs[0]
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT if align == "left" else WD_ALIGN_PARAGRAPH.CENTER
+    run = p.add_run(_ra_text(text))
+    run.bold = bold
+    run.font.name = "Times New Roman"
+    try:
+        from docx.shared import Pt
+        run.font.size = Pt(size_pt)
+    except Exception:
+        pass
+
+
+def _ra_docx_shade(cell, fill="D9D9D9"):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = tc_pr.find(qn("w:shd"))
+    if shd is None:
+        shd = OxmlElement("w:shd")
+        tc_pr.append(shd)
+    shd.set(qn("w:fill"), fill)
+
+
+def _ra_docx_add_title(doc, text, size=18, spacing_after=4):
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p.add_run(_ra_text(text))
+    run.bold = True
+    run.font.name = "Times New Roman"
+    run.font.size = Pt(size)
+    p.paragraph_format.space_after = Pt(spacing_after)
+    return p
+
+
+def _ra_docx_add_approved(doc, text="……………………………APPROVED"):
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run = p.add_run(text)
+    run.bold = True
+    run.font.name = "Times New Roman"
+    run.font.size = Pt(11)
+    return p
+
+
+def _ra_docx_add_table(doc, headers, rows, align_left_cols: set[int] | None = None, font_size=8):
+    from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+    table = doc.add_table(rows=1, cols=len(headers))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.style = "Table Grid"
+    for i, header in enumerate(headers):
+        _ra_docx_set_cell_text(table.rows[0].cells[i], header, bold=True, size_pt=font_size)
+        _ra_docx_shade(table.rows[0].cells[i])
+    align_left_cols = align_left_cols or set()
+    for row in rows:
+        cells = table.add_row().cells
+        for i, value in enumerate(row):
+            _ra_docx_set_cell_text(cells[i], value, align="left" if i in align_left_cols else "center", size_pt=font_size)
+            cells[i].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    return table
+
+
+def make_results_approved_docx(event: Event) -> BytesIO:
+    from docx import Document
+    from docx.shared import Inches, Pt
+    from docx.enum.section import WD_ORIENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    ctx = build_results_approved_context(event)
+    doc = Document()
+    section = doc.sections[0]
+    section.top_margin = Inches(0.45)
+    section.bottom_margin = Inches(0.45)
+    section.left_margin = Inches(0.45)
+    section.right_margin = Inches(0.45)
+
+    style = doc.styles["Normal"]
+    style.font.name = "Times New Roman"
+    style.font.size = Pt(10)
+
+    logos = ctx.get("logos", {})
+
+    # Cover
+    _ra_docx_add_center_image(doc, logos.get("cover_main"), width_inches=1.35)
+    _ra_docx_add_title(doc, "SEA GAMES", 20)
+    _ra_docx_add_title(doc, "THAILAND", 20)
+    _ra_docx_add_title(doc, ctx["date_line"], 12)
+    _ra_docx_add_title(doc, ctx["host_line"], 12)
+    doc.add_paragraph()
+    _ra_docx_add_title(doc, "PÉTANQUE", 26)
+    _ra_docx_add_logo_row(doc, [logos.get("cover_bottom_1"), logos.get("cover_bottom_2"), logos.get("cover_bottom_3")], width_inches=0.75)
+    doc.add_paragraph()
+    _ra_docx_add_title(doc, "RESULTS", 24)
+    _ra_docx_add_title(doc, "APPROVED", 10)
+    doc.add_page_break()
+
+    # Officials
+    if getattr(ctx["setting"], "show_official_pages", True):
+        _ra_docx_add_logo_row(doc, [logos.get("header_1"), logos.get("header_2"), logos.get("header_3"), logos.get("header_4")], width_inches=0.62)
+        _ra_docx_add_title(doc, ctx["competition_title"], 14)
+        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "president_title", "PRESIDENT"), 14)
+        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "president_name", ""), 12)
+        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "technical_title", "TECHNICAL DELEGATE"), 14)
+        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "technical_name", ""), 12)
+        _ra_docx_add_title(doc, "UMPIRE", 18)
+        ump_rows = [[r["no"], r["name"], r["federation"]] for r in ctx["umpire_rows"]]
+        if ump_rows:
+            _ra_docx_add_table(doc, ["NO", "FAMILY NAME - GIVEN NAME", "FEDERATION"], ump_rows, align_left_cols={1}, font_size=9)
+        _ra_docx_add_approved(doc, ctx["approved_text"])
+        doc.add_page_break()
+
+    # Event cover
+    _ra_docx_add_title(doc, f"1. {ctx['event_title']}", 20)
+    _ra_docx_add_title(doc, ctx["date_line"], 12)
+    _ra_docx_add_table(doc, ["NO.", ctx["country_label"]], [[r["no"], r["country"]] for r in ctx["entry_countries"]], align_left_cols={1}, font_size=10)
+    _ra_docx_add_approved(doc, ctx["approved_text"])
+    doc.add_page_break()
+
+    # Name list
+    _ra_docx_add_title(doc, "NAME LISTS", 20)
+    _ra_docx_add_title(doc, ctx["event_title"], 14)
+    name_rows = [[r["no"], r["country"], r["family_name"], r["given_name"]] for r in ctx["name_rows"]]
+    _ra_docx_add_table(doc, ["NO.", ctx["country_label"], "FAMILY NAME", "GIVEN NAME"], name_rows, align_left_cols={1,2,3}, font_size=9)
+    _ra_docx_add_approved(doc, ctx["approved_text"])
+    doc.add_page_break()
+
+    # QF1 summary
+    _ra_docx_add_title(doc, ctx["event_title"], 16)
+    _ra_docx_add_title(doc, "QUALIFICATION ROUND 1", 16)
+    qf1_rows = [[r["no"], r["country"], r["lane"], r["points"], r["rank"]] for r in ctx["qf1_rows"]]
+    _ra_docx_add_table(doc, ["NO.", ctx["country_label"], "LANE", "POINTS", "RANK\n(QF1)"], qf1_rows, align_left_cols={1}, font_size=9)
+    _ra_docx_add_approved(doc, ctx["approved_text"])
+    doc.add_page_break()
+
+    # QF1 detail landscape
+    section = doc.add_section()
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width, section.page_height = section.page_height, section.page_width
+    section.top_margin = Inches(0.3)
+    section.bottom_margin = Inches(0.3)
+    section.left_margin = Inches(0.25)
+    section.right_margin = Inches(0.25)
+    _ra_docx_add_title(doc, f"{ctx['event_title']} - Qualification Shooting", 16)
+    headers = ["Rank", ctx["country_label"], "Name"]
+    for s in STATIONS:
+        headers.extend([f"A{s} 6M", "7M", "8M", "9M", "Tot."])
+    headers += ["Total", "Rank"]
+    rows = []
+    for r in ctx["qf1_detail_rows"]:
+        rows.append([r["rank"], r["country"], r["name"], *r["distance_cells"], r["total"], r["rank"]])
+    _ra_docx_add_table(doc, headers, rows, align_left_cols={1,2}, font_size=6)
+    _ra_docx_add_approved(doc, ctx["approved_text"])
+    doc.add_page_break()
+
+    if ctx["qf2_rows"]:
+        section = doc.add_section()
+        section.orientation = WD_ORIENT.PORTRAIT
+        section.page_width, section.page_height = section.page_height, section.page_width
+        section.top_margin = Inches(0.45)
+        section.bottom_margin = Inches(0.45)
+        section.left_margin = Inches(0.45)
+        section.right_margin = Inches(0.45)
+        _ra_docx_add_title(doc, ctx["event_title"], 16)
+        _ra_docx_add_title(doc, "QUALIFICATION ROUND 2", 16)
+        qf2_rows = [[r["qf1_rank"], r["country"], r["lane"], r["r1"], r["r2"], r["total"], r["qf2_rank"]] for r in ctx["qf2_rows"]]
+        _ra_docx_add_table(doc, ["RANK\n(QF1)", ctx["country_label"], "LANE", "R1", "R2", "TOTAL", "RANK\n(QF2)"], qf2_rows, align_left_cols={1}, font_size=9)
+        _ra_docx_add_approved(doc, ctx["approved_text"])
+        doc.add_page_break()
+
+    section = doc.add_section()
+    section.orientation = WD_ORIENT.PORTRAIT
+    section.page_width, section.page_height = section.page_height, section.page_width
+    section.top_margin = Inches(0.45)
+    section.bottom_margin = Inches(0.45)
+    section.left_margin = Inches(0.45)
+    section.right_margin = Inches(0.45)
+    _ra_docx_add_title(doc, "SEMIFINAL ROUND / FINAL ROUND", 18)
+    ko_rows = []
+    for r in ctx["semifinal_rows"] + ctx["final_rows"]:
+        ko_rows.append([r["round_label"], r["match_no"], r["lane"], r["rank_a"], r["country_a"], r["points_a"]])
+        ko_rows.append(["", "", "", r["rank_b"], r["country_b"], r["points_b"]])
+    if ko_rows:
+        _ra_docx_add_table(doc, ["ROUND", "MATCH", "LANE", "RANK", ctx["country_label"], "POINTS"], ko_rows, align_left_cols={4}, font_size=9)
+    _ra_docx_add_approved(doc, ctx["approved_text"])
+    doc.add_page_break()
+
+    _ra_docx_add_title(doc, "RANKING RESULT", 20)
+    _ra_docx_add_title(doc, ctx["event_title"], 16)
+    medal_rows = [[r["medal"], r["country"], r["family_name"], r["given_name"]] for r in ctx["medal_rows"]]
+    _ra_docx_add_table(doc, ["MEDAL", ctx["country_label"], "FAMILY NAME", "GIVEN NAME"], medal_rows, align_left_cols={1,2,3}, font_size=10)
+    _ra_docx_add_approved(doc, ctx["approved_text"])
+
+    out = BytesIO()
+    doc.save(out)
+    out.seek(0)
+    return out
+
+
+@app.route("/events/<int:event_id>/results-approved/settings", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def results_approved_settings(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    setting = get_results_approved_setting(event, create=True)
+    if request.method == "POST":
+        setting.competition_title = request.form.get("competition_title", "").strip() or event.name
+        setting.host_line = request.form.get("host_line", "").strip()
+        setting.date_line = request.form.get("date_line", "").strip() or _ra_date_text(event)
+        setting.location_line = request.form.get("location_line", "").strip()
+        setting.country_label = request.form.get("country_label", "COUNTRY").strip().upper() or "COUNTRY"
+        setting.president_title = request.form.get("president_title", "").strip()
+        setting.president_name = request.form.get("president_name", "").strip()
+        setting.technical_title = request.form.get("technical_title", "").strip()
+        setting.technical_name = request.form.get("technical_name", "").strip()
+        setting.umpires_text = request.form.get("umpires_text", "").strip()
+        setting.approved_text = request.form.get("approved_text", "").strip() or "……………………………APPROVED"
+        setting.show_official_pages = request.form.get("show_official_pages") == "yes"
+        for field_name, attr in RESULTS_APPROVED_LOGO_FIELDS.items():
+            if request.form.get(f"clear_{field_name}") == "yes":
+                setattr(setting, attr, None)
+            saved_logo = _ra_save_uploaded_logo(event.id, field_name)
+            if saved_logo:
+                setattr(setting, attr, saved_logo)
+        db.session.commit()
+        flash("บันทึกตั้งค่า Results Approved แล้ว", "success")
+        return redirect(url_for("results_approved", event_id=event.id))
+    logo_field_labels = [
+        ("cover_main_logo", "โลโก้หลักบนปก"),
+        ("cover_bottom_logo_1", "โลโก้ล่างปก 1"),
+        ("cover_bottom_logo_2", "โลโก้ล่างปก 2"),
+        ("cover_bottom_logo_3", "โลโก้ล่างปก 3"),
+        ("header_logo_1", "โลโก้หัวกระดาษ 1"),
+        ("header_logo_2", "โลโก้หัวกระดาษ 2"),
+        ("header_logo_3", "โลโก้หัวกระดาษ 3"),
+        ("header_logo_4", "โลโก้หัวกระดาษ 4"),
+        ("side_logo", "โลโก้มุมซ้ายในหน้าผล"),
+    ]
+    return render_template(
+        "results_approved_settings.html",
+        event=event,
+        setting=setting,
+        logos=_ra_logo_map(setting),
+        logo_field_labels=logo_field_labels,
+    )
+
+
+@app.route("/events/<int:event_id>/results-approved")
+@login_required
+def results_approved(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    ctx = build_results_approved_context(event)
+    return render_template("results_approved.html", **ctx)
+
+
+@app.route("/events/<int:event_id>/results-approved.docx")
+@login_required
+def results_approved_docx(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    try:
+        stream = make_results_approved_docx(event)
+    except ModuleNotFoundError:
+        flash("ยังไม่ได้ติดตั้ง python-docx ให้รัน: python -m pip install -r requirements.txt", "warning")
+        return redirect(url_for("results_approved", event_id=event.id))
+    filename = f"results_approved_event_{event.id}.docx"
+    return send_file(
+        stream,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
 @app.route("/events/<int:event_id>/stats")
 def event_stats(event_id: int):

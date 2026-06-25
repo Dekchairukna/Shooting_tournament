@@ -5,7 +5,9 @@
   <p class="muted">รอบ {{ round_no }} · เลือกคะแนนแบบ 0 / 1 / 3 / 5</p>
   <p class="muted">ต้องบันทึกพร้อมกันทุกคนที่ติด Shoot-off หากยังเท่ากันให้กลับมาเลือกกลุ่มเดิมแล้วบันทึกเพิ่มอีกเที่ยว</p>
 
-  <form method="post" class="tiebreak-form">
+  <form method="post" class="tiebreak-form" action="{% if bulk_mode is defined and bulk_mode %}{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=ids) }}{% else %}{{ url_for('tiebreak', athlete_id=athlete.id, round=round_no) }}{% endif %}">
+    <input type="hidden" name="round" value="{{ round_no }}">
+    {% if bulk_mode is defined and bulk_mode %}<input type="hidden" name="ids" value="{{ ids }}">{% endif %}
     {% for athlete in athletes %}
     <div class="tiebreak-athlete-card">
       <div class="athlete-head">
@@ -23,7 +25,7 @@
             <select name="tb_{{ station }}" class="score-select">
           {% endif %}
             {% for score in [0,1,3,5] %}
-            <option value="{{ score }}">{{ score }}</option>
+            <option value="{{ score }}" {% if score == old_score %}selected{% endif %}>{{ score }}</option>
             {% endfor %}
           </select>
           <small>สะสมเดิม: {{ old_score }}</small>

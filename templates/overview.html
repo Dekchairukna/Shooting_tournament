@@ -1494,6 +1494,10 @@
         <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=2) }}">รอบ 2</a>
         {% endif %}
         <a class="btn secondary" href="{{ url_for('bracket', event_id=event.id) }}">ตารางประกบ</a>
+        <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">Results Approved</a>
+        {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
+        <a class="btn secondary" href="{{ url_for('results_approved_settings', event_id=event.id) }}">ตั้งค่า Results</a>
+        {% endif %}
         {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
         <a class="btn secondary" href="{{ url_for('scorecards_print_select', event_id=event.id, round=round_no) }}">พิมพ์ Scorecard หลายคน</a>
         {% endif %}
@@ -1605,7 +1609,7 @@
               {% if round_no == 2 and event.has_round_two %}
               <td class="sum-total-cell">{{ row.combined_total }}</td>
               {% endif %}
-              <td class="overall-rank">{{ row.display_rank if round_no == 2 and event.has_round_two and row.display_rank is defined else row.rank }}</td>
+              <td class="overall-rank">{{ row.display_rank if row.display_rank is defined else row.rank }}</td>
               <td>
                 <span class="status-pill {{ row.status }}">{{ 'เข้ารอบตรง' if row.status == 'direct' else ('กำลังตี' if row.status == 'active' else ('ตีเสร็จแล้ว' if row.status == 'finished' else 'รอคิว')) }}</span>
                 {% if row.shoot_off_required %}
@@ -1691,7 +1695,7 @@
       if (name) name.textContent = item.name;
       if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.round2_total ?? item.total ?? 0);
       if (sumTotal) sumTotal.textContent = item.combined_total ?? ((item.round1_total ?? 0) + (item.round2_total ?? item.total ?? 0));
-      if (rank) rank.textContent = item.rank;
+      if (rank) rank.textContent = item.display_rank ?? item.rank;
       const statusCell = row.querySelector('td:last-child');
       if (statusCell) {
         const ids = (item.shoot_off_group_ids || [item.athlete_id]).join(',');

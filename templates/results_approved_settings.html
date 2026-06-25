@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}ตั้งค่า Results Approved{% endblock %}
+{% block content %}
+<section class="card narrow" style="max-width:960px;margin:auto;">
+  <h1>ตั้งค่า Results Approved SEA Games Style</h1>
+  <p class="muted">ตั้งค่าข้อความหัวเอกสารและรายชื่อกรรมการสำหรับ {{ event.name }}</p>
+  <form method="post" class="form-grid form-wide" enctype="multipart/form-data">
+    <label>ชื่อการแข่งขัน / Competition Title
+      <input name="competition_title" value="{{ setting.competition_title or event.name }}">
+    </label>
+    <label>บรรทัดประเทศ/เจ้าภาพ
+      <input name="host_line" value="{{ setting.host_line or event.location }}">
+    </label>
+    <label>วันที่บนเอกสาร
+      <input name="date_line" value="{{ setting.date_line or event.competition_date }}">
+    </label>
+    <label>สถานที่ / Location
+      <input name="location_line" value="{{ setting.location_line or event.location }}">
+    </label>
+    <label>หัวคอลัมน์สังกัด
+      <select name="country_label">
+        {% for v in ['COUNTRY','AFFILIATION','SCHOOL','TEAM'] %}
+        <option value="{{ v }}" {% if (setting.country_label or 'COUNTRY') == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>ข้อความ APPROVED
+      <input name="approved_text" value="{{ setting.approved_text or '……………………………APPROVED' }}">
+    </label>
+    <div style="grid-column:1/-1;border:1px solid #e5e7eb;border-radius:16px;padding:14px;background:#f8fafc;margin-top:8px;">
+      <h2 style="margin:0 0 8px;font-size:20px;">โลโก้เอกสาร</h2>
+      <p class="muted" style="margin-top:0;">อัปโหลดไฟล์ png, jpg, jpeg, webp หรือ gif ได้เอง ถ้าไม่อัปโหลดระบบจะใช้โลโก้ค่าเริ่มต้นตามเอกสารตัวอย่าง</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+        {% for field, label in logo_field_labels %}
+          {% set key = field.replace('_logo','') %}
+          {% if field == 'cover_main_logo' %}{% set current = logos.cover_main %}
+          {% elif field == 'cover_bottom_logo_1' %}{% set current = logos.cover_bottom_1 %}
+          {% elif field == 'cover_bottom_logo_2' %}{% set current = logos.cover_bottom_2 %}
+          {% elif field == 'cover_bottom_logo_3' %}{% set current = logos.cover_bottom_3 %}
+          {% elif field == 'header_logo_1' %}{% set current = logos.header_1 %}
+          {% elif field == 'header_logo_2' %}{% set current = logos.header_2 %}
+          {% elif field == 'header_logo_3' %}{% set current = logos.header_3 %}
+          {% elif field == 'header_logo_4' %}{% set current = logos.header_4 %}
+          {% elif field == 'side_logo' %}{% set current = logos.side %}
+          {% endif %}
+          <label style="display:block;background:white;border:1px solid #e5e7eb;border-radius:14px;padding:10px;">
+            <b>{{ label }}</b>
+            <div style="height:70px;display:flex;align-items:center;justify-content:center;margin:8px 0;border:1px dashed #cbd5e1;border-radius:10px;background:#fff;">
+              <img src="{{ url_for('static', filename=current) }}" alt="{{ label }}" style="max-width:100%;max-height:60px;object-fit:contain;">
+            </div>
+            <input type="file" name="{{ field }}" accept="image/png,image/jpeg,image/webp,image/gif">
+            <div style="display:flex;gap:6px;align-items:center;margin-top:6px;font-weight:400;">
+              <input type="checkbox" name="clear_{{ field }}" value="yes"> ใช้ค่าเริ่มต้น
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+    <label>แสดงหน้ากรรมการ
+      <select name="show_official_pages">
+        <option value="yes" {% if setting.show_official_pages %}selected{% endif %}>แสดง</option>
+        <option value="no" {% if not setting.show_official_pages %}selected{% endif %}>ไม่แสดง</option>
+      </select>
+    </label>
+    <label>ตำแหน่งประธาน / President Title
+      <textarea name="president_title" rows="2">{{ setting.president_title or '' }}</textarea>
+    </label>
+    <label>ชื่อประธาน / President Name
+      <input name="president_name" value="{{ setting.president_name or '' }}">
+    </label>
+    <label>ตำแหน่ง Technical Delegate
+      <textarea name="technical_title" rows="3">{{ setting.technical_title or '' }}</textarea>
+    </label>
+    <label>ชื่อ Technical Delegate
+      <input name="technical_name" value="{{ setting.technical_name or '' }}">
+    </label>
+    <label style="grid-column:1/-1;">รายชื่อกรรมการ Umpire <small class="muted">ใส่บรรทัดละ 1 คน รูปแบบ: ชื่อ | สังกัด เช่น MR. SOMCHAI JAIDEE | ABSC</small>
+      <textarea name="umpires_text" rows="10" placeholder="MR. JEAN-LUC FUENTES (HEAD) | F.I.P.J.P&#10;MR. SOMCHAI JAIDEE | THAILAND">{{ setting.umpires_text or '' }}</textarea>
+    </label>
+    <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn" type="submit">บันทึกตั้งค่า</button>
+      <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">กลับ Results Approved</a>
+      <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">กลับ Overview</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
