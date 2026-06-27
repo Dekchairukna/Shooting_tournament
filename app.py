@@ -1624,6 +1624,192 @@ def scorecard_print_positions() -> dict:
     }
 
 
+def scorecard_round_to_bracket_round(round_no: int, event: Event) -> str | None:
+    """แปลงเลขรอบของ Scorecard เป็นชื่อรอบ bracket สำหรับหน้าพิมพ์รวม."""
+    if round_no < 3:
+        return None
+    if event_has_round_of_16(event):
+        return {3: "R16", 4: "QF", 5: "SF", 6: "F"}.get(round_no)
+    return {3: "QF", 4: "SF", 5: "F"}.get(round_no)
+
+
+def bracket_participant_order_map(event: Event, round_no: int) -> dict[int, dict]:
+    """คืนข้อมูลลำดับ/สนามของนักกีฬาในรอบ bracket เพื่อใช้พิมพ์ Scorecard รวม."""
+    round_name = scorecard_round_to_bracket_round(round_no, event)
+    if not round_name:
+        return {}
+
+    matches = BracketMatch.query.filter_by(
+        event_id=event.id,
+        round_name=round_name,
+    ).order_by(BracketMatch.match_no.asc()).all()
+
+    result: dict[int, dict] = {}
+    lane_count = max(event.lane_count or 1, 1)
+    running_order = 1
+    for match in matches:
+        for side_no, athlete_id in enumerate([match.athlete_a_id, match.athlete_b_id], start=1):
+            if not athlete_id or athlete_id in result:
+                continue
+            result[athlete_id] = {
+                "display_order": running_order,
+                "display_lane_no": ((match.match_no - 1) % lane_count) + 1,
+                "display_lane_order": match.match_no,
+                "match_no": match.match_no,
+                "match_side": side_no,
+            }
+            running_order += 1
+    return result
+
+
+def athletes_for_scorecard_round(event: Event, round_no: int, selected_ids: list[int] | None = None) -> list[Athlete]:
+    """เลือกรายชื่อนักกีฬาที่ควรพิมพ์ Scorecard รวมในแต่ละรอบ.
+
+    - รอบ 1: นักกีฬาทั้งหมด
+    - รอบ 2: เฉพาะผู้มีสิทธิ์ตีรอบ 2
+    - รอบ bracket: เฉพาะคนที่อยู่ในคู่ของรอบนั้น
+    """
+    selected_set = {int(aid) for aid in selected_ids or []}
+
+    def keep_selected(athletes: list[Athlete]) -> list[Athlete]:
+        if not selected_set:
+            return athletes
+        return [athlete for athlete in athletes if athlete.id in selected_set]
+
+    if round_no == 1:
+        athletes = sorted(event.athletes, key=lambda athlete: (
+            athlete.start_order if athlete.start_order is not None else 999999,
+            athlete.id,
+        ))
+        return keep_selected(athletes)
+
+    if round_no == 2:
+        if not event.has_round_two:
+            return []
+        sync_round_two_candidates(event)
+        candidate_ids = round_two_candidate_ids(event)
+        start_rows = build_round_two_start_list(event)
+        ordered_ids = [row["athlete"].id for row in start_rows if row["athlete"].id in candidate_ids]
+        seen = set()
+        athletes: list[Athlete] = []
+        for athlete_id in ordered_ids:
+            athlete = Athlete.query.get(athlete_id)
+            if athlete and athlete.id not in seen:
+                athletes.append(athlete)
+                seen.add(athlete.id)
+
+        # เผื่อข้อมูลเก่ามี signature รอบ 2 อยู่แล้ว แต่ไม่อยู่ใน start_rows
+        for athlete in sorted(event.athletes, key=lambda a: (a.start_order, a.id)):
+            if athlete.id in candidate_ids and athlete.id not in seen:
+                athletes.append(athlete)
+                seen.add(athlete.id)
+        return keep_selected(athletes)
+
+    round_name = scorecard_round_to_bracket_round(round_no, event)
+    if not round_name:
+        return []
+
+    # สร้าง/เติม bracket ที่ยังขาดก่อน เพื่อให้ปุ่มพิมพ์รอบ knockout ใช้งานได้แม้ยังไม่เคยเปิดหน้าสาย
+    ensure_bracket(event)
+    order_map = bracket_participant_order_map(event, round_no)
+    if not order_map:
+        return []
+
+    athletes_by_id = {athlete.id: athlete for athlete in event.athletes}
+    ordered_ids = sorted(
+        order_map,
+        key=lambda aid: (
+            order_map[aid].get("display_order", 999999),
+            athletes_by_id.get(aid).start_order if athletes_by_id.get(aid) else 999999,
+            aid,
+        ),
+    )
+    athletes = [athletes_by_id[aid] for aid in ordered_ids if aid in athletes_by_id]
+    return keep_selected(athletes)
+
+
+def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
+    """รวมข้อมูลให้ template พิมพ์ Scorecard แบบหลายคน โดยใช้โครงเดียวกับหน้าพิมพ์รายคน."""
+    event = athlete.event
+    template_data = build_scorecard_template_data(athlete.id)
+    ranks = compute_round_ranks(event)
+
+    round_ranks = {rn: "" for rn in ALL_SCORECARD_ROUNDS}
+    for rn in [1, 2]:
+        round_ranks[rn] = ranks.get(rn, {}).get(athlete.id, "")
+    for rn in scorecard_round_numbers(event):
+        if rn >= 3:
+            row = next(
+                (item for item in build_round_ranking(event, rn) if item["athlete"].id == athlete.id),
+                None,
+            )
+            if row:
+                round_ranks[rn] = row.get("rank", "")
+
+    round_signatures = {
+        rn: get_round_signature(athlete.id, rn)
+        for rn in scorecard_round_numbers(event)
+    }
+
+    round_station_running_totals = {}
+    for rn in scorecard_round_numbers(event):
+        running = {}
+        acc = 0
+        for st in STATIONS:
+            val = template_data["station_totals"].get((rn, st), 0)
+            acc += val
+            running[st] = acc
+        round_station_running_totals[rn] = running
+
+    display_order = athlete.start_order
+    display_lane_no = athlete.lane_no
+    display_lane_order = athlete.lane_order
+
+    if round_no == 2 and event.has_round_two:
+        for row in build_round_two_overview_rows(event):
+            if row.get("athlete") and row["athlete"].id == athlete.id:
+                display_order = row.get("display_order", display_order)
+                display_lane_no = row.get("display_lane_no", display_lane_no)
+                display_lane_order = row.get("display_lane_order", display_lane_order)
+                break
+    elif round_no >= 3:
+        order_map = bracket_participant_order_map(event, round_no)
+        if athlete.id in order_map:
+            display_order = order_map[athlete.id].get("display_order", display_order)
+            display_lane_no = order_map[athlete.id].get("display_lane_no", display_lane_no)
+            display_lane_order = order_map[athlete.id].get("display_lane_order", display_lane_order)
+    else:
+        current_round_rows = build_round_ranking(event, round_no)
+        current_row = next((row for row in current_round_rows if row["athlete"].id == athlete.id), None)
+        if current_row:
+            display_order = current_row.get("display_order", display_order)
+            display_lane_no = current_row.get("display_lane_no", display_lane_no)
+            display_lane_order = current_row.get("display_lane_order", display_lane_order)
+
+    combined_rows = build_combined_qualifiers(event) if event.has_round_two else []
+    current_combined = next(
+        (row for row in combined_rows if row.get("athlete") and row["athlete"].id == athlete.id),
+        None,
+    )
+
+    return {
+        "athlete": athlete,
+        "event": event,
+        "score_map": template_data["score_map"],
+        "station_totals": template_data["station_totals"],
+        "station_reds": template_data["station_reds"],
+        "round_totals": template_data["round_totals"],
+        "round_ranks": round_ranks,
+        "round_signatures": round_signatures,
+        "round_station_running_totals": round_station_running_totals,
+        "combined_rows": combined_rows,
+        "current_combined": current_combined,
+        "display_order": display_order,
+        "display_lane_no": display_lane_no,
+        "display_lane_order": display_lane_order,
+    }
+
+
 
 def get_progression_groups(event: Event) -> dict:
     cache = _request_cache()
