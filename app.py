@@ -194,6 +194,8 @@ class ScoreEntry(db.Model):
     distance_m = db.Column(db.Integer, nullable=False)
     score = db.Column(db.Integer, nullable=False, default=0)
     is_red_card = db.Column(db.Boolean, nullable=False, default=False)
+    # แยกสถานะ “ตีช่องนี้แล้ว” ออกจากคะแนน เพื่อแยก 0 คะแนนจริงกับช่องที่ยังไม่ได้ตี
+    is_scored = db.Column(db.Boolean, nullable=False, default=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -416,6 +418,10 @@ def ensure_schema() -> None:
             }
             for col, col_type in ra_logo_columns.items():
                 conn.exec_driver_sql(f'ALTER TABLE "results_approved_setting" ADD COLUMN IF NOT EXISTS {col} {col_type}')
+
+            # ScoreEntry: เพิ่ม checkbox ตีแล้วสำหรับทุกช่องคะแนน
+            conn.exec_driver_sql('ALTER TABLE "score_entry" ADD COLUMN IF NOT EXISTS is_scored BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('UPDATE "score_entry" SET is_scored = true WHERE COALESCE(score, 0) <> 0 OR COALESCE(is_red_card, false) = true')
         return
 
     # SQLite migration เดิม
@@ -436,6 +442,11 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN started_at DATETIME")
         if "finished_at" not in columns:
             conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN finished_at DATETIME")
+
+        score_entry_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(score_entry)").fetchall()}
+        if "is_scored" not in score_entry_columns:
+            conn.exec_driver_sql("ALTER TABLE score_entry ADD COLUMN is_scored BOOLEAN DEFAULT 0")
+            conn.exec_driver_sql("UPDATE score_entry SET is_scored = 1 WHERE COALESCE(score, 0) <> 0 OR COALESCE(is_red_card, 0) = 1")
 
         event_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(event)").fetchall()}
         if "has_round_two" not in event_columns:
@@ -579,6 +590,7 @@ def ensure_round_entries(athlete_id: int, round_no: int) -> None:
                     distance_m=distance_m,
                     score=0,
                     is_red_card=False,
+                    is_scored=False,
                 ))
                 changed = True
     if changed:
@@ -617,8 +629,12 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
     by_station = {}
     for station_no in STATIONS:
         station_entries = [e for e in entries if e.station_no == station_no]
+        played_distances = {e.distance_m: bool(getattr(e, "is_scored", False)) for e in station_entries}
         by_station[station_no] = {
             "distances": {e.distance_m: e.score for e in station_entries},
+            "played_distances": played_distances,
+            "played_count": sum(1 for v in played_distances.values() if v),
+            "is_complete": all(played_distances.get(distance_m, False) for distance_m in DISTANCES),
             "total": sum(e.score for e in station_entries),
         }
 
@@ -670,6 +686,7 @@ def build_scorecard_template_data(athlete_id: int) -> dict:
                 score_map[(round_no, station_no, distance_m)] = {
                     "score": entry.score if entry else "",
                     "is_red_card": entry.is_red_card if entry else False,
+                    "is_scored": bool(getattr(entry, "is_scored", False)) if entry else False,
                 }
 
     round_ranks = {1: "", 2: "", 3: "", 4: "", 5: ""}
@@ -2415,12 +2432,21 @@ def overview_data(event_id: int):
     for row in rows:
         stations = {}
         for station in STATIONS:
+            station_summary = row["by_station"][station]
             stations[str(station)] = {
-                "6": row["by_station"][station]["distances"].get(6, 0),
-                "7": row["by_station"][station]["distances"].get(7, 0),
-                "8": row["by_station"][station]["distances"].get(8, 0),
-                "9": row["by_station"][station]["distances"].get(9, 0),
-                "total": row["by_station"][station]["total"],
+                "6": station_summary["distances"].get(6, 0),
+                "7": station_summary["distances"].get(7, 0),
+                "8": station_summary["distances"].get(8, 0),
+                "9": station_summary["distances"].get(9, 0),
+                "total": station_summary["total"],
+                "played": {
+                    "6": bool(station_summary.get("played_distances", {}).get(6, False)),
+                    "7": bool(station_summary.get("played_distances", {}).get(7, False)),
+                    "8": bool(station_summary.get("played_distances", {}).get(8, False)),
+                    "9": bool(station_summary.get("played_distances", {}).get(9, False)),
+                },
+                "played_count": station_summary.get("played_count", 0),
+                "is_complete": station_summary.get("is_complete", False),
             }
         round1_stations = None
         round2_stations = None
@@ -2509,6 +2535,7 @@ def autosave_scorecard(athlete_id: int):
     distance_m = int(payload.get("distance_m", 6))
     score_value = str(payload.get("score", "")).strip()
     red = bool(payload.get("red", False))
+    played = bool(payload.get("played", False))
     ensure_round_entries(athlete.id, round_no)
     signature = ensure_signature(athlete.id, round_no)
     if not signature.started_at:
@@ -2520,6 +2547,7 @@ def autosave_scorecard(athlete_id: int):
         value = max(0, min(5, value))
         entry.is_red_card = red
         entry.score = 0 if red else value
+        entry.is_scored = bool(played or red)
     db.session.commit()
     clear_request_cache()
     summary = summarize_round(athlete.id, round_no)
@@ -2533,7 +2561,9 @@ def autosave_scorecard(athlete_id: int):
         "ok": True,
         "station_total": summary["by_station"][station_no]["total"],
         "station_red": station_red,
-        "round_total": summary["total"]
+        "round_total": summary["total"],
+        "station_played_count": summary["by_station"][station_no].get("played_count", 0),
+        "station_complete": summary["by_station"][station_no].get("is_complete", False),
     })
 
 

@@ -169,15 +169,15 @@
   }
 
   .score-col {
-    min-width: 33px;
-    font-size: .7rem;
+    min-width: 20px;
+    font-size: .15rem;
   }
 
   .score-total-col {
-    min-width: 40px;
+    min-width: 30px;
     font-weight: 900;
     background: #f8fafc;
-    font-size: .7rem;
+    font-size: .15rem;
   }
 
   .col-order { min-width: 42px; }
@@ -388,11 +388,11 @@
 
 /* ช่องคะแนนให้คงขนาด ไม่โดนชื่อเบียด */
 .score-col {
-  min-width: 24px !important;
+  min-width: 20px !important;
 }
 
 .score-total-col {
-  min-width: 30px !important;
+  min-width: 20px !important;
 }
 
 /* iPad */
@@ -1477,6 +1477,1037 @@
   color:transparent !important;
 }
 
+
+
+/* ===== PATCH: Overview สีตามสถานะ + สีช่องตาม checkbox ตีแล้ว ===== */
+.qualification-table tbody tr.status-waiting > td { background:#ffffff !important; color:#111827 !important; }
+.qualification-table tbody tr.status-active > td { background:#fef3c7 !important; color:#111827 !important; }
+.qualification-table tbody tr.status-finished > td { background:#dcfce7 !important; color:#111827 !important; }
+.qualification-table tbody tr.round2-candidate > td { background:#ffedd5 !important; color:#111827 !important; }
+.qualification-table tbody tr.qualified-direct > td,
+.qualification-table tbody tr.qualified-round2 > td { background:#dbeafe !important; color:#0f172a !important; }
+.qualification-table tbody tr.eliminated > td { background:#fee2e2 !important; color:#7f1d1d !important; }
+.qualification-table tbody tr.shoot-off-required > td { background:#fecaca !important; color:#7f1d1d !important; font-weight:1000 !important; }
+.qualification-table tbody tr.cut-line-after > td { border-bottom:6px solid #dc2626 !important; }
+
+.qualification-table tbody td.score-played {
+  background:#bbf7d0 !important;
+  color:#064e3b !important;
+  font-weight:1000 !important;
+}
+.qualification-table tbody td.station-partial {
+  background:#dcfce7 !important;
+  color:#166534 !important;
+  font-weight:1000 !important;
+}
+.qualification-table tbody td.station-complete {
+  background:#86efac !important;
+  color:#064e3b !important;
+  font-weight:1000 !important;
+  box-shadow: inset 0 0 0 2px #16a34a;
+}
+.qualification-table tbody tr.direct-placeholder td.score-col,
+.qualification-table tbody tr.direct-placeholder td.score-total-col,
+.qualification-table tbody tr.direct-placeholder td.round2-total-cell,
+.qualification-table tbody tr.direct-placeholder td.sum-total-cell,
+.qualification-table tbody tr.direct-placeholder td.r2-disabled{
+  background:#737373 !important;
+  color:transparent !important;
+}
+.legend.finished { background:#dcfce7 !important; color:#166534 !important; }
+.legend.direct, .legend.ko { background:#dbeafe !important; color:#1e3a8a !important; }
+.legend.r2 { background:#ffedd5 !important; color:#9a3412 !important; }
+.legend.out { background:#fee2e2 !important; color:#7f1d1d !important; }
+
+
+.qualification-table tbody tr.direct-placeholder td.r1-total,
+.qualification-table tbody tr.direct-placeholder td.round1-history-col{
+  background:#fef08a !important;
+  color:#991b1b !important;
+  font-weight:1000 !important;
+}
+
+
+/* ===== PATCH 2: Overview รายช่องชัดเจน + ช่องสถานะกระชับ ===== */
+.qualification-table thead th.col-status,
+.qualification-table tbody td.status-cell {
+  width: 1% !important;
+  min-width: 48px !important;
+  max-width: 92px !important;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+  white-space: nowrap !important;
+}
+.qualification-table tbody td.status-cell {
+  text-align: center !important;
+}
+.qualification-table tbody td.status-cell .status-pill {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 3px 6px !important;
+  font-size: .58rem !important;
+  line-height: 1 !important;
+  border-radius: 999px !important;
+  white-space: nowrap !important;
+}
+.qualification-table tbody td.status-cell .shoot-off-badge,
+.qualification-table tbody td.status-cell .shoot-off-link {
+  display: block !important;
+  margin: 2px auto 0 !important;
+  width: max-content !important;
+  max-width: 84px !important;
+  font-size: .52rem !important;
+  line-height: 1.05 !important;
+  white-space: nowrap !important;
+}
+/* ให้สีรายช่องจาก checkbox ชนะสีแถวสถานะ/เข้ารอบ */
+.qualification-table tbody tr td.score-col.score-played,
+.qualification-table tbody tr.status-waiting td.score-col.score-played,
+.qualification-table tbody tr.status-active td.score-col.score-played,
+.qualification-table tbody tr.status-finished td.score-col.score-played,
+.qualification-table tbody tr.qualified-direct td.score-col.score-played,
+.qualification-table tbody tr.round2-candidate td.score-col.score-played,
+.qualification-table tbody tr.qualified-round2 td.score-col.score-played,
+.qualification-table tbody tr.eliminated td.score-col.score-played {
+  background: #bbf7d0 !important;
+  color: #064e3b !important;
+  font-weight: 1000 !important;
+  box-shadow: inset 0 0 0 2px #16a34a !important;
+}
+.qualification-table tbody tr td.station-total.station-partial,
+.qualification-table tbody tr.status-waiting td.station-total.station-partial,
+.qualification-table tbody tr.status-active td.station-total.station-partial,
+.qualification-table tbody tr.status-finished td.station-total.station-partial,
+.qualification-table tbody tr.qualified-direct td.station-total.station-partial,
+.qualification-table tbody tr.round2-candidate td.station-total.station-partial,
+.qualification-table tbody tr.qualified-round2 td.station-total.station-partial,
+.qualification-table tbody tr.eliminated td.station-total.station-partial {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  font-weight: 1000 !important;
+  box-shadow: inset 0 0 0 2px #86efac !important;
+}
+.qualification-table tbody tr td.station-total.station-complete,
+.qualification-table tbody tr.status-waiting td.station-total.station-complete,
+.qualification-table tbody tr.status-active td.station-total.station-complete,
+.qualification-table tbody tr.status-finished td.station-total.station-complete,
+.qualification-table tbody tr.qualified-direct td.station-total.station-complete,
+.qualification-table tbody tr.round2-candidate td.station-total.station-complete,
+.qualification-table tbody tr.qualified-round2 td.station-total.station-complete,
+.qualification-table tbody tr.eliminated td.station-total.station-complete {
+  background: #86efac !important;
+  color: #064e3b !important;
+  font-weight: 1000 !important;
+  box-shadow: inset 0 0 0 2px #15803d !important;
+}
+.station-total .station-total-value {
+  display: block;
+  font-size: .72rem;
+  line-height: 1;
+}
+.station-total .station-progress-mini {
+  display: block;
+  margin-top: 1px;
+  font-size: .48rem;
+  line-height: 1;
+  font-weight: 900;
+  color: inherit;
+  opacity: .95;
+}
+.qualification-table tbody tr.direct-placeholder td.score-col.score-played,
+.qualification-table tbody tr.direct-placeholder td.station-total.station-partial,
+.qualification-table tbody tr.direct-placeholder td.station-total.station-complete {
+  background:#737373 !important;
+  color:transparent !important;
+  box-shadow:none !important;
+}
+@media (max-width: 1180px) {
+  .qualification-table thead th.col-status,
+  .qualification-table tbody td.status-cell { min-width: 42px !important; max-width: 78px !important; }
+  .qualification-table tbody td.status-cell .status-pill { font-size: .52rem !important; padding: 2px 4px !important; }
+  .station-total .station-progress-mini { font-size: .42rem; }
+}
+
+
+
+/* ===== PATCH LATEST: Overview สีรายช่อง/รายสถานี + สถานะกระชับจริง ===== */
+.qualification-table tbody tr.status-waiting td.score-col:not(.score-played),
+.qualification-table tbody tr.status-active td.score-col:not(.score-played),
+.qualification-table tbody tr.status-finished td.score-col:not(.score-played),
+.qualification-table tbody tr.qualified-direct td.score-col:not(.score-played),
+.qualification-table tbody tr.round2-candidate td.score-col:not(.score-played),
+.qualification-table tbody tr.qualified-round2 td.score-col:not(.score-played),
+.qualification-table tbody tr.eliminated td.score-col:not(.score-played) {
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+}
+.qualification-table tbody tr td.score-col.score-played,
+.qualification-table tbody tr.status-waiting td.score-col.score-played,
+.qualification-table tbody tr.status-active td.score-col.score-played,
+.qualification-table tbody tr.status-finished td.score-col.score-played,
+.qualification-table tbody tr.qualified-direct td.score-col.score-played,
+.qualification-table tbody tr.round2-candidate td.score-col.score-played,
+.qualification-table tbody tr.qualified-round2 td.score-col.score-played,
+.qualification-table tbody tr.eliminated td.score-col.score-played {
+  background: #22c55e !important;
+  color: #052e16 !important;
+  font-weight: 1000 !important;
+  box-shadow: inset 0 0 0 2px #15803d !important;
+}
+.qualification-table tbody tr td.station-total.station-partial,
+.qualification-table tbody tr.status-waiting td.station-total.station-partial,
+.qualification-table tbody tr.status-active td.station-total.station-partial,
+.qualification-table tbody tr.status-finished td.station-total.station-partial,
+.qualification-table tbody tr.qualified-direct td.station-total.station-partial,
+.qualification-table tbody tr.round2-candidate td.station-total.station-partial,
+.qualification-table tbody tr.qualified-round2 td.station-total.station-partial,
+.qualification-table tbody tr.eliminated td.station-total.station-partial {
+  background: #bbf7d0 !important;
+  color: #064e3b !important;
+  font-weight: 1000 !important;
+  box-shadow: inset 0 0 0 2px #22c55e !important;
+}
+.qualification-table tbody tr td.station-total.station-complete,
+.qualification-table tbody tr.status-waiting td.station-total.station-complete,
+.qualification-table tbody tr.status-active td.station-total.station-complete,
+.qualification-table tbody tr.status-finished td.station-total.station-complete,
+.qualification-table tbody tr.qualified-direct td.station-total.station-complete,
+.qualification-table tbody tr.round2-candidate td.station-total.station-complete,
+.qualification-table tbody tr.qualified-round2 td.station-total.station-complete,
+.qualification-table tbody tr.eliminated td.station-total.station-complete {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  font-weight: 1000 !important;
+  box-shadow: inset 0 0 0 2px #14532d !important;
+}
+.station-total .station-total-value {
+  display: block !important;
+  font-size: .68rem !important;
+  line-height: 1 !important;
+}
+.station-total .station-progress-mini {
+  display: block !important;
+  margin-top: 1px !important;
+  font-size: .45rem !important;
+  line-height: 1 !important;
+  font-weight: 1000 !important;
+  letter-spacing: -.01em !important;
+}
+.qualification-table thead th.col-status,
+.qualification-table thead th.compact-status-head,
+.qualification-table tbody td.status-cell {
+  width: 1px !important;
+  min-width: 1px !important;
+  max-width: 58px !important;
+  padding: 1px 2px !important;
+  white-space: nowrap !important;
+}
+.qualification-table thead th.compact-status-head {
+  font-size: .52rem !important;
+  line-height: 1 !important;
+}
+.qualification-table tbody td.status-cell .status-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: max-content !important;
+  padding: 2px 4px !important;
+  font-size: .50rem !important;
+  line-height: 1 !important;
+  border-radius: 999px !important;
+  white-space: nowrap !important;
+}
+.qualification-table tbody td.status-cell .shoot-off-badge,
+.qualification-table tbody td.status-cell .shoot-off-link {
+  display: block !important;
+  width: max-content !important;
+  max-width: 45px !important;
+  margin: 1px auto 0 !important;
+  padding: 1px 2px !important;
+  font-size: .46rem !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+
+/* ===== FINAL PASTEL OVERVIEW PATCH ===== */
+:root{
+  --ov-pastel-yellow:#fff4cc;
+  --ov-pastel-green:#d9f7e8;
+  --ov-pastel-blue:#dbeafe;
+  --ov-pastel-orange:#ffe7cc;
+  --ov-pastel-red:#ffd9de;
+  --ov-pastel-pink:#fde2ef;
+  --ov-pastel-purple:#ece3ff;
+  --ov-active-bar:#7c3aed;
+  --ov-played-green:#86efac;
+  --ov-played-green-dark:#22c55e;
+}
+.qualification-table tbody tr > td{
+  transition: background-color .18s ease, box-shadow .18s ease, color .18s ease;
+}
+.qualification-table tbody tr.status-waiting > td{
+  background:#ffffff !important;
+  color:#0f172a !important;
+}
+.qualification-table tbody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) > td{
+  background:var(--ov-pastel-green) !important;
+  color:#0f172a !important;
+}
+.qualification-table tbody tr.qualified-direct > td{
+  background:var(--ov-pastel-blue) !important;
+  color:#0f172a !important;
+}
+.qualification-table tbody tr.round2-candidate > td{
+  background:var(--ov-pastel-orange) !important;
+  color:#0f172a !important;
+}
+.qualification-table tbody tr.qualified-round2 > td{
+  background:var(--ov-pastel-blue) !important;
+  color:#0f172a !important;
+}
+.qualification-table tbody tr.eliminated > td{
+  background:var(--ov-pastel-red) !important;
+  color:#7f1d1d !important;
+}
+.qualification-table tbody tr.shoot-off-required > td{
+  background:var(--ov-pastel-purple) !important;
+  color:#111827 !important;
+}
+.qualification-table tbody tr.live-active > td{
+  background:#fff7d6 !important;
+  color:#111827 !important;
+  box-shadow: inset 0 1px 0 #f59e0b, inset 0 -1px 0 #f59e0b !important;
+}
+.qualification-table tbody tr.live-active > td:first-child{
+  box-shadow: inset 6px 0 0 #ef4444, inset 0 1px 0 #f59e0b, inset 0 -1px 0 #f59e0b !important;
+}
+.qualification-table tbody tr.live-active td.cursor-station{
+  background:#ffe1e1 !important;
+  color:#7f1d1d !important;
+  box-shadow: inset 0 0 0 2px #ef4444 !important;
+  font-weight:900 !important;
+}
+.qualification-table tbody tr td.score-col.score-played,
+.qualification-table tbody td.score-col.score-played,
+.qualification-table tbody tr td.station-total.station-partial,
+.qualification-table tbody td.station-total.station-partial,
+.qualification-table tbody tr td.station-total.station-complete,
+.qualification-table tbody td.station-total.station-complete{
+  background:inherit !important;
+  color:inherit !important;
+  box-shadow:none !important;
+}
+.qualification-table tbody tr.live-active td.cursor-station.station-total.station-partial,
+.qualification-table tbody tr.live-active td.cursor-station.station-total.station-complete,
+.qualification-table tbody tr.live-active td.cursor-station.score-col{
+  background:#ffe1e1 !important;
+  color:#7f1d1d !important;
+  box-shadow: inset 0 0 0 2px #ef4444 !important;
+}
+.qualification-table tbody td.status-cell,
+.qualification-table thead th.col-status,
+.qualification-table thead th.compact-status-head{
+  width:1px !important;
+  min-width:1px !important;
+  max-width:46px !important;
+  padding:1px 2px !important;
+}
+.qualification-table tbody td.status-cell .status-pill{
+  font-size:.47rem !important;
+  line-height:1 !important;
+  padding:2px 4px !important;
+  border-radius:999px !important;
+}
+.qualification-table tbody td.status-cell .shoot-off-badge,
+.qualification-table tbody td.status-cell .shoot-off-link{
+  max-width:40px !important;
+  font-size:.43rem !important;
+  padding:1px 2px !important;
+}
+.status-pill.waiting{background:#f8fafc !important;color:#334155 !important;border:1px solid #cbd5e1;}
+.status-pill.active{background:#ffe1e1 !important;color:#991b1b !important;border:1px solid #ef4444;}
+.status-pill.finished{background:var(--ov-pastel-green) !important;color:#166534 !important;border:1px solid #4ade80;}
+.status-pill.direct{background:var(--ov-pastel-blue) !important;color:#1e3a8a !important;border:1px solid #60a5fa;}
+
+
+/* ===== FINAL OVERRIDE: highlight per-cell only while currently shooting ===== */
+.qualification-table tbody tr:not(.live-active) td.score-col.score-played,
+.qualification-table tbody tr:not(.live-active) td.station-total.station-partial,
+.qualification-table tbody tr:not(.live-active) td.station-total.station-complete,
+.qualification-table tbody tr:not(.live-active) td.cursor-station {
+  background: inherit !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+/* keep finished / passed / eliminated rows as one flat row color */
+.qualification-table tbody tr.status-finished td.score-col.score-played,
+.qualification-table tbody tr.status-finished td.station-total.station-partial,
+.qualification-table tbody tr.status-finished td.station-total.station-complete,
+.qualification-table tbody tr.qualified-direct td.score-col.score-played,
+.qualification-table tbody tr.qualified-direct td.station-total.station-partial,
+.qualification-table tbody tr.qualified-direct td.station-total.station-complete,
+.qualification-table tbody tr.round2-candidate td.score-col.score-played,
+.qualification-table tbody tr.round2-candidate td.station-total.station-partial,
+.qualification-table tbody tr.round2-candidate td.station-total.station-complete,
+.qualification-table tbody tr.qualified-round2 td.score-col.score-played,
+.qualification-table tbody tr.qualified-round2 td.station-total.station-partial,
+.qualification-table tbody tr.qualified-round2 td.station-total.station-complete,
+.qualification-table tbody tr.eliminated td.score-col.score-played,
+.qualification-table tbody tr.eliminated td.station-total.station-partial,
+.qualification-table tbody tr.eliminated td.station-total.station-complete {
+  background: inherit !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+
+
+/* ===== ACTIVE ROW / CURRENT STATION FINAL OVERRIDE ===== */
+.qualification-table tbody tr.live-active td:not(.cursor-station){
+  background:#fff7d6 !important;
+  color:#111827 !important;
+}
+.qualification-table tbody tr.live-active td.cursor-station{
+  background:#ffe1e1 !important;
+  color:#7f1d1d !important;
+  box-shadow: inset 0 0 0 2px #ef4444 !important;
+}
+
+
+/* ===== HARD OVERRIDE: non-active rows stay flat color across left/right ===== */
+.qualification-table tbody tr:not(.live-active) td.score-col,
+.qualification-table tbody tr:not(.live-active) td.station-total{
+  background: inherit !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+.qualification-table tbody tr.live-active td.score-col,
+.qualification-table tbody tr.live-active td.station-total{
+  background:#fff7d6 !important;
+  color:#111827 !important;
+  box-shadow: inset 0 1px 0 #f59e0b, inset 0 -1px 0 #f59e0b !important;
+}
+.qualification-table tbody tr.live-active td.score-col.cursor-station,
+.qualification-table tbody tr.live-active td.station-total.cursor-station{
+  background:#ffe1e1 !important;
+  color:#7f1d1d !important;
+  box-shadow: inset 0 0 0 2px #ef4444 !important;
+}
+
+/* ===== HIDE STATION PROGRESS MINI ===== */
+.station-total .station-progress-mini{display:none !important;}
+
+
+/* ===== FINAL OVERRIDE: current red only on played score cells, never on total ===== */
+.qualification-table tbody tr.live-active td.score-col.cursor-station.score-played{
+  background:#ffe1e1 !important;
+  color:#7f1d1d !important;
+  box-shadow: inset 0 0 0 2px #ef4444 !important;
+  font-weight:900 !important;
+}
+.qualification-table tbody tr.live-active td.score-col.cursor-station:not(.score-played),
+.qualification-table tbody tr.live-active td.station-total,
+.qualification-table tbody tr.live-active td.station-total.cursor-station{
+  background:#fff7d6 !important;
+  color:#111827 !important;
+  box-shadow: inset 0 1px 0 #f59e0b, inset 0 -1px 0 #f59e0b !important;
+  font-weight:inherit !important;
+}
+
+
+/* ===== FINAL YELLOW LOADING STYLE ===== */
+/* every colored row should stay flat across score cells and total cells */
+.qualification-table tbody tr.status-waiting td.score-col,
+.qualification-table tbody tr.status-waiting td.station-total,
+.qualification-table tbody tr.status-finished td.score-col,
+.qualification-table tbody tr.status-finished td.station-total,
+.qualification-table tbody tr.qualified-direct td.score-col,
+.qualification-table tbody tr.qualified-direct td.station-total,
+.qualification-table tbody tr.round2-candidate td.score-col,
+.qualification-table tbody tr.round2-candidate td.station-total,
+.qualification-table tbody tr.qualified-round2 td.score-col,
+.qualification-table tbody tr.qualified-round2 td.station-total,
+.qualification-table tbody tr.eliminated td.score-col,
+.qualification-table tbody tr.eliminated td.station-total,
+.qualification-table tbody tr.shoot-off-required td.score-col,
+.qualification-table tbody tr.shoot-off-required td.station-total{
+  background: inherit !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+/* while typing / active = pale yellow across the whole row */
+.qualification-table tbody tr.live-active > td,
+.qualification-table tbody tr.status-active > td{
+  background:#fff2bf !important;
+  color:#111827 !important;
+  box-shadow:none !important;
+}
+.qualification-table tbody tr.live-active > td:first-child,
+.qualification-table tbody tr.status-active > td:first-child{
+  box-shadow: inset 6px 0 0 #ef4444 !important;
+}
+/* only score cells that have already been keyed become soft red, like loading progress */
+.qualification-table tbody tr.live-active td.score-col.score-played,
+.qualification-table tbody tr.status-active td.score-col.score-played,
+.qualification-table tbody tr.live-active td.score-col.cursor-station.score-played,
+.qualification-table tbody tr.status-active td.score-col.cursor-station.score-played{
+  background:#fff1f2 !important;
+  color:#b91c1c !important;
+  box-shadow: inset 0 0 0 2px #f87171 !important;
+  font-weight:900 !important;
+}
+/* totals stay yellow, never red, and no green highlights */
+.qualification-table tbody tr.live-active td.station-total,
+.qualification-table tbody tr.status-active td.station-total,
+.qualification-table tbody tr.live-active td.station-total.station-partial,
+.qualification-table tbody tr.status-active td.station-total.station-partial,
+.qualification-table tbody tr.live-active td.station-total.station-complete,
+.qualification-table tbody tr.status-active td.station-total.station-complete,
+.qualification-table tbody tr.live-active td.station-total.cursor-station,
+.qualification-table tbody tr.status-active td.station-total.cursor-station{
+  background:#fff2bf !important;
+  color:#111827 !important;
+  box-shadow:none !important;
+  font-weight:inherit !important;
+}
+/* remove old green played styling entirely */
+.qualification-table tbody td.score-played,
+.qualification-table tbody td.station-partial,
+.qualification-table tbody td.station-complete{
+  background:inherit !important;
+  color:inherit !important;
+  box-shadow:none !important;
+}
+
+
+/* ===== FINAL ROW COLOR UNIFY + NEW BLUE + HOVER ===== */
+:root{
+  --ov-direct-blue-flat:#d9efff;
+  --ov-direct-blue-hover:#c7e7ff;
+  --ov-r2-orange-flat:#f7e7c8;
+  --ov-r2-orange-hover:#f3ddb2;
+  --ov-out-flat:#eadffb;
+  --ov-out-hover:#dfcff8;
+  --ov-finished-flat:#dff6ea;
+  --ov-finished-hover:#cef0dd;
+  --ov-shoot-flat:#f9e0eb;
+  --ov-shoot-hover:#f4d0df;
+}
+/* make the whole row color continue through all score and total cells */
+.qualification-table tbody tr.qualified-direct > td,
+.qualification-table tbody tr.qualified-round2 > td{
+  background:var(--ov-direct-blue-flat) !important;
+  color:#0f172a !important;
+  box-shadow:none !important;
+}
+.qualification-table tbody tr.round2-candidate > td{
+  background:var(--ov-r2-orange-flat) !important;
+  color:#0f172a !important;
+  box-shadow:none !important;
+}
+.qualification-table tbody tr.eliminated > td{
+  background:var(--ov-out-flat) !important;
+  color:#5b2130 !important;
+  box-shadow:none !important;
+}
+.qualification-table tbody tr.shoot-off-required > td{
+  background:var(--ov-shoot-flat) !important;
+  color:#111827 !important;
+  box-shadow:none !important;
+}
+.qualification-table tbody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) > td{
+  background:var(--ov-finished-flat) !important;
+  color:#0f172a !important;
+  box-shadow:none !important;
+}
+/* score / total cells must follow the row color, not become patchy */
+.qualification-table tbody tr:not(.live-active) td.score-col,
+.qualification-table tbody tr:not(.live-active) td.station-total,
+.qualification-table tbody tr:not(.live-active) td.score-total-col,
+.qualification-table tbody tr:not(.live-active) td.overall-total,
+.qualification-table tbody tr:not(.live-active) td.sum-total-cell{
+  background:inherit !important;
+  color:inherit !important;
+  box-shadow:none !important;
+}
+/* hover: whole row changes to a clearly different tint and gets a frame */
+.qualification-table tbody tr[data-athlete-id]:not(.live-active):hover > td{
+  filter:brightness(.98);
+  box-shadow: inset 0 1px 0 #60a5fa, inset 0 -1px 0 #60a5fa !important;
+}
+.qualification-table tbody tr.qualified-direct[data-athlete-id]:hover > td,
+.qualification-table tbody tr.qualified-round2[data-athlete-id]:hover > td{
+  background:var(--ov-direct-blue-hover) !important;
+}
+.qualification-table tbody tr.round2-candidate[data-athlete-id]:hover > td{
+  background:var(--ov-r2-orange-hover) !important;
+}
+.qualification-table tbody tr.eliminated[data-athlete-id]:hover > td{
+  background:var(--ov-out-hover) !important;
+}
+.qualification-table tbody tr.shoot-off-required[data-athlete-id]:hover > td{
+  background:var(--ov-shoot-hover) !important;
+}
+.qualification-table tbody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required)[data-athlete-id]:hover > td{
+  background:var(--ov-finished-hover) !important;
+}
+.qualification-table tbody tr[data-athlete-id]:hover > td:first-child{
+  box-shadow: inset 5px 0 0 #3b82f6, inset 0 1px 0 #60a5fa, inset 0 -1px 0 #60a5fa !important;
+}
+.qualification-table tbody tr[data-athlete-id]:hover > td:last-child{
+  box-shadow: inset -2px 0 0 #60a5fa, inset 0 1px 0 #60a5fa, inset 0 -1px 0 #60a5fa !important;
+}
+
+
+/* ===== FINAL MATCH NAME-BG + WIDER STATUS ===== */
+/* make score area use same row background as the name area */
+.qualification-table tbody tr:not(.live-active) td.score-col,
+.qualification-table tbody tr:not(.live-active) td.score-total-col,
+.qualification-table tbody tr:not(.live-active) td.station-total,
+.qualification-table tbody tr:not(.live-active) td.overall-total,
+.qualification-table tbody tr:not(.live-active) td.sum-total-cell,
+.qualification-table tbody tr:not(.live-active) td.overall-rank{
+  background: inherit !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+/* keep hover unified across the whole row, including score cells */
+.qualification-table tbody tr[data-athlete-id]:hover td.score-col,
+.qualification-table tbody tr[data-athlete-id]:hover td.score-total-col,
+.qualification-table tbody tr[data-athlete-id]:hover td.station-total,
+.qualification-table tbody tr[data-athlete-id]:hover td.overall-total,
+.qualification-table tbody tr[data-athlete-id]:hover td.sum-total-cell,
+.qualification-table tbody tr[data-athlete-id]:hover td.overall-rank{
+  background: inherit !important;
+}
+/* larger status column */
+.qualification-table thead th.compact-status-head,
+.qualification-table thead th.col-status,
+.qualification-table tbody td.status-cell{
+  width: 70px !important;
+  min-width: 70px !important;
+  max-width: 90px !important;
+  padding: 4px 6px !important;
+}
+.qualification-table tbody td.status-cell .status-pill{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  min-width:48px !important;
+  font-size:.58rem !important;
+  line-height:1.1 !important;
+  padding:4px 8px !important;
+  border-radius:999px !important;
+}
+.qualification-table tbody td.status-cell .shoot-off-badge,
+.qualification-table tbody td.status-cell .shoot-off-link{
+  font-size:.52rem !important;
+}
+@media (max-width: 1024px){
+  .qualification-table thead th.compact-status-head,
+  .qualification-table thead th.col-status,
+  .qualification-table tbody td.status-cell{
+    width: 62px !important;
+    min-width: 62px !important;
+    max-width: 78px !important;
+  }
+  .qualification-table tbody td.status-cell .status-pill{
+    min-width:42px !important;
+    font-size:.54rem !important;
+    padding:3px 6px !important;
+  }
+}
+
+
+
+/* ======================================================================
+   SAFE FINAL OVERVIEW COLOR FIX
+   แตะเฉพาะ CSS หน้า Overview ไม่แตะ app.py / logic คะแนน
+   ใช้ #overviewTableBody เพื่อชนะ CSS เก่าที่ซ้อนกันหลายรอบ
+   ====================================================================== */
+:root{
+  --safe-ov-neutral:#eaf6ff;
+  --safe-ov-gold:#f6df91;
+  --safe-ov-gold-hover:#f1d26a;
+  --safe-ov-blue:#d9edff;
+  --safe-ov-blue-hover:#c6e4ff;
+  --safe-ov-orange:#ffe2b8;
+  --safe-ov-orange-hover:#ffd49a;
+  --safe-ov-red:#ffd1d1;
+  --safe-ov-red-hover:#ffbcbc;
+  --safe-ov-active:#fff2b8;
+  --safe-ov-active-input:#ffe3e3;
+  --safe-ov-frame:#3b82f6;
+  --safe-ov-active-left:#ef4444;
+}
+
+/* เอาข้อความ ส1 1/4 / ตี 1/4 ออกจากช่อง Total */
+#overviewTableBody .station-progress-mini{display:none !important;}
+
+/* ตัดสีเฉพาะช่องเก่าที่ทำให้ตารางด่าง */
+#overviewTableBody td.score-played,
+#overviewTableBody td.station-partial,
+#overviewTableBody td.station-complete,
+#overviewTableBody td.cursor-station{
+  box-shadow:none !important;
+}
+
+/* ---------- ยังไม่ตี / ไม่มีสถานะพิเศษ ---------- */
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) > td,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.score-col,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.score-col.score-played,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.score-col:not(.score-played),
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.score-total-col,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.station-total,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.station-total.station-partial,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.station-total.station-complete,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.overall-total,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.round2-total-cell,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.sum-total-cell,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.overall-rank,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.status-cell,
+#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required) td.round1-history-col{
+  background:var(--safe-ov-neutral) !important;
+  color:#0f172a !important;
+  box-shadow:none !important;
+}
+
+/* ---------- เข้ารอบ / อันดับดี = ทอง ---------- */
+#overviewTableBody tr.qualified-direct > td,
+#overviewTableBody tr.qualified-direct td.score-col,
+#overviewTableBody tr.qualified-direct td.score-col.score-played,
+#overviewTableBody tr.qualified-direct td.score-col:not(.score-played),
+#overviewTableBody tr.qualified-direct td.score-total-col,
+#overviewTableBody tr.qualified-direct td.station-total,
+#overviewTableBody tr.qualified-direct td.station-total.station-partial,
+#overviewTableBody tr.qualified-direct td.station-total.station-complete,
+#overviewTableBody tr.qualified-direct td.overall-total,
+#overviewTableBody tr.qualified-direct td.round2-total-cell,
+#overviewTableBody tr.qualified-direct td.sum-total-cell,
+#overviewTableBody tr.qualified-direct td.overall-rank,
+#overviewTableBody tr.qualified-direct td.status-cell,
+#overviewTableBody tr.qualified-direct td.round1-history-col,
+#overviewTableBody tr.qualified-round2 > td,
+#overviewTableBody tr.qualified-round2 td.score-col,
+#overviewTableBody tr.qualified-round2 td.score-col.score-played,
+#overviewTableBody tr.qualified-round2 td.score-col:not(.score-played),
+#overviewTableBody tr.qualified-round2 td.score-total-col,
+#overviewTableBody tr.qualified-round2 td.station-total,
+#overviewTableBody tr.qualified-round2 td.station-total.station-partial,
+#overviewTableBody tr.qualified-round2 td.station-total.station-complete,
+#overviewTableBody tr.qualified-round2 td.overall-total,
+#overviewTableBody tr.qualified-round2 td.round2-total-cell,
+#overviewTableBody tr.qualified-round2 td.sum-total-cell,
+#overviewTableBody tr.qualified-round2 td.overall-rank,
+#overviewTableBody tr.qualified-round2 td.status-cell,
+#overviewTableBody tr.qualified-round2 td.round1-history-col{
+  background:var(--safe-ov-gold) !important;
+  color:#0f172a !important;
+  box-shadow:none !important;
+}
+
+/* ---------- ได้ตีรอบสอง = ฟ้า ---------- */
+#overviewTableBody tr.round2-candidate > td,
+#overviewTableBody tr.round2-candidate td.score-col,
+#overviewTableBody tr.round2-candidate td.score-col.score-played,
+#overviewTableBody tr.round2-candidate td.score-col:not(.score-played),
+#overviewTableBody tr.round2-candidate td.score-total-col,
+#overviewTableBody tr.round2-candidate td.station-total,
+#overviewTableBody tr.round2-candidate td.station-total.station-partial,
+#overviewTableBody tr.round2-candidate td.station-total.station-complete,
+#overviewTableBody tr.round2-candidate td.overall-total,
+#overviewTableBody tr.round2-candidate td.round2-total-cell,
+#overviewTableBody tr.round2-candidate td.sum-total-cell,
+#overviewTableBody tr.round2-candidate td.overall-rank,
+#overviewTableBody tr.round2-candidate td.status-cell,
+#overviewTableBody tr.round2-candidate td.round1-history-col{
+  background:var(--safe-ov-blue) !important;
+  color:#0f172a !important;
+  box-shadow:none !important;
+}
+
+/* ---------- ตกรอบ = แสด / finished ที่ไม่มี progress class ก็ถือเป็นกลุ่มจบแล้ว ---------- */
+#overviewTableBody tr.eliminated > td,
+#overviewTableBody tr.eliminated td.score-col,
+#overviewTableBody tr.eliminated td.score-col.score-played,
+#overviewTableBody tr.eliminated td.score-col:not(.score-played),
+#overviewTableBody tr.eliminated td.score-total-col,
+#overviewTableBody tr.eliminated td.station-total,
+#overviewTableBody tr.eliminated td.station-total.station-partial,
+#overviewTableBody tr.eliminated td.station-total.station-complete,
+#overviewTableBody tr.eliminated td.overall-total,
+#overviewTableBody tr.eliminated td.round2-total-cell,
+#overviewTableBody tr.eliminated td.sum-total-cell,
+#overviewTableBody tr.eliminated td.overall-rank,
+#overviewTableBody tr.eliminated td.status-cell,
+#overviewTableBody tr.eliminated td.round1-history-col,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) > td,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.score-col,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.score-col.score-played,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.score-col:not(.score-played),
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.score-total-col,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.station-total,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.station-total.station-partial,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.station-total.station-complete,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.overall-total,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.round2-total-cell,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.sum-total-cell,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.overall-rank,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.status-cell,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required) td.round1-history-col{
+  background:var(--safe-ov-orange) !important;
+  color:#0f172a !important;
+  box-shadow:none !important;
+}
+
+/* ---------- Shoot-off = แดง ชนะทุกสี ยกเว้นกำลังตี ---------- */
+#overviewTableBody tr.shoot-off-required:not(.live-active) > td,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.score-col,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.score-col.score-played,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.score-col:not(.score-played),
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.score-total-col,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.station-total,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.station-total.station-partial,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.station-total.station-complete,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.overall-total,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.round2-total-cell,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.sum-total-cell,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.overall-rank,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.status-cell,
+#overviewTableBody tr.shoot-off-required:not(.live-active) td.round1-history-col{
+  background:var(--safe-ov-red) !important;
+  color:#7f1d1d !important;
+  box-shadow:none !important;
+  font-weight:900 !important;
+}
+
+/* ---------- กำลังตี = เหลืองทั้งแถว ---------- */
+#overviewTableBody tr.live-active > td,
+#overviewTableBody tr.status-active > td,
+#overviewTableBody tr.live-active td.score-col,
+#overviewTableBody tr.status-active td.score-col,
+#overviewTableBody tr.live-active td.score-col:not(.score-played),
+#overviewTableBody tr.status-active td.score-col:not(.score-played),
+#overviewTableBody tr.live-active td.score-total-col,
+#overviewTableBody tr.status-active td.score-total-col,
+#overviewTableBody tr.live-active td.station-total,
+#overviewTableBody tr.status-active td.station-total,
+#overviewTableBody tr.live-active td.station-total.station-partial,
+#overviewTableBody tr.status-active td.station-total.station-partial,
+#overviewTableBody tr.live-active td.station-total.station-complete,
+#overviewTableBody tr.status-active td.station-total.station-complete,
+#overviewTableBody tr.live-active td.overall-total,
+#overviewTableBody tr.status-active td.overall-total,
+#overviewTableBody tr.live-active td.round2-total-cell,
+#overviewTableBody tr.status-active td.round2-total-cell,
+#overviewTableBody tr.live-active td.sum-total-cell,
+#overviewTableBody tr.status-active td.sum-total-cell,
+#overviewTableBody tr.live-active td.overall-rank,
+#overviewTableBody tr.status-active td.overall-rank,
+#overviewTableBody tr.live-active td.status-cell,
+#overviewTableBody tr.status-active td.status-cell,
+#overviewTableBody tr.live-active td.round1-history-col,
+#overviewTableBody tr.status-active td.round1-history-col{
+  background:var(--safe-ov-active) !important;
+  color:#111827 !important;
+  box-shadow:none !important;
+}
+#overviewTableBody tr.live-active > td:first-child,
+#overviewTableBody tr.status-active > td:first-child{border-left:6px solid var(--safe-ov-active-left) !important;}
+
+/* ระหว่างกำลังตี: แดงอ่อนเฉพาะช่องคะแนนที่กรอกแล้วเท่านั้น ไม่รวม Total */
+#overviewTableBody tr.live-active td.score-col.score-played,
+#overviewTableBody tr.status-active td.score-col.score-played,
+#overviewTableBody tr.live-active td.score-col.cursor-station.score-played,
+#overviewTableBody tr.status-active td.score-col.cursor-station.score-played{
+  background:var(--safe-ov-active-input) !important;
+  color:#991b1b !important;
+  box-shadow:inset 0 0 0 2px #f87171 !important;
+  font-weight:900 !important;
+}
+#overviewTableBody tr.live-active td.score-total-col,
+#overviewTableBody tr.status-active td.score-total-col,
+#overviewTableBody tr.live-active td.station-total,
+#overviewTableBody tr.status-active td.station-total{
+  background:var(--safe-ov-active) !important;
+  color:#111827 !important;
+  box-shadow:none !important;
+}
+
+/* placeholder สีเทา */
+#overviewTableBody tr.direct-placeholder td.score-col,
+#overviewTableBody tr.direct-placeholder td.score-total-col,
+#overviewTableBody tr.direct-placeholder td.station-total{
+  background:#94a3b8 !important;
+  color:#94a3b8 !important;
+}
+
+/* hover เป็นกรอบทั้งแถว ไม่ทำให้สีด่าง */
+#overviewTableBody tr[data-athlete-id]:hover > td{box-shadow:inset 0 1px 0 var(--safe-ov-frame), inset 0 -1px 0 var(--safe-ov-frame) !important;}
+#overviewTableBody tr[data-athlete-id]:hover > td:first-child{box-shadow:inset 5px 0 0 var(--safe-ov-frame), inset 0 1px 0 var(--safe-ov-frame), inset 0 -1px 0 var(--safe-ov-frame) !important;}
+#overviewTableBody tr.qualified-direct:not(.live-active):hover > td,
+#overviewTableBody tr.qualified-round2:not(.live-active):hover > td{background:var(--safe-ov-gold-hover) !important;}
+#overviewTableBody tr.round2-candidate:not(.live-active):hover > td{background:var(--safe-ov-blue-hover) !important;}
+#overviewTableBody tr.eliminated:not(.live-active):hover > td,
+#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required):not(.live-active):hover > td{background:var(--safe-ov-orange-hover) !important;}
+#overviewTableBody tr.shoot-off-required:not(.live-active):hover > td{background:var(--safe-ov-red-hover) !important;}
+#overviewTableBody tr.live-active:hover > td,
+#overviewTableBody tr.status-active:hover > td{background:var(--safe-ov-active) !important;}
+#overviewTableBody tr.live-active:hover td.score-col.score-played,
+#overviewTableBody tr.status-active:hover td.score-col.score-played{background:var(--safe-ov-active-input) !important;}
+
+/* ช่องสถานะอ่านง่ายขึ้น */
+.qualification-table thead th.compact-status-head,
+.qualification-table thead th.col-status,
+.qualification-table tbody td.status-cell{width:72px !important;min-width:72px !important;max-width:96px !important;padding:4px 6px !important;}
+.qualification-table tbody td.status-cell .status-pill{font-size:.58rem !important;padding:4px 8px !important;min-width:48px !important;}
+.status-pill.active{background:#fef3c7 !important;color:#92400e !important;border:1px solid #f59e0b !important;}
+.status-pill.finished{background:#fed7aa !important;color:#9a3412 !important;border:1px solid #fb923c !important;}
+.status-pill.direct{background:#fde68a !important;color:#854d0e !important;border:1px solid #f59e0b !important;}
+
+
+
+/* ===== FINAL REQUEST PATCH: only status colors / round2 green / direct-placeholder green =====
+   ฐานเดิมตามไฟล์ที่ส่งมา: แตะเฉพาะสีของ overview ไม่แตะ logic คะแนน
+*/
+:root{
+  --ov-pill-gray:#e5e7eb;
+  --ov-pill-yellow:#fef3c7;
+  --ov-pill-green:#dcfce7;
+  --ov-pill-blue:#dbeafe;
+  --ov-pill-orange:#ffedd5;
+  --ov-pill-red:#fee2e2;
+  --ov-row-round2-green:#dcfce7;
+  --ov-row-round2-green-hover:#bbf7d0;
+}
+
+/* เปลี่ยน "ผ่านไปตีรอบ 2" เป็นสีเขียว */
+.legend.r2{
+  background:var(--ov-pill-green) !important;
+  color:#166534 !important;
+  border-color:#86efac !important;
+}
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active) > td,
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active) td.score-col,
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active) td.score-total-col,
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active) td.station-total,
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active) td.overall-total,
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active) td.overall-rank,
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active) td.status-cell{
+  background:var(--ov-row-round2-green) !important;
+  color:#0f172a !important;
+}
+.qualification-table tbody tr.round2-candidate:not(.status-active):not(.live-active):hover > td{
+  background:var(--ov-row-round2-green-hover) !important;
+}
+
+/* สีสถานะคอลัมน์สุดท้ายให้ตรงกับ legend/สถานะ */
+.qualification-table tbody td.status-cell .status-pill{
+  min-width:52px !important;
+  padding:4px 8px !important;
+  font-size:.60rem !important;
+  border-width:1px !important;
+  border-style:solid !important;
+}
+.qualification-table tbody tr.status-waiting td.status-cell .status-pill{
+  background:var(--ov-pill-gray) !important;
+  color:#111827 !important;
+  border-color:#cbd5e1 !important;
+}
+.qualification-table tbody tr.status-active td.status-cell .status-pill,
+.qualification-table tbody tr.live-active td.status-cell .status-pill{
+  background:var(--ov-pill-yellow) !important;
+  color:#78350f !important;
+  border-color:#fbbf24 !important;
+}
+.qualification-table tbody tr.status-finished td.status-cell .status-pill{
+  background:var(--ov-pill-green) !important;
+  color:#166534 !important;
+  border-color:#86efac !important;
+}
+.qualification-table tbody tr.qualified-direct td.status-cell .status-pill{
+  background:var(--ov-pill-blue) !important;
+  color:#1e3a8a !important;
+  border-color:#93c5fd !important;
+}
+.qualification-table tbody tr.round2-candidate td.status-cell .status-pill{
+  background:var(--ov-pill-green) !important;
+  color:#166534 !important;
+  border-color:#86efac !important;
+}
+.qualification-table tbody tr.qualified-round2 td.status-cell .status-pill{
+  background:var(--ov-pill-blue) !important;
+  color:#1e3a8a !important;
+  border-color:#93c5fd !important;
+}
+.qualification-table tbody tr.eliminated td.status-cell .status-pill{
+  background:var(--ov-pill-orange) !important;
+  color:#9a3412 !important;
+  border-color:#fdba74 !important;
+}
+.qualification-table tbody tr.shoot-off-required td.status-cell .status-pill,
+.qualification-table tbody tr.shoot-off-required td.status-cell .shoot-off-badge,
+.qualification-table tbody tr.shoot-off-required td.status-cell .shoot-off-link{
+  background:#ef4444 !important;
+  color:#fff !important;
+  border-color:#ef4444 !important;
+}
+
+/* รอบ 2: ทีมที่ไม่ได้ตี/เข้ารอบตรง ไม่ให้เป็นขาวหรือเทา ให้เป็นเขียวอ่อน */
+.qualification-table.overview-round-2 tbody tr.direct-placeholder > td,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.score-col,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.score-total-col,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.station-total,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.r2-disabled,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.round2-total-cell,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.sum-total-cell{
+  background:#dcfce7 !important;
+  color:#166534 !important;
+}
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.r2-disabled,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.score-col.r2-disabled,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.score-total-col.r2-disabled,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.round2-total-cell{
+  color:transparent !important;
+}
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.r1-total,
+.qualification-table.overview-round-2 tbody tr.direct-placeholder td.round1-history-col{
+  background:#dcfce7 !important;
+  color:#166534 !important;
+  font-weight:1000 !important;
+}
+.qualification-table.overview-round-2 tbody tr.direct-placeholder:hover > td{
+  background:#bbf7d0 !important;
+}
+
+
+/* ===== EXACT 8 STATUS LABELS PATCH ===== */
+.qualification-table thead th.compact-status-head,
+.qualification-table thead th.col-status,
+.qualification-table tbody td.status-cell{
+  width:50px !important;
+  min-width:115px !important;
+  max-width:160px !important;
+  padding:4px 6px !important;
+}
+.qualification-table tbody td.status-cell .status-pill{
+  min-width:0 !important;
+  width:70% !important;
+  max-width:148px !important;
+  justify-content:center !important;
+  white-space:normal !important;
+  line-height:1.15 !important;
+  font-size:.62rem !important;
+  padding:5px 6px !important;
+}
+.status-legend .legend{font-weight:900;}
+
 </style>
 
 <div class="overview-page">
@@ -1560,7 +2591,7 @@
               <th rowspan="3" class="col-total sum-head">SUM</th>
               {% endif %}
               <th rowspan="3" class="col-class">Class</th>
-              <th rowspan="3" class="col-status">สถานะ</th>
+              <th rowspan="3" class="col-status compact-status-head">สถานะ</th>
             </tr>
             <tr>
               {% for station in [1,2,3,4,5] %}
@@ -1580,7 +2611,7 @@
           </thead>
           <tbody id="overviewTableBody">
             {% for row in rows %}
-            <tr class="status-{{ row.status }} {{ row.progress_class }} {{ 'direct-placeholder' if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else '' }} {{ 'cut-line-after' if row.cut_line_after else '' }}" data-athlete-id="{{ row.athlete.id }}"
+            <tr class="status-{{ row.status }} {{ 'live-active' if row.status == 'active' else '' }} {{ row.progress_class }} {{ 'direct-placeholder' if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else '' }} {{ 'cut-line-after' if row.cut_line_after else '' }}" data-athlete-id="{{ row.athlete.id }}"
               {% if not (row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder) %}onclick="window.location='{{ url_for('scorecard', athlete_id=row.athlete.id, round=round_no) }}'"{% endif %}>
               <td class="start-order">{{ row.display_order or row.athlete.start_order }}</td>
               <td class="lane-no">{{ row.display_lane_no or row.athlete.lane_no or '-' }}</td>
@@ -1598,11 +2629,14 @@
                 <td class="score-col r2-disabled" data-station="{{ station }}" data-distance="9">-</td>
                 <td class="score-total-col station-total r2-disabled" data-station="{{ station }}" data-distance="total">-</td>
                 {% else %}
-                <td class="score-col" data-station="{{ station }}" data-distance="6">{{ row.by_station[station].distances.get(6,0) }}</td>
-                <td class="score-col" data-station="{{ station }}" data-distance="7">{{ row.by_station[station].distances.get(7,0) }}</td>
-                <td class="score-col" data-station="{{ station }}" data-distance="8">{{ row.by_station[station].distances.get(8,0) }}</td>
-                <td class="score-col" data-station="{{ station }}" data-distance="9">{{ row.by_station[station].distances.get(9,0) }}</td>
-                <td class="score-total-col station-total" data-station="{{ station }}" data-distance="total">{{ row.by_station[station].total }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(6) %}score-played{% endif %}" data-station="{{ station }}" data-distance="6">{{ row.by_station[station].distances.get(6,0) }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(7) %}score-played{% endif %}" data-station="{{ station }}" data-distance="7">{{ row.by_station[station].distances.get(7,0) }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(8) %}score-played{% endif %}" data-station="{{ station }}" data-distance="8">{{ row.by_station[station].distances.get(8,0) }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(9) %}score-played{% endif %}" data-station="{{ station }}" data-distance="9">{{ row.by_station[station].distances.get(9,0) }}</td>
+                <td class="score-total-col station-total {% if row.by_station[station].is_complete %}station-complete{% elif row.by_station[station].played_count %}station-partial{% endif %}" data-station="{{ station }}" data-distance="total" data-played-count="{{ row.by_station[station].played_count }}">
+                  <span class="station-total-value">{{ row.by_station[station].total }}</span>
+                  {% if row.by_station[station].played_count %}<span class="station-progress-mini">ส{{ station }} {{ row.by_station[station].played_count }}/4</span>{% endif %}
+                </td>
                 {% endif %}
               {% endfor %}
               <td class="overall-total round2-total-cell">{{ '-' if round_no == 2 and event.has_round_two and row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else (row.round2_total if round_no == 2 and event.has_round_two and row.round2_total is defined else row.total) }}</td>
@@ -1610,11 +2644,27 @@
               <td class="sum-total-cell">{{ row.combined_total }}</td>
               {% endif %}
               <td class="overall-rank">{{ row.display_rank if row.display_rank is defined else row.rank }}</td>
-              <td>
-                <span class="status-pill {{ row.status }}">{{ 'เข้ารอบตรง' if row.status == 'direct' else ('กำลังตี' if row.status == 'active' else ('ตีเสร็จแล้ว' if row.status == 'finished' else 'รอคิว')) }}</span>
+              <td class="status-cell">
                 {% if row.shoot_off_required %}
-                  <span class="shoot-off-badge">Shoot-off</span>
-                  <a class="shoot-off-link" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.shoot_off_group_ids|join(','))) }}">บันทึกรอบพิเศษ</a>
+                  {% set status_text = 'Shoot-off' %}
+                {% elif row.progress_class == 'qualified-direct' %}
+                  {% set status_text = 'เข้ารอบตรง' %}
+                {% elif row.progress_class == 'round2-candidate' %}
+                  {% set status_text = 'ผ่านไปตีรอบ 2' %}
+                {% elif row.progress_class == 'qualified-round2' %}
+                  {% set status_text = 'เข้า Knockout' %}
+                {% elif row.progress_class == 'eliminated' %}
+                  {% set status_text = 'ตกรอบ' %}
+                {% elif row.status == 'active' %}
+                  {% set status_text = 'กำลังตี / มีการคีย์' %}
+                {% elif row.status == 'finished' %}
+                  {% set status_text = 'ตีแล้ว' %}
+                {% else %}
+                  {% set status_text = 'ยังไม่ตี' %}
+                {% endif %}
+                <span class="status-pill {{ row.status }}">{{ status_text }}</span>
+                {% if row.shoot_off_required %}
+                  <a class="shoot-off-link" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.shoot_off_group_ids|join(','))) }}">แก้</a>
                 {% endif %}
               </td>
             </tr>
@@ -1659,13 +2709,30 @@
   });
 }
 
-  function statusLabel(status) {
-    if (status === 'direct') return 'เข้ารอบตรง';
-    if (status === 'active') return 'กำลังตี';
-    if (status === 'finished') return 'ตีเสร็จแล้ว';
-    return 'รอคิว';
+  function statusLabel(item) {
+    const progressClass = item.progress_class || '';
+    if (item.shoot_off_required || progressClass.includes('shoot-off-required')) return 'Shoot-off';
+    if (progressClass.includes('qualified-direct')) return 'เข้ารอบตรง';
+    if (progressClass.includes('round2-candidate')) return 'ผ่านไปตีรอบ 2';
+    if (progressClass.includes('qualified-round2')) return 'เข้า Knockout';
+    if (progressClass.includes('eliminated')) return 'ตกรอบ';
+    if (item.status === 'active') return 'กำลังตี / มีการคีย์';
+    if (item.status === 'finished') return 'ตีแล้ว';
+    return 'ยังไม่ตี';
   }
 
+  function deriveCurrentStation(item) {
+    const stations = Object.entries(item.stations || {}).map(([stationNo, stationData]) => ({
+      stationNo: Number(stationNo),
+      playedCount: Number(stationData?.played_count || 0),
+      isComplete: !!stationData?.is_complete,
+    })).sort((a, b) => a.stationNo - b.stationNo);
+    const partial = stations.find(st => st.playedCount > 0 && !st.isComplete);
+    if (partial) return partial.stationNo;
+    const firstUnplayed = stations.find(st => !st.isComplete);
+    if (item.status === 'active') return (firstUnplayed && firstUnplayed.stationNo) || 1;
+    return null;
+  }
 
   function updateOverviewRows(items) {
     const tbody = document.getElementById('overviewTableBody');
@@ -1676,7 +2743,10 @@
     items.forEach(item => {
       const row = rowMap.get(String(item.athlete_id));
       if (!row) return;
-      row.className = `status-${item.status} ${item.progress_class || ''} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''}`;
+      const currentStation = deriveCurrentStation(item);
+      row.className = `status-${item.status} ${item.progress_class || ''} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''} ${item.status === 'active' ? 'live-active' : ''}`.trim();
+      row.dataset.currentStation = currentStation ? String(currentStation) : '';
+      row.querySelectorAll('.cursor-station').forEach(cell => cell.classList.remove('cursor-station'));
 
       const startOrder = row.querySelector('.start-order');
       const laneNo = row.querySelector('.lane-no');
@@ -1696,11 +2766,11 @@
       if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.round2_total ?? item.total ?? 0);
       if (sumTotal) sumTotal.textContent = item.combined_total ?? ((item.round1_total ?? 0) + (item.round2_total ?? item.total ?? 0));
       if (rank) rank.textContent = item.display_rank ?? item.rank;
-      const statusCell = row.querySelector('td:last-child');
+      const statusCell = row.querySelector('.status-cell') || row.querySelector('td:last-child');
       if (statusCell) {
         const ids = (item.shoot_off_group_ids || [item.athlete_id]).join(',');
-        const link = item.shoot_off_required ? `<span class="shoot-off-badge">Shoot-off</span><a class="shoot-off-link" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}">บันทึกรอบพิเศษ</a>` : '';
-        statusCell.innerHTML = `<span class="status-pill ${item.status}">${statusLabel(item.status)}</span>${link}`;
+        const link = item.shoot_off_required ? `<span class="shoot-off-badge">SO</span><a class="shoot-off-link" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}">แก้</a>` : '';
+        statusCell.innerHTML = `<span class="status-pill ${item.status}">${statusLabel(item)}</span>${link}`;
       }
 
       if (item.round1_stations || item.round2_stations) {
@@ -1711,9 +2781,35 @@
       }
       if (!item.is_round2_direct_placeholder) {
         for (const [station, stationData] of Object.entries(item.stations || {})) {
-          for (const [distance, value] of Object.entries(stationData)) {
+          const playedMap = stationData.played || {};
+          ['6', '7', '8', '9'].forEach(distance => {
             const cell = row.querySelector(`[data-station="${station}"][data-distance="${distance}"]`);
-            if (cell) cell.textContent = value;
+            if (cell) {
+              cell.textContent = stationData[distance] ?? 0;
+              cell.classList.toggle('score-played', !!playedMap[distance]);
+              cell.classList.toggle('cursor-station', item.status === 'active' && !!playedMap[distance]);
+            }
+          });
+          const totalCell = row.querySelector(`[data-station="${station}"][data-distance="total"]`);
+          if (totalCell) {
+            const playedCount = stationData.played_count ?? 0;
+            totalCell.dataset.playedCount = String(playedCount);
+            let valueSpan = totalCell.querySelector('.station-total-value');
+            if (!valueSpan) {
+              totalCell.innerHTML = '<span class="station-total-value"></span><span class="station-progress-mini"></span>';
+              valueSpan = totalCell.querySelector('.station-total-value');
+            }
+            valueSpan.textContent = stationData.total ?? 0;
+            let progressSpan = totalCell.querySelector('.station-progress-mini');
+            if (!progressSpan) {
+              progressSpan = document.createElement('span');
+              progressSpan.className = 'station-progress-mini';
+              totalCell.appendChild(progressSpan);
+            }
+            progressSpan.textContent = playedCount > 0 ? `ส${station} ${playedCount}/4` : '';
+            totalCell.classList.toggle('station-partial', playedCount > 0 && !stationData.is_complete);
+            totalCell.classList.toggle('station-complete', !!stationData.is_complete);
+            totalCell.classList.remove('cursor-station');
           }
         }
       }

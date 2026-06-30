@@ -612,6 +612,355 @@
       appearance: none;
     }
   }
+
+
+  /* ===== PATCH: ช่องตีแล้ว + scorecard ทีละสถานี + signature tablet fix ===== */
+  .played-under {
+    margin-bottom: 2px;
+    font-size: .52rem;
+    line-height: 1;
+    white-space: nowrap;
+    font-weight: 900;
+    color: #166534;
+  }
+  .played-under input {
+    transform: scale(.9);
+    vertical-align: middle;
+  }
+  .score-cell-wrap.cell-played {
+    box-shadow: inset 0 0 0 2px #22c55e;
+    background: #ecfdf5 !important;
+  }
+  .station-stepper {
+    display: none;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 8px 0 10px;
+    padding: 8px;
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    background: #f8fbff;
+  }
+  .station-stepper-label {
+    font-weight: 900;
+    color: #0f172a;
+    margin-right: 4px;
+  }
+  .station-step-btn {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #0f172a;
+    border-radius: 999px;
+    padding: 8px 11px;
+    min-height: 42px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .station-step-btn.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+  }
+  .station-step-hint {
+    flex-basis: 100%;
+    color: #64748b;
+    font-size: .74rem;
+    font-weight: 700;
+  }
+
+  .signature-modal-panel {
+    max-height: calc(100dvh - 28px);
+  }
+  .signature-modal-body {
+    overflow: hidden;
+  }
+  .signature-modal-actions {
+    background: #fff;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+
+  @media (min-width: 768px) and (max-width: 1180px) {
+    .signature-modal-panel { inset: 8px; max-height: calc(100dvh - 16px); }
+    .signature-modal-canvas { min-height: 0 !important; height: 100% !important; }
+    .signature-modal-actions { padding: 8px !important; }
+    #signatureModalSave { min-width: 180px; }
+  }
+
+  @media (max-width: 1180px) and (orientation: portrait) {
+    .station-stepper { display: flex; }
+    .scorecard-table-wrap { overflow-x: hidden; }
+    .scorecard-sheet { min-width: 0 !important; width: 100% !important; }
+    .scorecard-main-table { table-layout: fixed; width: 100%; }
+    .scorecard-main-table .vertical-side,
+    .scorecard-main-table .vertical-side2 { display: none !important; }
+    .scorecard-main-table .station-group:not(.active-station) { display: none !important; }
+    .scorecard-main-table th,
+    .scorecard-main-table td { font-size: .84rem !important; padding: 6px 4px !important; }
+    .scorecard-station-image-cell img { height: 110px !important; }
+    .round-col, .round-name, .running-total-label { width: 90px !important; min-width: 90px !important; }
+    .score-cell-wrap { width: auto !important; min-width: 0 !important; }
+    .score-input { width: 100% !important; min-width: 58px; height: 46px !important; font-size: 1.2rem !important; border-radius: 12px !important; }
+    .played-under, .red-under { font-size: .68rem !important; line-height: 1.15; }
+    .played-under input, .red-under input { transform: scale(1.15); }
+    .station-sum, .running-cumulative-total, .grand-total-cell, .round-running-total { font-size: 1rem !important; }
+    .scorecard-meta-table th, .scorecard-meta-table td { font-size: .68rem !important; padding: 4px 3px !important; }
+    .sheet-header { grid-template-columns: 48px 1fr 48px; }
+    .sheet-logo { height: 42px; font-size: .7rem; }
+  }
+
+  @media (max-width: 767px) and (orientation: portrait) {
+    .scorecard-main-table th,
+    .scorecard-main-table td { font-size: .76rem !important; padding: 5px 3px !important; }
+    .scorecard-station-image-cell img { height: 92px !important; }
+    .round-col, .round-name, .running-total-label { width: 74px !important; min-width: 74px !important; }
+    .score-input { min-width: 48px; height: 44px !important; font-size: 1.1rem !important; }
+    .station-step-btn { padding: 7px 9px; min-height: 40px; }
+    .signature-modal-panel { inset: 5px; max-height: calc(100dvh - 10px); }
+    .signature-modal-canvas { min-height: 0 !important; height: 100% !important; }
+  }
+
+
+  /* ===== FINAL MOBILE COMPACT PATCH ===== */
+  .responsive-toolbar{gap:8px;}
+  .responsive-toolbar .btn{
+    min-height:38px !important;
+    padding:8px 12px !important;
+    font-size:.84rem !important;
+    border-radius:12px !important;
+  }
+  .station-stepper{
+    gap:8px;
+  }
+  .station-step-btn{
+    min-height:38px !important;
+    padding:7px 10px !important;
+    font-size:.82rem !important;
+    line-height:1.1;
+  }
+  @media (max-width: 1180px) and (orientation: portrait) {
+    .station-stepper{
+      display:grid !important;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      align-items:stretch;
+      gap:8px;
+      padding:10px;
+    }
+    .station-stepper-label,
+    .station-step-hint{
+      grid-column: 1 / -1;
+    }
+    .station-step-hint{
+      margin-top:2px;
+      font-size:.66rem !important;
+    }
+    .station-step-btn{
+      width:100%;
+      min-height:36px !important;
+      padding:7px 6px !important;
+      font-size:.78rem !important;
+      border-radius:12px !important;
+    }
+    .responsive-toolbar{
+      display:grid !important;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      width:100%;
+      gap:8px;
+    }
+    .responsive-toolbar .btn{
+      width:100% !important;
+      min-height:36px !important;
+      padding:8px 6px !important;
+      font-size:.78rem !important;
+    }
+    .scorecard-main-table .round-col,
+    .scorecard-main-table .round-name,
+    .scorecard-main-table .running-total-label{
+      width:64px !important;
+      min-width:64px !important;
+    }
+    .scorecard-main-table .score-cell-wrap,
+    .scorecard-main-table .station-sum,
+    .scorecard-main-table .running-cumulative-total{
+      width:calc((100vw - 120px)/5) !important;
+      min-width:0 !important;
+    }
+    .scorecard-main-table .score-input{
+      width:100% !important;
+      min-width:0 !important;
+      height:42px !important;
+      font-size:1rem !important;
+    }
+  }
+  @media (max-width: 767px) {
+    .responsive-toolbar{
+      grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+    }
+    .responsive-toolbar .btn{
+      min-height:34px !important;
+      padding:7px 4px !important;
+      font-size:.74rem !important;
+    }
+    .scorecard-main-table .round-col,
+    .scorecard-main-table .round-name,
+    .scorecard-main-table .running-total-label{
+      width:58px !important;
+      min-width:58px !important;
+    }
+  }
+
+
+  /* ===== FINAL PHONE COMPACT: ให้สถานีเดียวครบ 6M/7M/8M/9M/รวม ในจอมือถือ ===== */
+  @media (max-width: 1180px) and (orientation: portrait) {
+    .scorecard-table-wrap {
+      overflow-x: hidden !important;
+    }
+    .scorecard-sheet {
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+    .scorecard-main-table {
+      width: 100% !important;
+      table-layout: fixed !important;
+    }
+    .scorecard-main-table th,
+    .scorecard-main-table td {
+      padding: 2px 1px !important;
+      font-size: .66rem !important;
+      line-height: 1.05 !important;
+    }
+    .scorecard-main-table .round-col,
+    .scorecard-main-table .round-name,
+    .scorecard-main-table .running-total-label {
+      width: 54px !important;
+      min-width: 54px !important;
+      max-width: 54px !important;
+      font-size: .62rem !important;
+      white-space: normal !important;
+    }
+    .scorecard-main-table .station-group.active-station {
+      width: calc((100% - 54px - 36px) / 5) !important;
+      min-width: 0 !important;
+      max-width: none !important;
+    }
+    .scorecard-main-table .grand-total-col,
+    .scorecard-main-table .grand-total-cell,
+    .scorecard-main-table .round-running-total {
+      width: 36px !important;
+      min-width: 36px !important;
+      max-width: 36px !important;
+      font-size: .58rem !important;
+    }
+    .scorecard-main-table .score-cell-wrap {
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+    }
+    .scorecard-main-table .score-input {
+      width: 34px !important;
+      min-width: 34px !important;
+      max-width: 34px !important;
+      height: 28px !important;
+      padding: 0 !important;
+      font-size: .84rem !important;
+      line-height: 1 !important;
+      border-radius: 10px !important;
+      text-align: center !important;
+    }
+    .played-under,
+    .red-under {
+      font-size: .50rem !important;
+      line-height: 1 !important;
+      margin: 0 0 1px !important;
+      white-space: nowrap !important;
+    }
+    .played-under input,
+    .red-under input {
+      transform: scale(.72) !important;
+      margin: 0 1px 0 0 !important;
+      vertical-align: middle !important;
+    }
+    .scorecard-station-image-cell img {
+      height: 54px !important;
+      max-width: 96% !important;
+      object-fit: contain !important;
+    }
+    .station-head {
+      font-size: .62rem !important;
+      padding: 3px 1px !important;
+    }
+    .station-subtitle {
+      font-size: .48rem !important;
+      line-height: 1 !important;
+    }
+    .station-sum,
+    .running-cumulative-total {
+      font-size: .68rem !important;
+      width: auto !important;
+      min-width: 0 !important;
+    }
+    .running-total-row td,
+    .running-total-row th {
+      height: 28px !important;
+    }
+  }
+
+  @media (max-width: 767px) and (orientation: portrait) {
+    .scorecard-meta-table th,
+    .scorecard-meta-table td {
+      font-size: .55rem !important;
+      padding: 2px 1px !important;
+    }
+    .sheet-header {
+      grid-template-columns: 40px 1fr 40px !important;
+      gap: 4px !important;
+    }
+    .sheet-logo {
+      height: 34px !important;
+      font-size: .58rem !important;
+      border-radius: 8px !important;
+    }
+    .sheet-title-main {
+      font-size: .82rem !important;
+    }
+    .sheet-title-sub {
+      font-size: .62rem !important;
+    }
+    .scorecard-main-table .round-col,
+    .scorecard-main-table .round-name,
+    .scorecard-main-table .running-total-label {
+      width: 48px !important;
+      min-width: 48px !important;
+      max-width: 48px !important;
+    }
+    .scorecard-main-table .station-group.active-station {
+      width: calc((100% - 48px - 32px) / 5) !important;
+    }
+    .scorecard-main-table .grand-total-col,
+    .scorecard-main-table .grand-total-cell,
+    .scorecard-main-table .round-running-total {
+      width: 32px !important;
+      min-width: 32px !important;
+      max-width: 32px !important;
+    }
+    .scorecard-main-table .score-input {
+      width: 30px !important;
+      min-width: 30px !important;
+      max-width: 30px !important;
+      height: 26px !important;
+      font-size: .78rem !important;
+    }
+    .played-under,
+    .red-under {
+      font-size: .44rem !important;
+    }
+    .scorecard-station-image-cell img {
+      height: 48px !important;
+    }
+  }
+
 </style>
 <section class="card scorecard-theme-{{ theme }}">
   <div class="section-head responsive-head">
@@ -629,6 +978,13 @@
   </div>
 
   <form method="post" id="scorecardForm">
+    <div class="station-stepper" id="stationStepper" aria-label="เลือกสถานีสำหรับหน้าจอแนวตั้ง">
+      <span class="station-stepper-label">กรอกทีละสถานี</span>
+      {% for station in [1,2,3,4,5] %}
+      <button type="button" class="station-step-btn {% if station == 1 %}active{% endif %}" data-station-step="{{ station }}">สถานี {{ station }}</button>
+      {% endfor %}
+      <span class="station-step-hint">มือถือ/แท็บเล็ตแนวตั้งจะแสดงเฉพาะสถานีที่เลือก เพื่อให้ช่องใหญ่ขึ้นและกดง่ายขึ้น</span>
+    </div>
     <div class="scorecard-table-wrap">
       <div id="scorecardCapture" class="scorecard-sheet print-landscape">
       <div class="sheet-header">
@@ -659,7 +1015,7 @@
             <th rowspan="3" class="vertical-side">S<br>H<br>O<br>O<br>T<br>I<br>N<br>G</th>
 
             {% for station in [1,2,3,4,5] %}
-            <th colspan="5" class="station-head station-color-{{ station }}">
+            <th colspan="5" class="station-head station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}">
               <div>สถานีที่ {{ station }}</div>
               <div class="station-subtitle">
                 {% if station == 1 %}ยิงลูกเดี่ยว{% endif %}
@@ -677,7 +1033,7 @@
 
           <tr>
             {% for station in [1,2,3,4,5] %}
-            <th colspan="5" class="station-image-cell scorecard-station-image-cell">
+            <th colspan="5" class="station-image-cell scorecard-station-image-cell station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}">
               <img src="{{ url_for('static', filename=station_images[station-1]) }}" alt="station {{ station }}">
             </th>
             {% endfor %}
@@ -690,11 +1046,11 @@
           <tr class="score-head-row">
             <th class="round-col">รอบแข่งขัน</th>
             {% for station in [1,2,3,4,5] %}
-            <th class="station-color-{{ station }}">6M</th>
-            <th class="station-color-{{ station }}">7M</th>
-            <th class="station-color-{{ station }}">8M</th>
-            <th class="station-color-{{ station }}">9M</th>
-            <th class="station-color-{{ station }}">รวม</th>
+            <th class="station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}">6M</th>
+            <th class="station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}">7M</th>
+            <th class="station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}">8M</th>
+            <th class="station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}">9M</th>
+            <th class="station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}">รวม</th>
             {% endfor %}
             <th class="grand-total-col">คะแนนรวม</th>
           </tr>
@@ -710,8 +1066,19 @@
             {% for station in [1,2,3,4,5] %}
               {% for distance in [6,7,8,9] %}
               {% set item = score_map.get((r, station, distance), {}) %}
-              <td class="station-color-{{ station }} score-cell-wrap">
+              <td class="station-color-{{ station }} score-cell-wrap station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %} {% if item.get('is_scored') %}cell-played{% endif %}">
                 {% if editable %}
+                <div class="played-under">
+                  <label>
+                    <input type="checkbox"
+                           class="played-check"
+                           data-round="{{ r }}"
+                           data-station="{{ station }}"
+                           data-distance="{{ distance }}"
+                           {% if item.get('is_scored') %}checked{% endif %}>
+                    ตีแล้ว
+                  </label>
+                </div>
                 <select class="score-input auto-score"
                         data-round="{{ r }}"
                         data-station="{{ station }}"
@@ -735,12 +1102,13 @@
                 </div>
                 {% else %}
                 <div class="readonly-score">{{ item.get('score','') }}</div>
+                <div class="played-under readonly-played">{% if item.get('is_scored') %}ตีแล้ว{% endif %}</div>
                 <div class="red-under readonly-red">{% if item.get('is_red_card') %}แดง{% endif %}</div>
                 {% endif %}
               </td>
               {% endfor %}
 
-              <td class="station-sum station-color-{{ station }}" id="station-total-{{ r }}-{{ station }}">
+              <td class="station-sum station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}" id="station-total-{{ r }}-{{ station }}">
                 {{ station_totals.get((r, station), 0) }}
               </td>
             {% endfor %}
@@ -752,11 +1120,11 @@
             <th class="running-total-label"></th>
 
             {% for station in [1,2,3,4,5] %}
-              <td class="running-blank station-color-{{ station }}"></td>
-              <td class="running-blank station-color-{{ station }}"></td>
-              <td class="running-blank station-color-{{ station }}"></td>
-              <td class="running-blank station-color-{{ station }}"></td>
-              <td class="running-cumulative-total red-frame-cell station-color-{{ station }}"
+              <td class="running-blank station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}"></td>
+              <td class="running-blank station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}"></td>
+              <td class="running-blank station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}"></td>
+              <td class="running-blank station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}"></td>
+              <td class="running-cumulative-total red-frame-cell station-color-{{ station }} station-group station-group-{{ station }} {% if station == 1 %}active-station{% endif %}"
                   id="station-running-total-{{ r }}-{{ station }}">
                 {{ running.get(station, 0) }}
               </td>
@@ -1037,6 +1405,7 @@
     const stationNo = el.dataset.station;
     const distanceM = el.dataset.distance;
     const red = document.querySelector(`.red-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`)?.checked || false;
+    const played = document.querySelector(`.played-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`)?.checked || false;
 
     const res = await fetch(`{{ url_for('autosave_scorecard', athlete_id=athlete.id) }}`, {
       method: 'POST',
@@ -1046,7 +1415,8 @@
         station_no: stationNo,
         distance_m: distanceM,
         score: el.value,
-        red: red
+        red: red,
+        played: played
       })
     });
 
@@ -1062,6 +1432,9 @@
     if (roundTotalEl) roundTotalEl.textContent = data.round_total ?? 0;
     if (roundRunningEl) roundRunningEl.textContent = data.round_total ?? 0;
 
+    const cell = el.closest('.score-cell-wrap');
+    if (cell) cell.classList.toggle('cell-played', played);
+
     let acc = 0;
     for (let s = 1; s <= 5; s++) {
       const stEl = document.getElementById(`station-total-${roundNo}-${s}`);
@@ -1073,14 +1446,37 @@
   }
 
   document.querySelectorAll('.auto-score').forEach(el => {
-    el.addEventListener('change', () => autosaveCell(el));
+    el.addEventListener('change', () => {
+      const playedBox = document.querySelector(`.played-check[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`);
+      if (playedBox && el.value !== '') playedBox.checked = true;
+      autosaveCell(el);
+    });
   });
 
-  document.querySelectorAll('.red-check').forEach(el => {
+  document.querySelectorAll('.played-check, .red-check').forEach(el => {
     el.addEventListener('change', () => {
       const target = document.querySelector(`.auto-score[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`);
       if (target) autosaveCell(target);
     });
   });
+
+  function setActiveStation(stationNo) {
+    document.querySelectorAll('.station-step-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.stationStep === String(stationNo));
+    });
+    document.querySelectorAll('.station-group').forEach(el => {
+      el.classList.toggle('active-station', el.classList.contains(`station-group-${stationNo}`));
+    });
+    try { localStorage.setItem('scorecard-active-station', String(stationNo)); } catch (e) {}
+  }
+
+  document.querySelectorAll('.station-step-btn').forEach(btn => {
+    btn.addEventListener('click', () => setActiveStation(btn.dataset.stationStep));
+  });
+
+  try {
+    const savedStation = localStorage.getItem('scorecard-active-station');
+    if (savedStation && ['1','2','3','4','5'].includes(savedStation)) setActiveStation(savedStation);
+  } catch (e) {}
 </script>
 {% endblock %}

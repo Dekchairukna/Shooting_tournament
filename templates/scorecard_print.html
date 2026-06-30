@@ -303,6 +303,62 @@
     .signature-grid > div { min-height: 24px; padding: 3px 4px; }
     .signature-image-print { max-height: 20px; }
   }
+
+
+  .signature-text-print{
+    display:block;
+    width:100%;
+    max-width:100%;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:clip;
+    line-height:1;
+    font-weight:900;
+    text-align:center;
+    transform-origin:center center;
+    font-size:10px;
+  }
+  .signature-grid > div{
+    height:30px;
+    max-height:30px;
+    overflow:hidden !important;
+    justify-content:center;
+  }
+  .rank-col .signature-text-print,
+  .rank-col2 .signature-text-print{
+    font-size:9px;
+    transform:scaleX(.86);
+  }
+  @media print{
+    .signature-text-print{font-size:8.5px !important; transform:scaleX(.82);}
+    .signature-grid > div{height:24px !important; max-height:24px !important; min-height:24px !important;}
+    .rank-col .signature-text-print,
+    .rank-col2 .signature-text-print{font-size:7.4px !important; transform:scaleX(.72);}
+  }
+
+
+  /* ===== PATCH LATEST: บังคับสีตอนพิมพ์ใบเดียวให้ตรงกับตัวอย่าง ===== */
+  .round-table,
+  .round-table td,
+  .round-table th,
+  .red-frame-cell {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .round-table td[style*="0, 255"] {
+    color: rgb(4, 0, 255) !important;
+    font-weight: 800 !important;
+  }
+  .round-table td[style*="255, 0, 0"] {
+    color: rgb(255, 0, 0) !important;
+    font-weight: 900 !important;
+  }
+  @media print {
+    .round-table td[style*="0, 255"] { color: rgb(4, 0, 255) !important; }
+    .round-table td[style*="255, 0, 0"] { color: rgb(255, 0, 0) !important; }
+    .red-frame-cell { box-shadow: inset 0 0 0 3px red !important; color:#000 !important; background:#fff !important; }
+  }
+
 </style>
 
 <div class="print-tools">
@@ -372,7 +428,18 @@
       {% for round_label in round_labels %}
       {% set rn = loop.index %}
       {% set sig = round_signatures[rn] %}
-      {% set has_started = sig and (sig.started_at or sig.finished_at) %}
+      {% set ns_started = namespace(value=(sig and (sig.started_at or sig.finished_at))) %}
+      {% if not ns_started.value %}
+        {% for st in [1,2,3,4,5] %}
+          {% for dm in [6,7,8,9] %}
+            {% set entry = score_map.get((rn, st, dm)) %}
+            {% if entry and ((entry.is_scored if entry.is_scored is defined else false) or (entry.score is not none and entry.score != '')) %}
+              {% set ns_started.value = true %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+      {% set has_started = ns_started.value %}
 
       <tr>
         <td class="round-label-col">{{ round_labels[rn-1] }}</td>
@@ -428,7 +495,7 @@
           {% if round_signatures[rn] and round_signatures[rn].athlete_signature %}
           <img src="{{ round_signatures[rn].athlete_signature }}" alt="ลายเซ็นนักกีฬา" class="signature-image-print">
           {% else %}
-          <div>{{ round_signatures[rn].athlete_name or '' if round_signatures[rn] else '' }}</div>
+          <span class="signature-text-print">{{ (round_signatures[rn].athlete_name if round_signatures[rn] else '') or '' }}</span>
           {% endif %}
         </td>
 
@@ -454,14 +521,14 @@
         {% if round_signatures[rn] and round_signatures[rn].referee_signature %}
         <img src="{{ round_signatures[rn].referee_signature }}" alt="ลายเซ็นกรรมการ" class="signature-image-print">
         {% else %}
-        {{ round_signatures[rn].referee_name or '' if round_signatures[rn] else '' }}
+        <span class="signature-text-print">{{ (round_signatures[rn].referee_name if round_signatures[rn] else '') or '' }}</span>
         {% endif %}
       </div>
       <div>
         {% if round_signatures[rn] and round_signatures[rn].recorder_signature %}
         <img src="{{ round_signatures[rn].recorder_signature }}" alt="ลายเซ็นผู้บันทึก" class="signature-image-print">
         {% else %}
-        {{ round_signatures[rn].recorder_name or '' if round_signatures[rn] else '' }}
+        <span class="signature-text-print">{{ (round_signatures[rn].recorder_name if round_signatures[rn] else '') or '' }}</span>
         {% endif %}
       </div>
       {% endfor %}

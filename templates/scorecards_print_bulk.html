@@ -206,6 +206,92 @@
       min-height: 100vh;
     }
   }
+
+
+  .signature-text-print{
+    display:block;
+    width:100%;
+    max-width:100%;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:clip;
+    line-height:1;
+    font-weight:900;
+    text-align:center;
+    transform-origin:center center;
+    font-size:10px;
+  }
+  .signature-grid > div{
+    height:34px;
+    max-height:34px;
+    overflow:hidden !important;
+    justify-content:center;
+  }
+  .rank-col .signature-text-print,
+  .rank-col2 .signature-text-print{
+    font-size:9px;
+    transform:scaleX(.86);
+  }
+  @media print{
+    .signature-text-print{font-size:8.5px !important; transform:scaleX(.82);}
+    .signature-grid > div{height:26px !important; max-height:26px !important; min-height:26px !important; padding:3px 4px !important;}
+    .rank-col .signature-text-print,
+    .rank-col2 .signature-text-print{font-size:7.4px !important; transform:scaleX(.72);}
+  }
+
+
+  /* ===== PATCH LATEST: พิมพ์รวมให้สีเหมือนใบสกอร์การ์ดตัวอย่าง ===== */
+  .round-table {
+    table-layout: fixed !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .score-blue,
+  .round-table td.score-blue {
+    color: rgb(4, 0, 255) !important;
+    font-weight: 800 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .score-red,
+  .round-table td.score-red,
+  .station-total-col.score-red {
+    color: rgb(255, 0, 0) !important;
+    font-weight: 900 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .red-frame-cell {
+    position: relative !important;
+    box-shadow: inset 0 0 0 3px red !important;
+    color: rgb(0, 0, 0) !important;
+    font-weight: 900 !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .cg-round { width: 110px; }
+  .cg-distance { width: 32px; }
+  .cg-station-total { width: 40px; }
+  .cg-grand-total { width: 52px; }
+  .cg-rank { width: 42px; }
+  .cg-athlete-sign { width: 82px; }
+  @media print {
+    @page { size: A4 landscape; margin: 6mm; }
+    body, .sheet, .round-table, .round-table td, .round-table th {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    .score-blue,
+    .round-table td.score-blue,
+    .round-table td .score-blue { color: rgb(4, 0, 255) !important; }
+    .score-red,
+    .round-table td.score-red,
+    .round-table td .score-red { color: rgb(255, 0, 0) !important; }
+    .red-frame-cell { box-shadow: inset 0 0 0 3px red !important; color:#000 !important; background:#fff !important; }
+  }
+
 </style>
 
 <div class="print-tools">
@@ -241,6 +327,15 @@
   </div>
 
   <table class="round-table">
+    <colgroup>
+      <col class="cg-round">
+      {% for st in [1,2,3,4,5] %}
+      <col class="cg-distance"><col class="cg-distance"><col class="cg-distance"><col class="cg-distance"><col class="cg-station-total">
+      {% endfor %}
+      <col class="cg-grand-total">
+      <col class="cg-rank">
+      <col class="cg-athlete-sign">
+    </colgroup>
     <thead>
       <tr>
         <th rowspan="3" class="round-label-col">รอบแข่งขัน</th>
@@ -274,18 +369,29 @@
       {% for round_label in round_labels %}
       {% set rn = loop.index %}
       {% set sig = round_signatures[rn] %}
-      {% set has_started = sig and (sig.started_at or sig.finished_at) %}
+      {% set ns_started = namespace(value=(sig and (sig.started_at or sig.finished_at))) %}
+      {% if not ns_started.value %}
+        {% for st in [1,2,3,4,5] %}
+          {% for dm in [6,7,8,9] %}
+            {% set entry = score_map.get((rn, st, dm)) %}
+            {% if entry and ((entry.is_scored if entry.is_scored is defined else false) or (entry.score is not none and entry.score != '')) %}
+              {% set ns_started.value = true %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+      {% set has_started = ns_started.value %}
 
       <tr>
         <td class="round-label-col">{{ round_labels[rn-1] }}</td>
 
         {% for st in [1,2,3,4,5] %}
-        <td>{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</td>
-        <td>{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</td>
-        <td>{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</td>
-        <td>{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</td>
-        <td class="station-total-col">
-          {{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</span></td>
+        <td class="station-total-col score-red">
+          <span class="score-red" style="color: rgb(255, 0, 0);">{{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}</span>
         </td>
         {% endfor %}
 
@@ -305,7 +411,7 @@
         <td></td>
         <td></td>
         <td></td>
-        <td class="station-total-col">
+        <td class="station-total-col red-frame-cell">
           {% if has_started %}
           {% set ns.running = ns.running + (station_totals[(rn, st)] if station_totals[(rn, st)] is defined else 0) %}
           {{ ns.running }}
@@ -323,7 +429,7 @@
           {% if round_signatures[rn] and round_signatures[rn].athlete_signature %}
           <img src="{{ round_signatures[rn].athlete_signature }}" alt="ลายเซ็นนักกีฬา" class="signature-image-print">
           {% else %}
-          <div>{{ round_signatures[rn].athlete_name or '' if round_signatures[rn] else '' }}</div>
+          <span class="signature-text-print">{{ (round_signatures[rn].athlete_name if round_signatures[rn] else '') or '' }}</span>
           {% endif %}
         </td>
       </tr>
@@ -346,14 +452,14 @@
         {% if round_signatures[rn] and round_signatures[rn].referee_signature %}
         <img src="{{ round_signatures[rn].referee_signature }}" alt="ลายเซ็นกรรมการ" class="signature-image-print">
         {% else %}
-        {{ round_signatures[rn].referee_name or '' if round_signatures[rn] else '' }}
+        <span class="signature-text-print">{{ (round_signatures[rn].referee_name if round_signatures[rn] else '') or '' }}</span>
         {% endif %}
       </div>
       <div>
         {% if round_signatures[rn] and round_signatures[rn].recorder_signature %}
         <img src="{{ round_signatures[rn].recorder_signature }}" alt="ลายเซ็นผู้บันทึก" class="signature-image-print">
         {% else %}
-        {{ round_signatures[rn].recorder_name or '' if round_signatures[rn] else '' }}
+        <span class="signature-text-print">{{ (round_signatures[rn].recorder_name if round_signatures[rn] else '') or '' }}</span>
         {% endif %}
       </div>
       {% endfor %}
