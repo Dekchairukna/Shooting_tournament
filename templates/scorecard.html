@@ -689,7 +689,9 @@
     #signatureModalSave { min-width: 180px; }
   }
 
-  @media (max-width: 1180px) and (orientation: portrait) {
+  /* แสดงทีละสถานีเฉพาะโทรศัพท์แนวตั้ง
+     แท็บเล็ตและคอมพิวเตอร์ยังใช้ตารางเต็มแบบเดิม */
+  @media screen and (max-width: 767px) and (orientation: portrait) {
     .station-stepper { display: flex; }
     .scorecard-table-wrap { overflow-x: hidden; }
     .scorecard-sheet { min-width: 0 !important; width: 100% !important; }
@@ -740,7 +742,7 @@
     font-size:.82rem !important;
     line-height:1.1;
   }
-  @media (max-width: 1180px) and (orientation: portrait) {
+  @media screen and (max-width: 767px) and (orientation: portrait) {
     .station-stepper{
       display:grid !important;
       grid-template-columns: repeat(3, minmax(0,1fr));
@@ -813,7 +815,7 @@
 
 
   /* ===== FINAL PHONE COMPACT: ให้สถานีเดียวครบ 6M/7M/8M/9M/รวม ในจอมือถือ ===== */
-  @media (max-width: 1180px) and (orientation: portrait) {
+  @media screen and (max-width: 767px) and (orientation: portrait) {
     .scorecard-table-wrap {
       overflow-x: hidden !important;
     }
@@ -821,9 +823,18 @@
       width: 100% !important;
       min-width: 0 !important;
     }
-    .scorecard-main-table {
+    .scorecard-main-table,
+    .scorecard-balanced-table {
       width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
       table-layout: fixed !important;
+    }
+    /* มือถือใช้ปุ่มเลือกสถานีด้านบนอยู่แล้ว จึงตัดรูปสถานีที่กินพื้นที่
+       และเริ่มตารางที่ 6M/7M/8M/9M/รวมทันที */
+    .scorecard-main-table thead > tr:first-child,
+    .scorecard-main-table thead > tr:nth-child(2) {
+      display: none !important;
     }
     .scorecard-main-table th,
     .scorecard-main-table td {
@@ -841,16 +852,16 @@
       white-space: normal !important;
     }
     .scorecard-main-table .station-group.active-station {
-      width: calc((100% - 54px - 36px) / 5) !important;
+      width: 14% !important;
       min-width: 0 !important;
       max-width: none !important;
     }
     .scorecard-main-table .grand-total-col,
     .scorecard-main-table .grand-total-cell,
     .scorecard-main-table .round-running-total {
-      width: 36px !important;
-      min-width: 36px !important;
-      max-width: 36px !important;
+      width: 10% !important;
+      min-width: 0 !important;
+      max-width: none !important;
       font-size: .58rem !important;
     }
     .scorecard-main-table .score-cell-wrap {
@@ -859,10 +870,10 @@
       max-width: none !important;
     }
     .scorecard-main-table .score-input {
-      width: 34px !important;
-      min-width: 34px !important;
-      max-width: 34px !important;
-      height: 28px !important;
+      width: calc(100% - 2px) !important;
+      min-width: 0 !important;
+      max-width: 42px !important;
+      height: 34px !important;
       padding: 0 !important;
       font-size: .84rem !important;
       line-height: 1 !important;
@@ -931,26 +942,26 @@
     .scorecard-main-table .round-col,
     .scorecard-main-table .round-name,
     .scorecard-main-table .running-total-label {
-      width: 48px !important;
-      min-width: 48px !important;
-      max-width: 48px !important;
+      width: 20% !important;
+      min-width: 0 !important;
+      max-width: none !important;
     }
     .scorecard-main-table .station-group.active-station {
-      width: calc((100% - 48px - 32px) / 5) !important;
+      width: 14% !important;
     }
     .scorecard-main-table .grand-total-col,
     .scorecard-main-table .grand-total-cell,
     .scorecard-main-table .round-running-total {
-      width: 32px !important;
-      min-width: 32px !important;
-      max-width: 32px !important;
+      width: 10% !important;
+      min-width: 0 !important;
+      max-width: none !important;
     }
     .scorecard-main-table .score-input {
-      width: 30px !important;
-      min-width: 30px !important;
-      max-width: 30px !important;
-      height: 26px !important;
-      font-size: .78rem !important;
+      width: calc(100% - 2px) !important;
+      min-width: 0 !important;
+      max-width: 42px !important;
+      height: 34px !important;
+      font-size: .86rem !important;
     }
     .played-under,
     .red-under {
@@ -1240,28 +1251,43 @@
   const signatureModalClear = document.getElementById('signatureModalClear');
   const signatureModalSave = document.getElementById('signatureModalSave');
   const signatureCtx = signatureModalCanvas.getContext('2d');
+
   let activeSignatureTarget = null;
   let signatureDrawing = false;
   let signatureDirty = false;
 
   function resizeModalCanvas() {
     if (!signatureModal || signatureModal.classList.contains('hidden')) return;
+
     const ratio = window.devicePixelRatio || 1;
     const rect = signatureModalCanvas.getBoundingClientRect();
+
     signatureModalCanvas.width = rect.width * ratio;
     signatureModalCanvas.height = rect.height * ratio;
+
     signatureCtx.setTransform(1, 0, 0, 1, 0, 0);
     signatureCtx.scale(ratio, ratio);
-    signatureCtx.lineWidth = 2.5;
+    signatureCtx.lineWidth = 5.5;
     signatureCtx.lineCap = 'round';
     signatureCtx.lineJoin = 'round';
     signatureCtx.strokeStyle = '#111827';
 
     if (activeSignatureTarget) {
       const hiddenInput = document.getElementById(activeSignatureTarget);
+
       if (hiddenInput && hiddenInput.value) {
         const img = new Image();
-        img.onload = () => signatureCtx.drawImage(img, 0, 0, rect.width, rect.height);
+
+        img.onload = () => {
+          signatureCtx.drawImage(
+            img,
+            0,
+            0,
+            rect.width,
+            rect.height
+          );
+        };
+
         img.src = hiddenInput.value;
       }
     }
@@ -1270,23 +1296,33 @@
   function signaturePos(e) {
     const rect = signatureModalCanvas.getBoundingClientRect();
     const point = e.touches ? e.touches[0] : e;
-    return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+
+    return {
+      x: point.clientX - rect.left,
+      y: point.clientY - rect.top
+    };
   }
 
   function signatureStart(e) {
     signatureDrawing = true;
     signatureDirty = true;
+
     const p = signaturePos(e);
+
     signatureCtx.beginPath();
     signatureCtx.moveTo(p.x, p.y);
+
     e.preventDefault();
   }
 
   function signatureMove(e) {
     if (!signatureDrawing) return;
+
     const p = signaturePos(e);
+
     signatureCtx.lineTo(p.x, p.y);
     signatureCtx.stroke();
+
     e.preventDefault();
   }
 
@@ -1297,10 +1333,12 @@
   function openSignatureModal(targetId, title) {
     activeSignatureTarget = targetId;
     signatureDirty = false;
+
     signatureModalTitle.textContent = title || 'ลงลายเซ็น';
     signatureModal.classList.remove('hidden');
     document.body.classList.add('signature-modal-open');
     signatureModal.setAttribute('aria-hidden', 'false');
+
     setTimeout(resizeModalCanvas, 20);
   }
 
@@ -1308,14 +1346,23 @@
     signatureModal.classList.add('hidden');
     document.body.classList.remove('signature-modal-open');
     signatureModal.setAttribute('aria-hidden', 'true');
+
     activeSignatureTarget = null;
   }
 
   function setSignaturePreview(targetId, dataUrl) {
     const input = document.getElementById(targetId);
-    const img = document.querySelector(`[data-preview-img="${targetId}"]`);
-    const placeholder = document.querySelector(`[data-preview-placeholder="${targetId}"]`);
-    if (input) input.value = dataUrl || '';
+    const img = document.querySelector(
+      `[data-preview-img="${targetId}"]`
+    );
+    const placeholder = document.querySelector(
+      `[data-preview-placeholder="${targetId}"]`
+    );
+
+    if (input) {
+      input.value = dataUrl || '';
+    }
+
     if (img) {
       if (dataUrl) {
         img.src = dataUrl;
@@ -1325,6 +1372,7 @@
         img.classList.add('hidden');
       }
     }
+
     if (placeholder) {
       placeholder.classList.toggle('hidden', !!dataUrl);
     }
@@ -1333,69 +1381,235 @@
   document.querySelectorAll('.signature-open-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.disabled) return;
-      openSignatureModal(btn.dataset.target, btn.dataset.title);
+
+      openSignatureModal(
+        btn.dataset.target,
+        btn.dataset.title
+      );
     });
   });
 
   document.querySelectorAll('.signature-clear-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.disabled) return;
+
       setSignaturePreview(btn.dataset.target, '');
     });
   });
 
-  signatureModalCanvas.addEventListener('mousedown', signatureStart);
-  signatureModalCanvas.addEventListener('mousemove', signatureMove);
-  window.addEventListener('mouseup', signatureEnd);
-  signatureModalCanvas.addEventListener('touchstart', signatureStart, { passive: false });
-  signatureModalCanvas.addEventListener('touchmove', signatureMove, { passive: false });
-  signatureModalCanvas.addEventListener('touchend', signatureEnd);
+  signatureModalCanvas.addEventListener(
+    'mousedown',
+    signatureStart
+  );
 
-  signatureModalClose.addEventListener('click', closeSignatureModal);
-  signatureModal.querySelector('.signature-modal-backdrop').addEventListener('click', closeSignatureModal);
+  signatureModalCanvas.addEventListener(
+    'mousemove',
+    signatureMove
+  );
+
+  window.addEventListener(
+    'mouseup',
+    signatureEnd
+  );
+
+  signatureModalCanvas.addEventListener(
+    'touchstart',
+    signatureStart,
+    { passive: false }
+  );
+
+  signatureModalCanvas.addEventListener(
+    'touchmove',
+    signatureMove,
+    { passive: false }
+  );
+
+  signatureModalCanvas.addEventListener(
+    'touchend',
+    signatureEnd
+  );
+
+  signatureModalClose.addEventListener(
+    'click',
+    closeSignatureModal
+  );
+
+  signatureModal
+    .querySelector('.signature-modal-backdrop')
+    .addEventListener('click', closeSignatureModal);
+
   signatureModalClear.addEventListener('click', () => {
     const rect = signatureModalCanvas.getBoundingClientRect();
-    signatureCtx.clearRect(0, 0, rect.width, rect.height);
-    signatureDirty = false;
+
+    signatureCtx.clearRect(
+      0,
+      0,
+      rect.width,
+      rect.height
+    );
+
+    signatureDirty = true;
   });
+
   function exportCompactSignatureDataUrl() {
-    // บันทึกลายเซ็นแบบย่อขนาดก่อนส่งฟอร์ม เพื่อกัน iPad ส่งข้อมูลใหญ่เกินจนบันทึกไม่ได้
-    const srcRect = signatureModalCanvas.getBoundingClientRect();
+    const sourceCanvas = signatureModalCanvas;
+    const sourceCtx = sourceCanvas.getContext('2d');
+
+    const sourceWidth = sourceCanvas.width;
+    const sourceHeight = sourceCanvas.height;
+
+    const imageData = sourceCtx.getImageData(
+      0,
+      0,
+      sourceWidth,
+      sourceHeight
+    );
+
+    const pixels = imageData.data;
+
+    let minX = sourceWidth;
+    let minY = sourceHeight;
+    let maxX = -1;
+    let maxY = -1;
+
+    // ค้นหาขอบเขตจริงของลายเซ็น
+    for (let y = 0; y < sourceHeight; y++) {
+      for (let x = 0; x < sourceWidth; x++) {
+        const alphaIndex =
+          ((y * sourceWidth + x) * 4) + 3;
+
+        const alpha = pixels[alphaIndex];
+
+        if (alpha > 8) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    // ไม่มีลายเซ็น
+    if (maxX < minX || maxY < minY) {
+      return '';
+    }
+
+    // เพิ่มขอบรอบลายเซ็นเล็กน้อย
+    const sourcePadding = Math.ceil(
+      Math.max(sourceWidth, sourceHeight) * 0.015
+    );
+
+    minX = Math.max(
+      0,
+      minX - sourcePadding
+    );
+
+    minY = Math.max(
+      0,
+      minY - sourcePadding
+    );
+
+    maxX = Math.min(
+      sourceWidth - 1,
+      maxX + sourcePadding
+    );
+
+    maxY = Math.min(
+      sourceHeight - 1,
+      maxY + sourcePadding
+    );
+
+    const cropWidth = maxX - minX + 1;
+    const cropHeight = maxY - minY + 1;
+
+    // สร้างภาพสำหรับบันทึก
     const exportCanvas = document.createElement('canvas');
+
     exportCanvas.width = 900;
     exportCanvas.height = 260;
+
     const exportCtx = exportCanvas.getContext('2d');
-    exportCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
-    exportCtx.lineCap = 'round';
-    exportCtx.lineJoin = 'round';
-    exportCtx.drawImage(
-      signatureModalCanvas,
-      0,
-      0,
-      signatureModalCanvas.width,
-      signatureModalCanvas.height,
+
+    exportCtx.clearRect(
       0,
       0,
       exportCanvas.width,
       exportCanvas.height
     );
+
+    exportCtx.imageSmoothingEnabled = true;
+    exportCtx.imageSmoothingQuality = 'high';
+
+    const outputPadding = 18;
+
+    // คำนวณอัตราขยายโดยไม่ทำให้ลายเซ็นผิดสัดส่วน
+    const scale = Math.min(
+      (
+        exportCanvas.width -
+        (outputPadding * 2)
+      ) / cropWidth,
+      (
+        exportCanvas.height -
+        (outputPadding * 2)
+      ) / cropHeight
+    );
+
+    const drawWidth = cropWidth * scale;
+    const drawHeight = cropHeight * scale;
+
+    const drawX =
+      (exportCanvas.width - drawWidth) / 2;
+
+    const drawY =
+      (exportCanvas.height - drawHeight) / 2;
+
+    // วาดเฉพาะบริเวณที่มีลายเซ็น
+    exportCtx.drawImage(
+      sourceCanvas,
+      minX,
+      minY,
+      cropWidth,
+      cropHeight,
+      drawX,
+      drawY,
+      drawWidth,
+      drawHeight
+    );
+
     return exportCanvas.toDataURL('image/png');
   }
 
   signatureModalSave.addEventListener('click', () => {
     let dataUrl = '';
+
     if (signatureDirty) {
       dataUrl = exportCompactSignatureDataUrl();
     } else if (activeSignatureTarget) {
-      dataUrl = document.getElementById(activeSignatureTarget)?.value || '';
+      dataUrl =
+        document.getElementById(activeSignatureTarget)?.value || '';
     }
-    if (activeSignatureTarget) setSignaturePreview(activeSignatureTarget, dataUrl);
+
+    if (activeSignatureTarget) {
+      setSignaturePreview(
+        activeSignatureTarget,
+        dataUrl
+      );
+    }
+
     closeSignatureModal();
   });
 
-  window.addEventListener('resize', resizeModalCanvas);
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && signatureModal && !signatureModal.classList.contains('hidden')) {
+  window.addEventListener(
+    'resize',
+    resizeModalCanvas
+  );
+
+  window.addEventListener('keydown', e => {
+    if (
+      e.key === 'Escape' &&
+      signatureModal &&
+      !signatureModal.classList.contains('hidden')
+    ) {
       closeSignatureModal();
     }
   });
@@ -1404,79 +1618,169 @@
     const roundNo = el.dataset.round;
     const stationNo = el.dataset.station;
     const distanceM = el.dataset.distance;
-    const red = document.querySelector(`.red-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`)?.checked || false;
-    const played = document.querySelector(`.played-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`)?.checked || false;
 
-    const res = await fetch(`{{ url_for('autosave_scorecard', athlete_id=athlete.id) }}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        round_no: roundNo,
-        station_no: stationNo,
-        distance_m: distanceM,
-        score: el.value,
-        red: red,
-        played: played
-      })
-    });
+    const red = document.querySelector(
+      `.red-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`
+    )?.checked || false;
+
+    const played = document.querySelector(
+      `.played-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`
+    )?.checked || false;
+
+    const res = await fetch(
+      `{{ url_for('autosave_scorecard', athlete_id=athlete.id) }}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          round_no: roundNo,
+          station_no: stationNo,
+          distance_m: distanceM,
+          score: el.value,
+          red: red,
+          played: played
+        })
+      }
+    );
 
     if (!res.ok) return;
+
     const data = await res.json();
 
-    const stationTotalEl = document.getElementById(`station-total-${roundNo}-${stationNo}`);
-    const runningEl = document.getElementById(`station-running-total-${roundNo}-${stationNo}`);
-    const roundTotalEl = document.getElementById(`round-total-${roundNo}`);
-    const roundRunningEl = document.getElementById(`round-running-total-${roundNo}`);
+    const stationTotalEl = document.getElementById(
+      `station-total-${roundNo}-${stationNo}`
+    );
 
-    if (stationTotalEl) stationTotalEl.textContent = data.station_total ?? 0;
-    if (roundTotalEl) roundTotalEl.textContent = data.round_total ?? 0;
-    if (roundRunningEl) roundRunningEl.textContent = data.round_total ?? 0;
+    const runningEl = document.getElementById(
+      `station-running-total-${roundNo}-${stationNo}`
+    );
+
+    const roundTotalEl = document.getElementById(
+      `round-total-${roundNo}`
+    );
+
+    const roundRunningEl = document.getElementById(
+      `round-running-total-${roundNo}`
+    );
+
+    if (stationTotalEl) {
+      stationTotalEl.textContent =
+        data.station_total ?? 0;
+    }
+
+    if (roundTotalEl) {
+      roundTotalEl.textContent =
+        data.round_total ?? 0;
+    }
+
+    if (roundRunningEl) {
+      roundRunningEl.textContent =
+        data.round_total ?? 0;
+    }
 
     const cell = el.closest('.score-cell-wrap');
-    if (cell) cell.classList.toggle('cell-played', played);
+
+    if (cell) {
+      cell.classList.toggle(
+        'cell-played',
+        played
+      );
+    }
 
     let acc = 0;
+
     for (let s = 1; s <= 5; s++) {
-      const stEl = document.getElementById(`station-total-${roundNo}-${s}`);
-      const runEl = document.getElementById(`station-running-total-${roundNo}-${s}`);
-      const val = Number(stEl ? stEl.textContent : 0);
+      const stEl = document.getElementById(
+        `station-total-${roundNo}-${s}`
+      );
+
+      const runEl = document.getElementById(
+        `station-running-total-${roundNo}-${s}`
+      );
+
+      const val = Number(
+        stEl ? stEl.textContent : 0
+      );
+
       acc += val;
-      if (runEl) runEl.textContent = acc;
+
+      if (runEl) {
+        runEl.textContent = acc;
+      }
     }
   }
 
   document.querySelectorAll('.auto-score').forEach(el => {
     el.addEventListener('change', () => {
-      const playedBox = document.querySelector(`.played-check[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`);
-      if (playedBox && el.value !== '') playedBox.checked = true;
+      const playedBox = document.querySelector(
+        `.played-check[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`
+      );
+
+      if (playedBox && el.value !== '') {
+        playedBox.checked = true;
+      }
+
       autosaveCell(el);
     });
   });
 
-  document.querySelectorAll('.played-check, .red-check').forEach(el => {
-    el.addEventListener('change', () => {
-      const target = document.querySelector(`.auto-score[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`);
-      if (target) autosaveCell(target);
+  document
+    .querySelectorAll('.played-check, .red-check')
+    .forEach(el => {
+      el.addEventListener('change', () => {
+        const target = document.querySelector(
+          `.auto-score[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`
+        );
+
+        if (target) {
+          autosaveCell(target);
+        }
+      });
     });
-  });
 
   function setActiveStation(stationNo) {
     document.querySelectorAll('.station-step-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.stationStep === String(stationNo));
+      btn.classList.toggle(
+        'active',
+        btn.dataset.stationStep === String(stationNo)
+      );
     });
+
     document.querySelectorAll('.station-group').forEach(el => {
-      el.classList.toggle('active-station', el.classList.contains(`station-group-${stationNo}`));
+      el.classList.toggle(
+        'active-station',
+        el.classList.contains(
+          `station-group-${stationNo}`
+        )
+      );
     });
-    try { localStorage.setItem('scorecard-active-station', String(stationNo)); } catch (e) {}
+
+    try {
+      localStorage.setItem(
+        'scorecard-active-station',
+        String(stationNo)
+      );
+    } catch (e) {}
   }
 
   document.querySelectorAll('.station-step-btn').forEach(btn => {
-    btn.addEventListener('click', () => setActiveStation(btn.dataset.stationStep));
+    btn.addEventListener('click', () => {
+      setActiveStation(btn.dataset.stationStep);
+    });
   });
 
   try {
-    const savedStation = localStorage.getItem('scorecard-active-station');
-    if (savedStation && ['1','2','3','4','5'].includes(savedStation)) setActiveStation(savedStation);
+    const savedStation =
+      localStorage.getItem('scorecard-active-station');
+
+    if (
+      savedStation &&
+      ['1', '2', '3', '4', '5'].includes(savedStation)
+    ) {
+      setActiveStation(savedStation);
+    }
   } catch (e) {}
 </script>
 {% endblock %}

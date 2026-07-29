@@ -2809,11 +2809,12 @@ def scorecards_print_bulk(event_id: int):
     ]
 
     return render_template(
-        "scorecards_print_bulk.html",
+        "scorecard_print.html",
         event=event,
         round_no=round_no,
         round_labels=scorecard_round_labels(event),
         print_items=print_items,
+        is_bulk=True,
         station_images=[f"station_{i}.png" for i in STATIONS],
     )
 
@@ -2829,69 +2830,15 @@ def scorecard_print(athlete_id: int):
         flash("นักกีฬาคนนี้ไม่มีสิทธิ์ตีรอบ 2", "warning")
         return redirect(url_for("event_overview", event_id=event.id, round=1))
 
-    template_data = build_scorecard_template_data(athlete.id)
-    ranks = compute_round_ranks(event)
-
-    round_ranks = {
-        1: ranks.get(1, {}).get(athlete.id, ""),
-        2: ranks.get(2, {}).get(athlete.id, ""),
-        3: "",
-        4: "",
-        5: "",
-        6: "",
-    }
-
-    round_station_running_totals = {}
-    for rn in scorecard_round_numbers(event):
-        running = {}
-        acc = 0
-        for st in STATIONS:
-            val = template_data["station_totals"].get((rn, st), 0)
-            acc += val
-            running[st] = acc
-        round_station_running_totals[rn] = running
-
-    round_signatures = {}
-    for rn in scorecard_round_numbers(event):
-        round_signatures[rn] = get_round_signature(athlete.id, rn)
-
-    combined_rows = build_combined_qualifiers(event) if event.has_round_two else []
-    current_combined = next(
-        (r for r in combined_rows if r.get("athlete") and r["athlete"].id == athlete.id),
-        None
-    )
-
-    display_order = athlete.start_order
-    display_lane_no = athlete.lane_no
-    display_lane_order = athlete.lane_order
-    current_round_rows = build_round_ranking(event, round_no)
-    current_row = next((row for row in current_round_rows if row["athlete"].id == athlete.id), None)
-    if current_row:
-        display_order = current_row.get("display_order", display_order)
-        display_lane_no = current_row.get("display_lane_no", display_lane_no)
-        display_lane_order = current_row.get("display_lane_order", display_lane_order)
-
-    positions = scorecard_print_positions()
+    print_item = build_scorecard_print_context(athlete, round_no)
 
     return render_template(
         "scorecard_print.html",
-        athlete=athlete,
         event=event,
         round_no=round_no,
         round_labels=scorecard_round_labels(event),
-        score_map=template_data["score_map"],
-        station_totals=template_data["station_totals"],
-        station_reds=template_data["station_reds"],
-        round_totals=template_data["round_totals"],
-        round_ranks=round_ranks,
-        round_signatures=round_signatures,
-        round_station_running_totals=round_station_running_totals,
-        current_combined=current_combined,
-        combined_rows=combined_rows,
-        display_order=display_order,
-        display_lane_no=display_lane_no,
-        display_lane_order=display_lane_order,
-        positions=positions,
+        print_items=[print_item],
+        is_bulk=False,
         station_images=[f"station_{i}.png" for i in STATIONS],
     )
 

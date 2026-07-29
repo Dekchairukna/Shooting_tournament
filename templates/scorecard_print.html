@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
+
 <style>
 
   /* ===== SIGNATURE PRINT BIG & CLEAR ===== */
@@ -28,15 +29,15 @@
 
     /* ปรับขนาดช่องหลักตรงนี้ */
     --round-col-w: 110px;      /* ช่องรอบแข่งขัน */
-    --score-col-w: 32px;       /* ช่อง 6M/7M/8M/9M */
+    --score-col-w: 30px;       /* ช่อง 6M/7M/8M/9M */
     --station-total-w: 40px;   /* ช่องรวมของแต่ละ Atelier */
-    
+
     --grand-total-w: 52px;     /* ช่องคะแนนรวม */
     --rank-w: 42px;            /* ช่องลำดับ */
     --athlete-sign-w: 82px;    /* ช่องลายเซ็นนักกีฬา */
 
-    --row-h: 40px;
-    --head-h: 40px;
+    --row-h: 34px;
+    --head-h: 20px;
     --image-row-h: 58px;
     --font-table: 13px;
     --font-small: 11px;
@@ -54,7 +55,7 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
   }
 
   .sheet {
@@ -63,6 +64,13 @@
     margin-bottom: 8px;
     background: #fff;
     box-sizing: border-box;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .sheet:last-of-type {
+    page-break-after: auto;
+    break-after: auto;
   }
 
   .header {
@@ -70,16 +78,16 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 12px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .header-left { flex: 1; min-width: 0; }
 
   .event-name {
-    font-size: 22px;
-    font-weight: 900;
+    font-size: 20px;
+    font-weight: 700;
     line-height: 1.2;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .athlete-meta {
@@ -103,7 +111,7 @@
     table-layout: fixed !important;
     border-collapse: collapse !important;
     border-spacing: 0 !important;
-    margin-top: 10px;
+    margin-top: 2px;
     border: 1px solid var(--grid-line);
     font-size: var(--font-table);
     background: #fff;
@@ -221,14 +229,14 @@
   }
 
   .signature-block {
-    margin-top: 10px;
+    margin-top: 2px;
     border: 1px solid var(--grid-line);
-    padding: 6px;
+    padding: 1px;
   }
 
   .signature-title {
-    font-weight: 900;
-    margin-bottom: 6px;
+    font-weight: 700;
+    margin-bottom: 2px;
   }
 
   .signature-grid {
@@ -255,13 +263,57 @@
   justify-content: center;  /* กลางแนวนอน */
   text-align: center;
 }
+  .signature-text-print{
+    display:block;
+    width:100%;
+    max-width:100%;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:clip;
+    line-height:1;
+    font-weight:900;
+    text-align:center;
+    transform-origin:center center;
+    font-size:10px;
+  }
+  .signature-grid > div{
+    height:30px;
+    max-height:30px;
+    overflow:hidden !important;
+    justify-content:center;
+  }
+  .rank-col .signature-text-print,
+  .rank-col2 .signature-text-print{
+    font-size:9px;
+    transform:scaleX(.86);
+  }
+  /* ===== PATCH LATEST: บังคับสีตอนพิมพ์ใบเดียวให้ตรงกับตัวอย่าง ===== */
+  .round-table,
+  .round-table td,
+  .round-table th,
+  .red-frame-cell {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .round-table td[style*="0, 255"] {
+    color: rgb(4, 0, 255) !important;
+    font-weight: 800 !important;
+  }
+  .round-table td[style*="255, 0, 0"] {
+    color: rgb(255, 0, 0) !important;
+    font-weight: 900 !important;
+  }
+  /* รวมค่าหน้าพิมพ์ไว้จุดเดียว */
   @media print {
+    @page {
+      size: A4 landscape;
+      margin: 2mm;
+    }
+
     .topbar,
     .print-tools {
       display: none !important;
     }
-
-    @page { size: A4 landscape; margin: 6mm; }
 
     html,
     body {
@@ -287,100 +339,103 @@
       page-break-inside: avoid;
     }
 
-    .event-name { font-size: 24px; }
-    .athlete-meta { font-size: 14px; gap: 4px 10px; }
+    .event-name {
+      font-size: 20px;
+    }
+
+    .athlete-meta {
+      font-size: 14px;
+      gap: 4px 10px;
+    }
 
     .round-table th,
     .round-table td {
       font-size: 12px;
       padding: 1px;
-      height: 34px;
+      height: 32px;
     }
 
     .station-group,
-    .distance-col { font-size: 8px; }
-    .signature-grid { font-size: 10px; }
-    .signature-grid > div { min-height: 24px; padding: 3px 4px; }
-    .signature-image-print { max-height: 20px; }
-  }
+    .distance-col {
+      font-size: 8px;
+    }
 
+    .signature-grid {
+      font-size: 10px;
+    }
 
-  .signature-text-print{
-    display:block;
-    width:100%;
-    max-width:100%;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:clip;
-    line-height:1;
-    font-weight:900;
-    text-align:center;
-    transform-origin:center center;
-    font-size:10px;
-  }
-  .signature-grid > div{
-    height:30px;
-    max-height:30px;
-    overflow:hidden !important;
-    justify-content:center;
-  }
-  .rank-col .signature-text-print,
-  .rank-col2 .signature-text-print{
-    font-size:9px;
-    transform:scaleX(.86);
-  }
-  @media print{
-    .signature-text-print{font-size:8.5px !important; transform:scaleX(.82);}
-    .signature-grid > div{height:24px !important; max-height:24px !important; min-height:24px !important;}
+    .signature-grid > div {
+      height: 24px !important;
+      min-height: 24px !important;
+      max-height: 24px !important;
+      padding: 3px 4px;
+    }
+
+    .signature-image-print {
+      max-height: 26px;
+    }
+
+    .signature-text-print {
+      font-size: 8.5px !important;
+      transform: scaleX(.82);
+    }
+
     .rank-col .signature-text-print,
-    .rank-col2 .signature-text-print{font-size:7.4px !important; transform:scaleX(.72);}
-  }
+    .rank-col2 .signature-text-print {
+      font-size: 7.4px !important;
+      transform: scaleX(.72);
+    }
 
+    .round-table td[style*="0, 255"] {
+      color: rgb(4, 0, 255) !important;
+    }
 
-  /* ===== PATCH LATEST: บังคับสีตอนพิมพ์ใบเดียวให้ตรงกับตัวอย่าง ===== */
-  .round-table,
-  .round-table td,
-  .round-table th,
-  .red-frame-cell {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .round-table td[style*="0, 255"] {
-    color: rgb(4, 0, 255) !important;
-    font-weight: 800 !important;
-  }
-  .round-table td[style*="255, 0, 0"] {
-    color: rgb(255, 0, 0) !important;
-    font-weight: 900 !important;
-  }
-  @media print {
-    .round-table td[style*="0, 255"] { color: rgb(4, 0, 255) !important; }
-    .round-table td[style*="255, 0, 0"] { color: rgb(255, 0, 0) !important; }
-    .red-frame-cell { box-shadow: inset 0 0 0 3px red !important; color:#000 !important; background:#fff !important; }
+    .round-table td[style*="255, 0, 0"] {
+      color: rgb(255, 0, 0) !important;
+    }
+
+    .red-frame-cell {
+      box-shadow: inset 0 0 0 3px red !important;
+      color: #000 !important;
+      background: #fff !important;
+    }
   }
 
 </style>
 
 <div class="print-tools">
-  <a class="btn secondary" href="{{ url_for('scorecard', athlete_id=athlete.id, round=round_no) }}">← กลับ scorecard</a>
+  {% if is_bulk %}
+  <a class="btn secondary" href="{{ url_for('scorecards_print_select', event_id=event.id, round=round_no) }}">← กลับหน้าเลือกนักกีฬา</a>
+  <button class="btn" onclick="window.print()">พิมพ์ทั้งหมดที่แสดง</button>
+  <span class="bulk-info">จำนวน {{ print_items|length }} คน | {{ round_labels[round_no-1] }}</span>
+  {% elif print_items %}
+  <a class="btn secondary" href="{{ url_for('scorecard', athlete_id=print_items[0].athlete.id, round=round_no) }}">← กลับ scorecard</a>
   <button class="btn secondary" onclick="window.print()">พิมพ์</button>
+  {% endif %}
 </div>
 
+{% for item in print_items %}
+{% set athlete = item.athlete %}
+{% set event = item.event %}
+{% set score_map = item.score_map %}
+{% set station_totals = item.station_totals %}
+{% set round_totals = item.round_totals %}
+{% set round_ranks = item.round_ranks %}
+{% set round_signatures = item.round_signatures %}
+{% set display_order = item.display_order %}
+{% set display_lane_no = item.display_lane_no %}
+{% set display_lane_order = item.display_lane_order %}
 <div class="sheet">
   <div class="header">
     <div class="header-left">
       <div class="event-name">{{ event.name }}</div>
-      <div class="event-name">
-        SHOOTING
-        &nbsp;&nbsp; {{ event.category }}
-      </div>
+      <div class="event-name">SHOOTING &nbsp;&nbsp; {{ event.category }}</div>
 
       <div class="athlete-meta">
-        <div class="meta-item"><strong>ลำดับการตี :</strong> {{ display_order or athlete.start_order }}</div>
-        <div class="meta-item"><strong>สังกัด :</strong> {{ athlete.affiliation }}</div>
-        <div class="meta-item"><strong>ชื่อ :</strong> {{ athlete.name }}</div>
-        <div class="meta-item"><strong>สนาม :</strong> {{ display_lane_no or athlete.lane_no }}/{{ display_lane_order or
-          athlete.lane_order }}</div>
+        <div class="meta-item"><strong>ลำดับการตี:</strong> {{ display_order or athlete.start_order }}</div>
+        <div class="meta-item"><strong>สังกัด:</strong> {{ athlete.affiliation }}</div>
+        <div class="meta-item"><strong>ชื่อ:</strong> {{ athlete.name }}</div>
+        <div class="meta-item"><strong>สนาม:</strong> {{ display_lane_no or athlete.lane_no }}/{{ display_lane_order or athlete.lane_order }}</div>
       </div>
     </div>
   </div>
@@ -445,25 +500,20 @@
         <td class="round-label-col">{{ round_labels[rn-1] }}</td>
 
         {% for st in [1,2,3,4,5] %}
-        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</td>
-        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</td>
-        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</td>
-        <td style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</td>
-        <td class="station-total-col" style="color: rgb(255, 0, 0);">
-          {{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</span></td>
+        <td class="station-total-col score-red">
+          <span class="score-red" style="color: rgb(255, 0, 0);">{{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}</span>
         </td>
         {% endfor %}
 
         <td class="grand-total-col">
-          
+          {{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}
         </td>
-        <td class="rank-col">
-
-        </td>
-
-        <td class="rank-col">
-
-        </td>
+        <td class="rank-col"></td>
+        <td class="rank-col"></td>
       </tr>
 
       <tr class="cumulative-row">
@@ -483,14 +533,12 @@
           {{ '' }}
           {% endif %}
         </td>
-
         {% endfor %}
 
         <td class="grand-total-col">
           {{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}
         </td>
-        <td class="rank-col">{{ round_ranks[rn] if has_started and round_ranks[rn] is defined and round_ranks[rn] != ''
-          else '' }}</td>
+        <td class="rank-col">{{ round_ranks[rn] if has_started and round_ranks[rn] is defined and round_ranks[rn] != '' else '' }}</td>
         <td class="rank-col">
           {% if round_signatures[rn] and round_signatures[rn].athlete_signature %}
           <img src="{{ round_signatures[rn].athlete_signature }}" alt="ลายเซ็นนักกีฬา" class="signature-image-print">
@@ -498,7 +546,6 @@
           <span class="signature-text-print">{{ (round_signatures[rn].athlete_name if round_signatures[rn] else '') or '' }}</span>
           {% endif %}
         </td>
-
       </tr>
       {% endfor %}
     </tbody>
@@ -509,14 +556,12 @@
 
     <div class="signature-grid">
       <div class="signature-head">รอบ</div>
-
       <div class="signature-head">กรรมการ</div>
       <div class="signature-head">ผู้บันทึก</div>
 
       {% for round_label in round_labels %}
       {% set rn = loop.index %}
       <div><strong>{{ round_labels[rn-1] }}</strong></div>
-
       <div>
         {% if round_signatures[rn] and round_signatures[rn].referee_signature %}
         <img src="{{ round_signatures[rn].referee_signature }}" alt="ลายเซ็นกรรมการ" class="signature-image-print">
@@ -535,5 +580,8 @@
     </div>
   </div>
 </div>
+{% else %}
+<div class="bulk-info">ยังไม่มีนักกีฬาสำหรับพิมพ์ในรอบนี้</div>
+{% endfor %}
 
 {% endblock %}
