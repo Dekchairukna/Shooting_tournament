@@ -60,9 +60,9 @@
       'รอบ 2': 'Qualification Round 2',
       'รอบที่ 1': 'Qualification 1',
       'รอบที่ 2': 'Qualification 2',
-      'รอบ 8 คน': 'Quaterfinal',
-      'รอบ 4 คน': 'Semi final',
-      'รอบรองชนะเลิศ': 'Semi Final',
+      'รอบ 8 คน': 'Quarterfinal',
+      'รอบ 4 คน': 'Semifinal',
+      'รอบรองชนะเลิศ': 'Semifinal',
       'รอบชิงชนะเลิศ': 'Final',
       'ตารางประกบ': 'Bracket',
       'หน้าประกบคู่': 'Bracket page',
@@ -81,7 +81,11 @@
       'สถานะ': 'Status',
       'หมายเลข': 'no.',
       'ชื่อ': 'Name',
-      'สังกัด': 'Contry',
+      'ชื่อ:': 'Name:',
+      'สังกัด': 'Affiliation',
+      'สังกัด:': 'Affiliation:',
+      'สนาม:': 'Lane:',
+      'ลำดับการตี:': 'Shooting order:',
       'เพิ่มนักกีฬาและจัดลำดับยิง': 'Add athletes and set shooting order',
       'ไปหน้ารวม': 'Go to overview',
       'หมายเลขและลำดับรวม ระบบสร้างให้อัตโนมัติ': 'Bib number and overall order are generated automatically',
@@ -112,7 +116,7 @@
       'กรรมการบันทึกคะแนน': 'Recorder',
       'ลายเซ็นกรรมการตัดสิน': 'Referee signature',
       'ลายเซ็นกรรมการบันทึกคะแนน': 'Recorder signature',
-      'ลายเซ็นนักกีฬา': 'signature',
+      'ลายเซ็นนักกีฬา': 'Athlete signature',
       'พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้': 'Type name; used if no signature is drawn',
       'เซ็นชื่อเต็มหน้าจอ': 'Full-screen signature',
       'ล้างลายเซ็น': 'Clear signature',
@@ -154,7 +158,130 @@
       'ยังไม่มีคู่ Semi Final': 'No Semi Final matches yet',
       'ยังไม่มีคู่ Final': 'No Final matches yet',
       'ยืนยันลบ': 'Confirm delete',
-      'ลบอีเวนต์นี้?': 'Delete this event?'
+      'ลบอีเวนต์นี้?': 'Delete this event?',
+
+      /* Navigation and event pages */
+      'และ': 'and',
+      '+ สร้างอีเวนต์': '+ Create event',
+      'กลับหน้าอีเวนต์': 'Back to event',
+      'รายการทั้งหมด': 'All entries',
+      'ประวัติรอบคัดเลือก': 'Qualification history',
+      'ผู้แข่งขัน': 'Competitors',
+      '🖨 พิมพ์ Score Sheet รอบนี้': '🖨 Print score sheets for this round',
+      'ยังไม่มีคู่รอบ 16 คน': 'No Round of 16 matches yet',
+      'บันทึกภาพไม่สำเร็จ ให้ใช้ปุ่มพิมพ์แล้วเลือก Save as PDF': 'The image could not be saved. Use Print and select Save as PDF instead.',
+      'รอแข่งขัน': 'Waiting to compete',
+      'ระบบใช้ตามรอบถัดไปอัตโนมัติ: รอบ 8 = 4, รอบ 16 = 8': 'The system sets this automatically from the next round: Quarterfinal = 4, Round of 16 = 8.',
+      'รอบ 16 คน': 'Round of 16',
+
+      /* Overview and ranking */
+      'ตั้งค่า Results': 'Results settings',
+      '📊 ดูสถิติ 5/3': '📊 View 5/3 statistics',
+      'ยังไม่ตี': 'Not started',
+      'กำลังตี / มีการคีย์': 'In progress / scores entered',
+      'ตีแล้ว': 'Completed',
+      'ผ่านไปตีรอบ 2': 'Advanced to Round 2',
+      'เข้า Knockout': 'Advanced to the knockout stage',
+      'สถิติประกอบการจัดอันดับ 5/3': '5/3 ranking statistics',
+      'เรียงตาม TOTAL → จำนวน 5 → จำนวน 3 ใช้ดูเหตุผลการจัดลำดับ ไม่รวมคะแนนรอบพิเศษในตารางหลัก': 'Ranked by TOTAL, then the number of 5-point shots, then the number of 3-point shots. This explains the ranking; tie-break scores are not included in the main table.',
+      'กำลังโหลด...': 'Loading...',
+      'โหลดข้อมูลไม่ได้': 'Unable to load data',
+      'แก้': 'Edit',
+      'ต้องตี Shoot-off': 'Shoot-off required',
+
+      /* Results Approved */
+      '← กลับ Overview': '← Back to Overview',
+      '⚙ ตั้งค่า Results Approved / กรรมการ': '⚙ Results Approved / Officials settings',
+      'ดาวน์โหลด DOCX': 'Download DOCX',
+      'พิมพ์ / Save PDF': 'Print / Save as PDF',
+      'ตั้งค่า Results Approved': 'Results Approved settings',
+      'ตั้งค่า Results Approved SEA Games Style': 'Configure Results Approved in SEA Games style',
+      'ตั้งค่าข้อความหัวเอกสารและรายชื่อกรรมการสำหรับ': 'Configure the document header and officials for',
+      'ชื่อการแข่งขัน / Competition Title': 'Competition title',
+      'บรรทัดประเทศ/เจ้าภาพ': 'Country / host line',
+      'วันที่บนเอกสาร': 'Document date',
+      'สถานที่ / Location': 'Location',
+      'หัวคอลัมน์สังกัด': 'Affiliation column heading',
+      'ข้อความ APPROVED': 'APPROVED text',
+      'โลโก้เอกสาร': 'Document logos',
+      'อัปโหลดไฟล์ png, jpg, jpeg, webp หรือ gif ได้เอง ถ้าไม่อัปโหลดระบบจะใช้โลโก้ค่าเริ่มต้นตามเอกสารตัวอย่าง': 'Upload a PNG, JPG, JPEG, WEBP, or GIF file. If no file is uploaded, the default logo from the sample document will be used.',
+      'ใช้ค่าเริ่มต้น': 'Use default',
+      'แสดงหน้ากรรมการ': 'Show the officials page',
+      'แสดง': 'Show',
+      'ไม่แสดง': 'Hide',
+      'ตำแหน่งประธาน / President Title': 'President title',
+      'ชื่อประธาน / President Name': 'President name',
+      'ตำแหน่ง Technical Delegate': 'Technical Delegate title',
+      'ชื่อ Technical Delegate': 'Technical Delegate name',
+      'รายชื่อกรรมการ Umpire': 'Umpire list',
+      'ใส่บรรทัดละ 1 คน รูปแบบ: ชื่อ | สังกัด เช่น MR. SOMCHAI JAIDEE | ABSC': 'Enter one person per line in this format: Name | Affiliation, for example MR. SOMCHAI JAIDEE | ABSC.',
+      'บันทึกตั้งค่า': 'Save settings',
+      'กลับ Results Approved': 'Back to Results Approved',
+      'กลับ Overview': 'Back to Overview',
+
+      /* Scorecard and signatures */
+      'กรอกทีละสถานี': 'Enter scores one station at a time',
+      'สถานี': 'Station',
+      'มือถือ/แท็บเล็ตแนวตั้งจะแสดงเฉพาะสถานีที่เลือก เพื่อให้ช่องใหญ่ขึ้นและกดง่ายขึ้น': 'On phones and portrait tablets, only the selected station is shown so the score boxes are larger and easier to tap.',
+      'ยิงลูกเดี่ยว ยิงลูกเหนือเป้า ยิงลูกกลางขวาง ยิงลูกขาวเหนือลูกดำ ยิงลูกเป้า': 'Single ball shot, target-ball jump shot, middle obstacle shot, white-over-black ball shot, and target ball shot',
+      'ลายเซ็นเฉพาะ': 'Signatures for',
+      'บันทึกลายเซ็น': 'Save signature',
+      'เลือกสถานีสำหรับหน้าจอแนวตั้ง': 'Select a station for portrait screens',
+      'รอบที่': 'Round',
+      'ลายเซ็นกรรมการตัดสิน -': 'Umpire signature -',
+      'ลายเซ็นกรรมการบันทึกคะแนน -': 'Recorder signature -',
+      'ลายเซ็นนักกีฬา -': 'Athlete signature -',
+      '← กลับหน้าเลือกนักกีฬา': '← Back to athlete selection',
+      '← กลับ scorecard': '← Back to scorecard',
+      'ลายเซ็นกรรมการ': 'Umpire signature',
+      'ลายเซ็นผู้บันทึก': 'Recorder signature',
+
+      /* Statistics and tie-break */
+      'สถิติ —': 'Statistics —',
+      '5 คะแนน': '5 points',
+      '3 คะแนน': '3 points',
+      'รอบ · เลือกคะแนนแบบ 0 / 1 / 3 / 5': 'round · Select a score of 0, 1, 3, or 5',
+      'ต้องบันทึกพร้อมกันทุกคนที่ติด Shoot-off หากยังเท่ากันให้กลับมาเลือกกลุ่มเดิมแล้วบันทึกเพิ่มอีกเที่ยว': 'All athletes involved in the shoot-off must be saved together. If they are still tied, select the same group and record another shoot-off.',
+      'สะสมเดิม:': 'Previous total:',
+      'บันทึกเที่ยวพิเศษพร้อมกัน': 'Save the shoot-off for all selected athletes',
+
+      /* Messages and validation */
+      'คุณไม่มีสิทธิ์ทำรายการนี้': 'You do not have permission to perform this action.',
+      'รอคู่แข่งขัน': 'Waiting for opponent',
+      'แข่งเสร็จ': 'Match completed',
+      'กำลังแข่งขัน': 'Match in progress',
+      'รอบันทึกผู้ชนะ': 'Waiting for the winner to be recorded',
+      'เข้าสู่ระบบสำเร็จ': 'You have logged in successfully.',
+      'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง': 'The username or password is incorrect.',
+      'ออกจากระบบแล้ว': 'You have logged out.',
+      'สร้างผู้ใช้สำเร็จ': 'The user was created successfully.',
+      'สร้างผู้ใช้ไม่สำเร็จ กรุณาตรวจสอบข้อมูล': 'The user could not be created. Please check the information and try again.',
+      'สร้างอีเวนต์สำเร็จ': 'The event was created successfully.',
+      'แก้ไขอีเวนต์สำเร็จ': 'The event was updated successfully.',
+      'ลบอีเวนต์แล้ว': 'The event was deleted.',
+      'เพิ่มนักกีฬาสำเร็จ': 'The athlete was added successfully.',
+      'ลบรายการ': 'Deleted',
+      'เรียบร้อย': 'successfully.',
+      'กรุณาเลือกไฟล์ Excel': 'Please select an Excel file.',
+      'รองรับเฉพาะไฟล์ .xlsx': 'Only .xlsx files are supported.',
+      'นำเข้านักกีฬาสำเร็จ': 'Athletes imported successfully:',
+      'สุ่มลำดับใหม่แล้ว': 'The shooting order was randomized successfully.',
+      'นักกีฬาคนนี้ไม่มีสิทธิ์ตีรอบ 2': 'This athlete is not eligible to compete in Round 2.',
+      'รอบแข่งขันไม่ถูกต้อง': 'The competition round is invalid.',
+      'จบการตีเรียบร้อย': 'The attempt was completed successfully.',
+      'ต้องลงชื่ออย่างใดอย่างหนึ่ง (พิมพ์ชื่อหรือเขียน) ให้ครบทั้ง 3 ฝ่าย หรือใช้สิทธิ์ข้าม': 'All three parties must provide a signature, either by typing a name or drawing a signature, unless an authorized signature bypass is used.',
+      'กรุณาเลือกนักกีฬาอย่างน้อย 1 คน': 'Please select at least one athlete.',
+      'บันทึกผลเที่ยวพิเศษแล้ว ถ้ายังเท่ากันให้บันทึกเที่ยวพิเศษเพิ่มอีกครั้ง': 'The tie-break result was saved. If the athletes are still tied, record another tie-break.',
+      'กรุณาเลือกนักกีฬาที่ต้องตี Shoot-off อย่างน้อย 2 คน': 'Please select at least two athletes for the shoot-off.',
+      'บันทึก Shoot-off พร้อมกันแล้ว ถ้ายังเท่ากันให้เลือกกลุ่มเดิมแล้วบันทึกเพิ่ม': 'The shoot-off was saved for all selected athletes. If they are still tied, select the same group and record another shoot-off.',
+      'ผู้ชนะไม่ถูกต้อง': 'The selected winner is invalid.',
+      'บันทึกผู้ชนะแล้ว': 'The winner was saved successfully.',
+      'ต้องเป็น png, jpg, jpeg, webp หรือ gif': 'must be a PNG, JPG, JPEG, WEBP, or GIF file.',
+      'บันทึกตั้งค่า Results Approved แล้ว': 'The Results Approved settings were saved successfully.',
+      'ยังไม่ได้ติดตั้ง python-docx ให้รัน: python -m pip install -r requirements.txt': 'python-docx is not installed. Run: python -m pip install -r requirements.txt',
+      'ไฟล์ Excel ต้องมีหัวคอลัมน์ชื่อ และ สังกัด': 'The Excel file must contain Name and Affiliation columns.',
+      'ต้องมีทั้งชื่อและสังกัด': 'must include both a name and an affiliation.',
+      'ไม่พบข้อมูลนักกีฬาในไฟล์ Excel': 'No athlete data was found in the Excel file.'
     },
     fr: {
       'หน้าหลัก': 'Accueil', 'สร้างอีเวนต์': 'Créer un événement', 'สร้างอีเวนต์ Shooting': 'Créer un événement de tir', 'แก้ไขอีเวนต์': 'Modifier l’événement', 'ผู้ใช้': 'Utilisateurs', 'ออกจากระบบ': 'Déconnexion', 'เข้าสู่ระบบ': 'Connexion', 'ชื่อผู้ใช้': 'Nom d’utilisateur', 'รหัสผ่าน': 'Mot de passe', 'สิทธิ์': 'Rôle', 'สร้างผู้ใช้ใหม่': 'Créer un utilisateur', 'รายการผู้ใช้': 'Liste des utilisateurs', 'บันทึก': 'Enregistrer', 'บันทึกการแก้ไข': 'Enregistrer les modifications',
@@ -194,6 +321,21 @@
     }
 
     let result = text;
+    if (dict === translations.en) {
+      result = result
+        .replace(/ลบรายการ\s+(.+?)\s+เรียบร้อย/g, 'Deleted $1 successfully.')
+        .replace(/นำเข้านักกีฬาสำเร็จ\s+(\d+)\s+คน/g, '$1 athletes were imported successfully.')
+        .replace(/จำนวน\s+(\d+)\s+คน/g, '$1 athletes')
+        .replace(/แถวที่\s+(\d+)\s+ต้องมีทั้งชื่อและสังกัด/g, 'Row $1 must include both a name and an affiliation.')
+        .replace(/ไฟล์โลโก้\s+(.+?)\s+ต้องเป็น png, jpg, jpeg, webp หรือ gif/g, 'Logo file $1 must be a PNG, JPG, JPEG, WEBP, or GIF file.')
+        .replace(/(\d+)\s*คะแนน\s*\|\s*5 คะแนน\s*(\d+)\s*ครั้ง\s*\|\s*3 คะแนน\s*(\d+)\s*ครั้ง/g, '$1 points | 5-point shots: $2 | 3-point shots: $3')
+        .replace(/รอบ\s+(\d+)\s+·\s+เลือกคะแนนแบบ 0\s*\/\s*1\s*\/\s*3\s*\/\s*5/g, 'Round $1 · Select a score of 0, 1, 3, or 5')
+        .replace(/(^|\|\s*)(ชาย|หญิง|ผสม)(?=\s*(?:\||$))/g, function (_, prefix, category) {
+          return prefix + { 'ชาย': 'Men', 'หญิง': 'Women', 'ผสม': 'Mixed' }[category];
+        })
+        .replace(/ส(\d+)\s+(\d+)\/4/g, 'Station $1 $2/4');
+    }
+
     const keys = Object.keys(dict)
       .filter(key => key.length >= 5 || /[\s()/?:|]/.test(key))
       .sort((a, b) => b.length - a.length);
@@ -203,6 +345,16 @@
       }
     }
     return result;
+  }
+
+  const TRANSLATABLE_ATTRIBUTES = ['placeholder', 'title', 'alt', 'data-title', 'aria-label'];
+
+  function translateElementAttributes(el, dict) {
+    TRANSLATABLE_ATTRIBUTES.forEach(attr => {
+      if (el.hasAttribute(attr)) {
+        el.setAttribute(attr, translateText(el.getAttribute(attr), dict));
+      }
+    });
   }
 
   function translateNode(root, dict) {
@@ -223,12 +375,11 @@
       node.nodeValue = translateText(node.nodeValue, dict);
     });
 
+    if (root.nodeType === Node.ELEMENT_NODE) {
+      translateElementAttributes(root, dict);
+    }
     root.querySelectorAll('[placeholder], [title], [alt], [data-title], [aria-label]').forEach(el => {
-      ['placeholder', 'title', 'alt', 'data-title', 'aria-label'].forEach(attr => {
-        if (el.hasAttribute(attr)) {
-          el.setAttribute(attr, translateText(el.getAttribute(attr), dict));
-        }
-      });
+      translateElementAttributes(el, dict);
     });
 
     root.querySelectorAll('[onsubmit], [onclick]').forEach(el => {
@@ -252,6 +403,49 @@
     };
   }
 
+  function installDynamicTranslation(dict) {
+    if (!dict || !document.body) return;
+
+    let observer;
+    const startObserving = function () {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: TRANSLATABLE_ATTRIBUTES
+      });
+    };
+
+    observer = new MutationObserver(function (mutations) {
+      observer.disconnect();
+
+      mutations.forEach(mutation => {
+        if (mutation.type === 'characterData') {
+          mutation.target.nodeValue = translateText(mutation.target.nodeValue, dict);
+          return;
+        }
+
+        if (mutation.type === 'attributes') {
+          translateElementAttributes(mutation.target, dict);
+          return;
+        }
+
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            node.nodeValue = translateText(node.nodeValue, dict);
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            translateNode(node, dict);
+          }
+        });
+      });
+
+      startObserving();
+    });
+
+    startObserving();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     const switcher = document.getElementById('languageSwitcher');
     if (switcher) {
@@ -265,8 +459,12 @@
     localStorage.setItem('app_lang', LANG);
     if (LANG !== 'th') {
       const dict = translations[LANG];
+      if (LANG === 'en') {
+        document.documentElement.style.setProperty('--i18n-cut-line', '"CUT LINE"');
+      }
       translateNode(document.body, dict);
       installDialogTranslation(dict);
+      installDynamicTranslation(dict);
     }
   });
 
