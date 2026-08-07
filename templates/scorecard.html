@@ -183,6 +183,40 @@
     vertical-align: middle;
   }
 
+  .red-card-stop-notice {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin:10px 0;
+    padding:9px 12px;
+    border:1px solid #ef4444;
+    border-radius:10px;
+    background:#fef2f2;
+    color:#991b1b;
+    font-size:.78rem;
+    font-weight:900;
+  }
+  .red-card-stop-notice[hidden]{display:none!important;}
+  .autosave-status{
+    display:inline-flex;
+    align-items:center;
+    min-height:28px;
+    margin:0 0 8px;
+    padding:5px 10px;
+    border:1px solid #cbd5e1;
+    border-radius:999px;
+    background:#f8fafc;
+    color:#475569;
+    font-size:.68rem;
+    font-weight:900;
+  }
+  .autosave-status.saving{background:#fff7ed;border-color:#fb923c;color:#9a3412;}
+  .autosave-status.saved{background:#ecfdf5;border-color:#22c55e;color:#166534;}
+  .autosave-status.error{background:#fef2f2;border-color:#ef4444;color:#991b1b;}
+  .score-cell-wrap.red-shot .score-input{background:#fee2e2!important;color:#991b1b!important;}
+  .round-row.red-card-stopped .score-cell-wrap{opacity:.72;}
+  .round-row.red-card-stopped .score-cell-wrap.red-shot{opacity:1;}
+
   .station-sum,
   .grand-total-cell,
   .running-cumulative-total,
@@ -627,6 +661,15 @@
     transform: scale(.9);
     vertical-align: middle;
   }
+  .played-under label,
+  .red-under label {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:1px;
+    max-width:100%;
+    white-space:nowrap;
+  }
   .score-cell-wrap.cell-played {
     box-shadow: inset 0 0 0 2px #22c55e;
     background: #ecfdf5 !important;
@@ -988,7 +1031,11 @@
     </div>
   </div>
 
-  <form method="post" id="scorecardForm">
+  <form method="post" id="scorecardForm" data-round="{{ round_no }}" data-red-cards="{{ current_round_red_cards|default(0) }}" data-stopped-by-red="{{ '1' if round_stopped_by_red else '0' }}">
+    <div id="redCardStopNotice" class="red-card-stop-notice" {% if not round_stopped_by_red %}hidden{% endif %}>
+      ใบแดงครบ 2 ครั้ง: ยุติการยิงรอบนี้และคงคะแนนที่ทำได้ไว้
+    </div>
+    <div id="autosaveStatus" class="autosave-status" role="status" aria-live="polite">พร้อมบันทึก</div>
     <div class="station-stepper" id="stationStepper" aria-label="เลือกสถานีสำหรับหน้าจอแนวตั้ง">
       <span class="station-stepper-label">กรอกทีละสถานี</span>
       {% for station in [1,2,3,4,5] %}
@@ -1614,6 +1661,48 @@
     }
   });
 
+  let autosaveStatusTimer = null;
+
+  function setAutosaveStatus(state, message) {
+    const status = document.getElementById('autosaveStatus');
+    if (!status) return;
+    status.className = `autosave-status ${state || ''}`.trim();
+    status.textContent = message;
+    if (autosaveStatusTimer) window.clearTimeout(autosaveStatusTimer);
+    if (state === 'saved') {
+      autosaveStatusTimer = window.setTimeout(() => {
+        status.className = 'autosave-status';
+        status.textContent = 'พร้อมบันทึก';
+      }, 1400);
+    }
+  }
+
+  function recalculateScorecardTotals(roundNo) {
+    let roundTotal = 0;
+    let runningTotal = 0;
+    for (let stationNo = 1; stationNo <= 5; stationNo++) {
+      let stationTotal = 0;
+      document.querySelectorAll(`.auto-score[data-round="${roundNo}"][data-station="${stationNo}"]`).forEach(score => {
+        const selector = `[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${score.dataset.distance}"]`;
+        const played = document.querySelector(`.played-check${selector}`)?.checked || false;
+        const red = document.querySelector(`.red-check${selector}`)?.checked || false;
+        if (played && !red) stationTotal += Number(score.value || 0);
+      });
+
+      const stationTotalEl = document.getElementById(`station-total-${roundNo}-${stationNo}`);
+      const runningEl = document.getElementById(`station-running-total-${roundNo}-${stationNo}`);
+      if (stationTotalEl) stationTotalEl.textContent = stationTotal;
+      runningTotal += stationTotal;
+      if (runningEl) runningEl.textContent = runningTotal;
+      roundTotal += stationTotal;
+    }
+
+    const roundTotalEl = document.getElementById(`round-total-${roundNo}`);
+    const roundRunningEl = document.getElementById(`round-running-total-${roundNo}`);
+    if (roundTotalEl) roundTotalEl.textContent = roundTotal;
+    if (roundRunningEl) roundRunningEl.textContent = roundTotal;
+  }
+
   async function autosaveCell(el) {
     const roundNo = el.dataset.round;
     const stationNo = el.dataset.station;
@@ -1627,10 +1716,14 @@
       `.played-check[data-round="${roundNo}"][data-station="${stationNo}"][data-distance="${distanceM}"]`
     )?.checked || false;
 
-    const res = await fetch(
-      `{{ url_for('autosave_scorecard', athlete_id=athlete.id) }}`,
-      {
+    recalculateScorecardTotals(roundNo);
+    setAutosaveStatus('saving', 'กำลังบันทึก…');
+
+    try {
+      const res = await fetch(`{{ url_for('autosave_scorecard', athlete_id=athlete.id) }}`, {
         method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -1642,74 +1735,81 @@
           red: red,
           played: played
         })
+      });
+
+      const responseText = await res.text();
+      let data = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง');
       }
-    );
 
-    if (!res.ok) return;
-
-    const data = await res.json();
-
-    const stationTotalEl = document.getElementById(
-      `station-total-${roundNo}-${stationNo}`
-    );
-
-    const runningEl = document.getElementById(
-      `station-running-total-${roundNo}-${stationNo}`
-    );
-
-    const roundTotalEl = document.getElementById(
-      `round-total-${roundNo}`
-    );
-
-    const roundRunningEl = document.getElementById(
-      `round-running-total-${roundNo}`
-    );
-
-    if (stationTotalEl) {
-      stationTotalEl.textContent =
-        data.station_total ?? 0;
-    }
-
-    if (roundTotalEl) {
-      roundTotalEl.textContent =
-        data.round_total ?? 0;
-    }
-
-    if (roundRunningEl) {
-      roundRunningEl.textContent =
-        data.round_total ?? 0;
-    }
-
-    const cell = el.closest('.score-cell-wrap');
-
-    if (cell) {
-      cell.classList.toggle(
-        'cell-played',
-        played
-      );
-    }
-
-    let acc = 0;
-
-    for (let s = 1; s <= 5; s++) {
-      const stEl = document.getElementById(
-        `station-total-${roundNo}-${s}`
-      );
-
-      const runEl = document.getElementById(
-        `station-running-total-${roundNo}-${s}`
-      );
-
-      const val = Number(
-        stEl ? stEl.textContent : 0
-      );
-
-      acc += val;
-
-      if (runEl) {
-        runEl.textContent = acc;
+      if (Object.prototype.hasOwnProperty.call(data, 'round_stopped')) {
+        applyRedCardStop(roundNo, Boolean(data.round_stopped));
       }
+
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.message || `บันทึกไม่สำเร็จ (${res.status})`);
+      }
+
+      const stationTotalEl = document.getElementById(`station-total-${roundNo}-${stationNo}`);
+
+      const roundTotalEl = document.getElementById(`round-total-${roundNo}`);
+      const roundRunningEl = document.getElementById(`round-running-total-${roundNo}`);
+
+      if (stationTotalEl) stationTotalEl.textContent = data.station_total ?? 0;
+
+      if (roundTotalEl) roundTotalEl.textContent = data.round_total ?? 0;
+
+      if (roundRunningEl) roundRunningEl.textContent = data.round_total ?? 0;
+
+      const cell = el.closest('.score-cell-wrap');
+
+      if (cell) {
+        cell.classList.toggle('cell-played', played);
+        cell.classList.toggle('red-shot', red);
+      }
+
+      let acc = 0;
+
+      for (let s = 1; s <= 5; s++) {
+        const stEl = document.getElementById(`station-total-${roundNo}-${s}`);
+
+        const runEl = document.getElementById(`station-running-total-${roundNo}-${s}`);
+
+        const val = Number(stEl ? stEl.textContent : 0);
+
+        acc += val;
+
+        if (runEl) runEl.textContent = acc;
+      }
+      setAutosaveStatus('saved', 'บันทึกแล้ว');
+    } catch (error) {
+      console.error('Scorecard autosave failed:', error);
+      setAutosaveStatus('error', error.message || 'บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง');
     }
+  }
+
+  function applyRedCardStop(roundNo, stopped) {
+    const form = document.getElementById('scorecardForm');
+    const notice = document.getElementById('redCardStopNotice');
+    const row = document.querySelector(`.round-row.round-${roundNo}`);
+    if (form) form.dataset.stoppedByRed = stopped ? '1' : '0';
+    if (notice) notice.hidden = !stopped;
+    if (row) row.classList.toggle('red-card-stopped', stopped);
+
+    document.querySelectorAll(`.auto-score[data-round="${roundNo}"], .played-check[data-round="${roundNo}"]`).forEach(control => {
+      control.disabled = stopped;
+    });
+    document.querySelectorAll(`.red-check[data-round="${roundNo}"]`).forEach(control => {
+      // ใบแดงที่ติ๊กอยู่ยังเปิดไว้ เพื่อให้แก้กรณีกดผิดได้
+      control.disabled = stopped && !control.checked;
+      const cell = control.closest('.score-cell-wrap');
+      if (cell) cell.classList.toggle('red-shot', control.checked);
+      const score = cell?.querySelector('.auto-score');
+      if (score && !stopped) score.disabled = control.checked;
+    });
   }
 
   document.querySelectorAll('.auto-score').forEach(el => {
@@ -1735,10 +1835,22 @@
         );
 
         if (target) {
+          if (el.classList.contains('red-check') && el.checked) {
+            target.value = '0';
+            const playedBox = document.querySelector(
+              `.played-check[data-round="${el.dataset.round}"][data-station="${el.dataset.station}"][data-distance="${el.dataset.distance}"]`
+            );
+            if (playedBox) playedBox.checked = true;
+          }
           autosaveCell(target);
         }
       });
     });
+
+  applyRedCardStop(
+    document.getElementById('scorecardForm')?.dataset.round || '{{ round_no }}',
+    document.getElementById('scorecardForm')?.dataset.stoppedByRed === '1'
+  );
 
   function setActiveStation(stationNo) {
     document.querySelectorAll('.station-step-btn').forEach(btn => {

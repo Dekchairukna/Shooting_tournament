@@ -212,6 +212,8 @@ class ScoreSignature(db.Model):
     bypass_signed = db.Column(db.Boolean, default=False)
     started_at = db.Column(db.DateTime, nullable=True)
     finished_at = db.Column(db.DateTime, nullable=True)
+    # รอบถูกยุติอัตโนมัติเมื่อได้รับใบแดงครบ 2 ครั้งตามกติกา Precision Shooting
+    stopped_by_red = db.Column(db.Boolean, nullable=False, default=False)
 
 
 class TieBreakEntry(db.Model):
@@ -422,6 +424,7 @@ def ensure_schema() -> None:
             # ScoreEntry: เพิ่ม checkbox ตีแล้วสำหรับทุกช่องคะแนน
             conn.exec_driver_sql('ALTER TABLE "score_entry" ADD COLUMN IF NOT EXISTS is_scored BOOLEAN DEFAULT false')
             conn.exec_driver_sql('UPDATE "score_entry" SET is_scored = true WHERE COALESCE(score, 0) <> 0 OR COALESCE(is_red_card, false) = true')
+            conn.exec_driver_sql('ALTER TABLE "score_signature" ADD COLUMN IF NOT EXISTS stopped_by_red BOOLEAN DEFAULT false')
         return
 
     # SQLite migration เดิม
@@ -442,6 +445,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN started_at DATETIME")
         if "finished_at" not in columns:
             conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN finished_at DATETIME")
+        if "stopped_by_red" not in columns:
+            conn.exec_driver_sql("ALTER TABLE score_signature ADD COLUMN stopped_by_red BOOLEAN DEFAULT 0")
 
         score_entry_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(score_entry)").fetchall()}
         if "is_scored" not in score_entry_columns:
@@ -2542,12 +2547,49 @@ def autosave_scorecard(athlete_id: int):
         signature.started_at = datetime.utcnow()
     athlete.status = "active"
     entry = ScoreEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no, station_no=station_no, distance_m=distance_m).first()
+    round_entries = ScoreEntry.query.filter_by(
+        athlete_id=athlete.id,
+        round_no=round_no,
+    ).all()
+    existing_round_red = sum(1 for item in round_entries if item.is_red_card)
+
+    # หลังใบแดงครั้งที่ 2 ห้ามแก้คะแนน/เพิ่มรายการอีก ยกเว้นการเอาใบแดงเดิมออกเพื่อแก้การกดผิด
+    correcting_red = bool(entry and entry.is_red_card and not red)
+    if existing_round_red >= MAX_RED_CARDS and not correcting_red:
+        summary = summarize_round(athlete.id, round_no)
+        return jsonify({
+            "ok": False,
+            "round_stopped": True,
+            "round_red": existing_round_red,
+            "station_total": summary["by_station"][station_no]["total"],
+            "round_total": summary["total"],
+            "message": "ใบแดงครบ 2 ครั้ง: ยุติการยิงรอบนี้และคงคะแนนที่ทำได้ไว้",
+        }), 409
+
     if entry:
         value = 0 if score_value == "" else int(score_value)
         value = max(0, min(5, value))
         entry.is_red_card = red
         entry.score = 0 if red else value
         entry.is_scored = bool(played or red)
+
+    round_red = sum(1 for item in round_entries if item.is_red_card)
+    round_stopped = round_red >= MAX_RED_CARDS
+    if round_stopped:
+        signature.stopped_by_red = True
+        signature.finished_at = signature.finished_at or datetime.utcnow()
+        athlete.status = "finished"
+    elif signature.stopped_by_red:
+        signature.stopped_by_red = False
+        has_full_signoff = bool(signature.bypass_signed) or all([
+            bool(signature.recorder_name or signature.recorder_signature),
+            bool(signature.referee_name or signature.referee_signature),
+            bool(signature.athlete_name or signature.athlete_signature),
+        ])
+        if not has_full_signoff:
+            signature.finished_at = None
+            athlete.status = "active"
+
     db.session.commit()
     clear_request_cache()
     summary = summarize_round(athlete.id, round_no)
@@ -2561,6 +2603,8 @@ def autosave_scorecard(athlete_id: int):
         "ok": True,
         "station_total": summary["by_station"][station_no]["total"],
         "station_red": station_red,
+        "round_red": round_red,
+        "round_stopped": round_stopped,
         "round_total": summary["total"],
         "station_played_count": summary["by_station"][station_no].get("played_count", 0),
         "station_complete": summary["by_station"][station_no].get("is_complete", False),
@@ -2738,6 +2782,17 @@ def scorecard(athlete_id: int):
         display_order=display_order,
         display_lane_no=display_lane_no,
         display_lane_order=display_lane_order,
+        current_round_red_cards=sum(
+            template_data["station_reds"].get((round_no, station_no), 0)
+            for station_no in STATIONS
+        ),
+        round_stopped_by_red=bool(
+            getattr(signature, "stopped_by_red", False)
+            or sum(
+                template_data["station_reds"].get((round_no, station_no), 0)
+                for station_no in STATIONS
+            ) >= MAX_RED_CARDS
+        ),
     )
 
 

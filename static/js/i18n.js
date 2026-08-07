@@ -69,6 +69,13 @@
       'พิมพ์ Scorecard หลายคน': 'Print multiple scorecards',
       'บันทึกเป็นรูปภาพ': 'Save as image',
       'พิมพ์ตาราง': 'Print table',
+      'ย่อ/ขยาย': 'Zoom',
+      'ความกว้างคู่': 'Match width',
+      'ระยะระหว่างรอบ': 'Round spacing',
+      'เลือกรอบที่จะเลื่อน': 'Round to move',
+      'เลื่อนขึ้น–ลง': 'Move up/down',
+      'พอดีหน้าจอ': 'Fit to screen',
+      'คืนค่า': 'Reset',
       'รอคิว': 'Waiting',
       'กำลังตี': 'In progress',
       'ตีเสร็จแล้ว': 'Finished',
@@ -170,6 +177,8 @@
       '🖨 พิมพ์ Score Sheet รอบนี้': '🖨 Print score sheets for this round',
       'ยังไม่มีคู่รอบ 16 คน': 'No Round of 16 matches yet',
       'บันทึกภาพไม่สำเร็จ ให้ใช้ปุ่มพิมพ์แล้วเลือก Save as PDF': 'The image could not be saved. Use Print and select Save as PDF instead.',
+      'ไม่สามารถเปิดเครื่องมือบันทึกภาพได้ กรุณารีเฟรชหน้าแล้วลองใหม่': 'The image export tool is unavailable. Refresh the page and try again.',
+      'กำลังสร้างภาพ…': 'Creating image…',
       'รอแข่งขัน': 'Waiting to compete',
       'ระบบใช้ตามรอบถัดไปอัตโนมัติ: รอบ 8 = 4, รอบ 16 = 8': 'The system sets this automatically from the next round: Quarterfinal = 4, Round of 16 = 8.',
       'รอบ 16 คน': 'Round of 16',
@@ -179,15 +188,30 @@
       '📊 ดูสถิติ 5/3': '📊 View 5/3 statistics',
       'ยังไม่ตี': 'Not started',
       'กำลังตี / มีการคีย์': 'In progress / scores entered',
-      'ตีแล้ว': 'Completed',
+      'ตีแล้ว': 'Done',
       'ผ่านไปตีรอบ 2': 'Advanced to Round 2',
       'เข้า Knockout': 'Advanced to the knockout stage',
+      'กำลังตี': 'Shooting',
+      'เข้ารอบ': 'Qualified',
+      'จบ': 'Done',
+      'รอ': 'Waiting',
+      'KO': 'KO',
       'สถิติประกอบการจัดอันดับ 5/3': '5/3 ranking statistics',
       'เรียงตาม TOTAL → จำนวน 5 → จำนวน 3 ใช้ดูเหตุผลการจัดลำดับ ไม่รวมคะแนนรอบพิเศษในตารางหลัก': 'Ranked by TOTAL, then the number of 5-point shots, then the number of 3-point shots. This explains the ranking; tie-break scores are not included in the main table.',
       'กำลังโหลด...': 'Loading...',
       'โหลดข้อมูลไม่ได้': 'Unable to load data',
+      'ไม่มีข้อมูล': 'No data available',
+      'เส้นตัดเข้ารอบ': 'Qualification cut line',
+      'CUT LINE / เส้นตัดเข้ารอบ': 'QUALIFICATION CUT LINE',
       'แก้': 'Edit',
       'ต้องตี Shoot-off': 'Shoot-off required',
+      'คะแนนเสมอ': 'Tied score',
+      'ตีรอบ Shoot-off': 'Shoot-off',
+      'พร้อมบันทึก': 'Ready to save',
+      'กำลังบันทึก…': 'Saving…',
+      'บันทึกแล้ว': 'Saved',
+      'บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง': 'Save failed. Please try again.',
+      'เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง': 'The server returned an invalid response.',
 
       /* Results Approved */
       '← กลับ Overview': '← Back to Overview',
@@ -235,6 +259,7 @@
       '← กลับ scorecard': '← Back to scorecard',
       'ลายเซ็นกรรมการ': 'Umpire signature',
       'ลายเซ็นผู้บันทึก': 'Recorder signature',
+      'ใบแดงครบ 2 ครั้ง: ยุติการยิงรอบนี้และคงคะแนนที่ทำได้ไว้': 'Two red cards: this shooting round has ended. All points already scored are retained.',
 
       /* Statistics and tie-break */
       'สถิติ —': 'Statistics —',
@@ -288,7 +313,7 @@
       'แดชบอร์ด': 'Tableau de bord', 'ภาพรวมของรายการแข่งขันและนักกีฬาในระบบ': 'Vue d’ensemble des compétitions et des athlètes', 'อีเวนต์': 'Événements', 'รายการแข่งขัน': 'Compétitions', 'เลือกดูหน้ารวม สถิติ และจัดการนักกีฬาได้จากตารางนี้': 'Ouvrir l’aperçu, les statistiques et la gestion des athlètes depuis ce tableau', 'คะแนนสูงสุดในระบบ': 'Meilleur score du système', 'สถิติสังกัดที่ทำคะแนนดีที่สุด': 'Statistiques des clubs/affiliations les mieux notés', 'คะแนนสูงสุด': 'Meilleur score', 'คะแนนรวม': 'Score total', 'คะแนน': 'points',
       'ชื่องาน': 'Nom de l’événement', 'รุ่น': 'Groupe', 'รุ่นแข่งขัน': 'Groupe de compétition', 'ประเภท': 'Catégorie', 'วันแข่งขัน': 'Date de compétition', 'สนาม': 'Terrain', 'จำนวนสนาม': 'Nombre de terrains', 'จัดการ': 'Gérer', 'หน้ารวม': 'Aperçu', 'สถิติ': 'Statistiques', 'นักกีฬา': 'Athlètes', 'แก้ไข': 'Modifier', 'ลบ': 'Supprimer', 'ยังไม่มีอีเวนต์': 'Aucun événement', 'ยังไม่มีข้อมูล': 'Aucune donnée',
       'ทั่วไป': 'Open', 'อาวุโส': 'Senior', 'เยาวชน': 'Jeunes', 'ชาย': 'Hommes', 'หญิง': 'Femmes', 'ผสม': 'Mixte', 'มี': 'Oui', 'ไม่มี': 'Non', 'จากรอบแรกเข้ารอบถัดไปทันที กี่คน': 'Qualifiés directs depuis le 1er tour', 'มีรอบ 2 หรือไม่': 'Activer le 2e tour ?', 'ถ้ามีรอบ 2 ให้ตีถึงลำดับที่เท่าไหร่': 'Rang limite du 2e tour', 'จากรอบ 2 คัดเข้ารอบต่อกี่คน': 'Qualifiés depuis le 2e tour', 'รอบถัดไปคือรอบอะไร': 'Nom du tour suivant',
-      'รอบที่กำลังดู': 'Tour affiché', 'รอบ 1': 'Tour 1', 'รอบ 2': 'Tour 2', 'รอบที่ 1': 'Tour 1', 'รอบที่ 2': 'Tour 2', 'รอบ 8 คน': 'Quart de finale', 'รอบ 4 คน': 'Demi-finale à 4', 'รอบรองชนะเลิศ': 'Demi-finale', 'รอบชิงชนะเลิศ': 'Finale', 'ตารางประกบ': 'Tableau', 'หน้าประกบคู่': 'Page du tableau', 'พิมพ์ Scorecard หลายคน': 'Imprimer plusieurs fiches', 'บันทึกเป็นรูปภาพ': 'Enregistrer comme image', 'พิมพ์ตาราง': 'Imprimer le tableau',
+      'รอบที่กำลังดู': 'Tour affiché', 'รอบ 1': 'Tour 1', 'รอบ 2': 'Tour 2', 'รอบที่ 1': 'Tour 1', 'รอบที่ 2': 'Tour 2', 'รอบ 8 คน': 'Quart de finale', 'รอบ 4 คน': 'Demi-finale à 4', 'รอบรองชนะเลิศ': 'Demi-finale', 'รอบชิงชนะเลิศ': 'Finale', 'ตารางประกบ': 'Tableau', 'หน้าประกบคู่': 'Page du tableau', 'พิมพ์ Scorecard หลายคน': 'Imprimer plusieurs fiches', 'บันทึกเป็นรูปภาพ': 'Enregistrer comme image', 'พิมพ์ตาราง': 'Imprimer le tableau', 'ย่อ/ขยาย': 'Zoom', 'ความกว้างคู่': 'Largeur du match', 'ระยะระหว่างรอบ': 'Espacement des tours', 'เลือกรอบที่จะเลื่อน': 'Tour à déplacer', 'เลื่อนขึ้น–ลง': 'Déplacer haut/bas', 'พอดีหน้าจอ': 'Ajuster à l’écran', 'คืนค่า': 'Réinitialiser',
       'รอคิว': 'En attente', 'กำลังตี': 'En cours', 'ตีเสร็จแล้ว': 'Terminé', 'เข้ารอบตรง': 'Qualifié direct', 'ผ่านจากรอบ 2': 'Qualifié du 2e tour', 'มีสิทธิ์รอบ 2': 'Éligible au 2e tour', 'ตกรอบ': 'Éliminé', 'ลำดับการตี': 'Ordre de tir', 'ลำดับในสนาม': 'Ordre sur terrain', 'สถานะ': 'Statut', 'หมายเลข': 'Dossard', 'ชื่อ': 'Nom', 'สังกัด': 'Affiliation',
       'เพิ่มนักกีฬาและจัดลำดับยิง': 'Ajouter des athlètes et définir l’ordre de tir', 'ไปหน้ารวม': 'Aller à l’aperçu', 'หมายเลขและลำดับรวม ระบบสร้างให้อัตโนมัติ': 'Le dossard et l’ordre général sont générés automatiquement', 'เพิ่มนักกีฬา': 'Ajouter un athlète', 'การกระจายสนามอัตโนมัติ': 'Répartition automatique des terrains', 'สนาม = วนตามจำนวนสนาม เช่น 1, 2, 3, 4 แล้วกลับไป 1': 'Les terrains tournent selon le nombre disponible, ex. 1, 2, 3, 4 puis retour à 1', 'สุ่มลำดับทั้งหมด': 'Mélanger tous les ordres', 'นำเข้ารายชื่อนักกีฬาจาก Excel': 'Importer une liste depuis Excel', 'ไฟล์ต้องเป็น .xlsx และต้องมี 2 คอลัมน์คือ': 'Le fichier doit être .xlsx avec 2 colonnes :', 'เลือกไฟล์ Excel': 'Choisir un fichier Excel', 'อัปโหลด Excel': 'Importer Excel', 'ดาวน์โหลดไฟล์ตัวอย่าง': 'Télécharger le modèle', 'ยังไม่มีนักกีฬา': 'Aucun athlète',
       'ประเภทสุดยอดความแม่นยำ (SHOOTING)': 'Tir de précision', 'กลับหน้ารวม': 'Retour à l’aperçu', 'พิมพ์แบบฟอร์ม': 'Imprimer le formulaire', 'รอบที่คีย์': 'Tour saisi', 'สถานีที่': 'Atelier', 'ยิงลูกเดี่ยว': 'Tir boule seule', 'ยิงลูกเหนือเป้า': 'Tir par-dessus la cible', 'ยิงลูกกลางขวาง': 'Tir avec obstacle central', 'ยิงลูกขาวเหนือลูกดำ': 'Boule blanche par-dessus boule noire', 'ยิงลูกเป้า': 'Tir sur la cible', 'รอบแข่งขัน': 'Tour de compétition', 'รวม': 'Total', 'แดง': 'Rouge',
@@ -301,7 +326,7 @@
       'แดชบอร์ด': '仪表盘', 'ภาพรวมของรายการแข่งขันและนักกีฬาในระบบ': '系统中的赛事和运动员概览', 'อีเวนต์': '赛事', 'รายการแข่งขัน': '比赛列表', 'เลือกดูหน้ารวม สถิติ และจัดการนักกีฬาได้จากตารางนี้': '可从此表进入总览、统计和运动员管理', 'คะแนนสูงสุดในระบบ': '系统最高分', 'สถิติสังกัดที่ทำคะแนนดีที่สุด': '最佳单位/队伍统计', 'คะแนนสูงสุด': '最高分', 'คะแนนรวม': '总分', 'คะแนน': '分',
       'ชื่องาน': '赛事名称', 'รุ่น': '组别', 'รุ่นแข่งขัน': '比赛组别', 'ประเภท': '类别', 'วันแข่งขัน': '比赛日期', 'สนาม': '场地', 'จำนวนสนาม': '场地数量', 'จัดการ': '管理', 'หน้ารวม': '总览', 'สถิติ': '统计', 'นักกีฬา': '运动员', 'แก้ไข': '编辑', 'ลบ': '删除', 'ยังไม่มีอีเวนต์': '暂无赛事', 'ยังไม่มีข้อมูล': '暂无数据',
       'ทั่วไป': '公开组', 'อาวุโส': '长青组', 'เยาวชน': '青年组', 'ชาย': '男子', 'หญิง': '女子', 'ผสม': '混合', 'มี': '有', 'ไม่มี': '无', 'จากรอบแรกเข้ารอบถัดไปทันที กี่คน': '第一轮直接晋级人数', 'มีรอบ 2 หรือไม่': '是否有第二轮？', 'ถ้ามีรอบ 2 ให้ตีถึงลำดับที่เท่าไหร่': '第二轮截止名次', 'จากรอบ 2 คัดเข้ารอบต่อกี่คน': '第二轮晋级人数', 'รอบถัดไปคือรอบอะไร': '下一轮名称',
-      'รอบที่กำลังดู': '当前查看轮次', 'รอบ 1': '第1轮', 'รอบ 2': '第2轮', 'รอบที่ 1': '第1轮', 'รอบที่ 2': '第2轮', 'รอบ 8 คน': '八强赛', 'รอบ 4 คน': '四强赛', 'รอบรองชนะเลิศ': '半决赛', 'รอบชิงชนะเลิศ': '决赛', 'ตารางประกบ': '对阵表', 'หน้าประกบคู่': '对阵页面', 'พิมพ์ Scorecard หลายคน': '打印多张记分卡', 'บันทึกเป็นรูปภาพ': '保存为图片', 'พิมพ์ตาราง': '打印表格',
+      'รอบที่กำลังดู': '当前查看轮次', 'รอบ 1': '第1轮', 'รอบ 2': '第2轮', 'รอบที่ 1': '第1轮', 'รอบที่ 2': '第2轮', 'รอบ 8 คน': '八强赛', 'รอบ 4 คน': '四强赛', 'รอบรองชนะเลิศ': '半决赛', 'รอบชิงชนะเลิศ': '决赛', 'ตารางประกบ': '对阵表', 'หน้าประกบคู่': '对阵页面', 'พิมพ์ Scorecard หลายคน': '打印多张记分卡', 'บันทึกเป็นรูปภาพ': '保存为图片', 'พิมพ์ตาราง': '打印表格', 'ย่อ/ขยาย': '缩放', 'ความกว้างคู่': '对阵框宽度', 'ระยะระหว่างรอบ': '轮次间距', 'เลือกรอบที่จะเลื่อน': '选择要移动的轮次', 'เลื่อนขึ้น–ลง': '上下移动', 'พอดีหน้าจอ': '适合屏幕', 'คืนค่า': '重置',
       'รอคิว': '等待中', 'กำลังตี': '进行中', 'ตีเสร็จแล้ว': '已完成', 'เข้ารอบตรง': '直接晋级', 'ผ่านจากรอบ 2': '第二轮晋级', 'มีสิทธิ์รอบ 2': '可进入第二轮', 'ตกรอบ': '淘汰', 'ลำดับการตี': '击球顺序', 'ลำดับในสนาม': '场地内顺序', 'สถานะ': '状态', 'หมายเลข': '号码', 'ชื่อ': '姓名', 'สังกัด': '所属单位',
       'เพิ่มนักกีฬาและจัดลำดับยิง': '添加运动员并安排击球顺序', 'ไปหน้ารวม': '前往总览', 'หมายเลขและลำดับรวม ระบบสร้างให้อัตโนมัติ': '号码和总顺序由系统自动生成', 'เพิ่มนักกีฬา': '添加运动员', 'การกระจายสนามอัตโนมัติ': '自动分配场地', 'สนาม = วนตามจำนวนสนาม เช่น 1, 2, 3, 4 แล้วกลับไป 1': '场地按数量循环分配，例如 1、2、3、4 后回到 1', 'สุ่มลำดับทั้งหมด': '随机全部顺序', 'นำเข้ารายชื่อนักกีฬาจาก Excel': '从 Excel 导入运动员名单', 'ไฟล์ต้องเป็น .xlsx และต้องมี 2 คอลัมน์คือ': '文件必须为 .xlsx，且包含两列：', 'เลือกไฟล์ Excel': '选择 Excel 文件', 'อัปโหลด Excel': '上传 Excel', 'ดาวน์โหลดไฟล์ตัวอย่าง': '下载模板文件', 'ยังไม่มีนักกีฬา': '暂无运动员',
       'ประเภทสุดยอดความแม่นยำ (SHOOTING)': '精准射击', 'กลับหน้ารวม': '返回总览', 'พิมพ์แบบฟอร์ม': '打印表单', 'รอบที่คีย์': '录入轮次', 'สถานีที่': '站点', 'ยิงลูกเดี่ยว': '单球射击', 'ยิงลูกเหนือเป้า': '越过目标球射击', 'ยิงลูกกลางขวาง': '中间障碍射击', 'ยิงลูกขาวเหนือลูกดำ': '白球越过黑球射击', 'ยิงลูกเป้า': '目标球射击', 'รอบแข่งขัน': '比赛轮次', 'รวม': '合计', 'แดง': '红牌',
@@ -323,17 +348,23 @@
     let result = text;
     if (dict === translations.en) {
       result = result
+        /* Translate complete dynamic sentences before individual words. */
+        .replace(/ยืนยันลบ\s+(.+?)\s*\?/g, 'Delete $1?')
         .replace(/ลบรายการ\s+(.+?)\s+เรียบร้อย/g, 'Deleted $1 successfully.')
         .replace(/นำเข้านักกีฬาสำเร็จ\s+(\d+)\s+คน/g, '$1 athletes were imported successfully.')
+        .replace(/จำนวน\s+(\d+)\s+คน\s*\|/g, '$1 athletes |')
         .replace(/จำนวน\s+(\d+)\s+คน/g, '$1 athletes')
         .replace(/แถวที่\s+(\d+)\s+ต้องมีทั้งชื่อและสังกัด/g, 'Row $1 must include both a name and an affiliation.')
         .replace(/ไฟล์โลโก้\s+(.+?)\s+ต้องเป็น png, jpg, jpeg, webp หรือ gif/g, 'Logo file $1 must be a PNG, JPG, JPEG, WEBP, or GIF file.')
         .replace(/(\d+)\s*คะแนน\s*\|\s*5 คะแนน\s*(\d+)\s*ครั้ง\s*\|\s*3 คะแนน\s*(\d+)\s*ครั้ง/g, '$1 points | 5-point shots: $2 | 3-point shots: $3')
         .replace(/รอบ\s+(\d+)\s+·\s+เลือกคะแนนแบบ 0\s*\/\s*1\s*\/\s*3\s*\/\s*5/g, 'Round $1 · Select a score of 0, 1, 3, or 5')
+        .replace(/กำลังตี\s+ส(\d+)/g, 'Shooting S$1')
         .replace(/(^|\|\s*)(ชาย|หญิง|ผสม)(?=\s*(?:\||$))/g, function (_, prefix, category) {
           return prefix + { 'ชาย': 'Men', 'หญิง': 'Women', 'ผสม': 'Mixed' }[category];
         })
-        .replace(/ส(\d+)\s+(\d+)\/4/g, 'Station $1 $2/4');
+        .replace(/ส(\d+)\s+(\d+)\/4/g, 'Station $1: $2/4 shots')
+        .replace(/สถานีที่?\s+(\d+)/g, 'Station $1')
+        .replace(/รอบที่กำลังดู:\s*(\d+)/g, 'Viewing Round $1');
     }
 
     const keys = Object.keys(dict)
@@ -460,9 +491,10 @@
     if (LANG !== 'th') {
       const dict = translations[LANG];
       if (LANG === 'en') {
-        document.documentElement.style.setProperty('--i18n-cut-line', '"CUT LINE"');
+        document.documentElement.style.setProperty('--i18n-cut-line', '"QUALIFICATION CUT LINE"');
       }
       translateNode(document.body, dict);
+      document.title = translateText(document.title, dict);
       installDialogTranslation(dict);
       installDynamicTranslation(dict);
     }

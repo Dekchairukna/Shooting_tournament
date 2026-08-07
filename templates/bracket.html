@@ -15,7 +15,7 @@
       {% endif %}
       <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id) }}">กลับหน้าอีเวนต์</a>
       <a class="btn secondary" href="{{ url_for('index') }}">รายการทั้งหมด</a>
-      <button type="button" class="btn secondary" onclick="downloadBracketImage()">บันทึกเป็นรูปภาพ</button>
+      <button type="button" class="btn secondary" data-bracket-download onclick="downloadBracketImage()">บันทึกเป็นรูปภาพ</button>
       <button type="button" class="btn secondary" onclick="window.print()">พิมพ์ตาราง</button>
     </div>
   </div>
@@ -1596,11 +1596,72 @@
       .match-row th, .match-row td{height:16px!important;}
     }
 
+    /* ===== BRACKET V2: จัดกึ่งกลางจากคู่ต้นทางและวาดเส้นเชื่อมอัตโนมัติ ===== */
+    .knockout-page{overflow:visible!important;}
+    .bracket-controls-v2{
+      display:flex;
+      flex-wrap:wrap;
+      align-items:end;
+      gap:10px;
+      margin:0 0 14px;
+      padding:12px;
+      border:1px solid #dbe4ef;
+      border-radius:14px;
+      background:#fffaf0;
+    }
+    .bracket-controls-v2 label{display:grid;gap:4px;font-size:.76rem;font-weight:900;color:#334155;}
+    .bracket-controls-v2 input[type="range"]{width:132px;}
+    .bracket-controls-v2 select{min-width:150px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;padding:7px 9px;color:#0f172a;font-weight:800;}
+    .bracket-scroll-v2{width:100%;overflow:auto;padding:4px 2px 18px;}
+    .bracket-board.auto-bracket{
+      position:relative!important;
+      display:flex!important;
+      width:max-content!important;
+      max-width:none!important;
+      min-width:100%!important;
+      gap:var(--bracket-gap,34px)!important;
+      align-items:stretch!important;
+      overflow:visible!important;
+      zoom:var(--bracket-scale,1)!important;
+      padding:8px!important;
+    }
+    .bracket-board.auto-bracket .round-col{
+      position:relative;
+      z-index:2;
+      display:flex;
+      flex:0 0 var(--round-width,430px);
+      width:var(--round-width,430px)!important;
+      min-width:var(--round-width,430px)!important;
+      flex-direction:column;
+    }
+    /* กล่องต้นทางเรียงติดกัน เพื่อไม่ให้ระยะของสายขยายตามลำดับคู่ */
+    .round-matches{position:relative;top:var(--round-shift,0px);display:flex;flex:1;flex-direction:column;gap:0;min-height:120px;}
+    .round-matches>.match-box{width:100%;margin:0!important;}
+    .round-matches.auto-centered{display:block;}
+    /* ต้องชนะกฎ .match-box { position:relative!important } ด้านบน
+       ไม่เช่นนั้น top ของคู่ 2/3/4 จะถูกบวกจากตำแหน่งเดิมและไหลลงสะสม */
+    .round-matches.auto-centered>.match-box{position:absolute!important;left:0;right:0;transition:top .16s ease;}
+    .bracket-lines-v2{position:absolute;inset:0;z-index:1;overflow:visible;pointer-events:none;}
+    .bracket-lines-v2 path{fill:none;stroke:#94a3b8;stroke-width:2;vector-effect:non-scaling-stroke;}
+    .exporting-bracket .bracket-controls-v2{display:none!important;}
+
+    @media(max-width:720px){
+      .bracket-controls-v2{align-items:stretch;}
+      .bracket-controls-v2 label{flex:1 1 140px;}
+      .bracket-controls-v2 input[type="range"],.bracket-controls-v2 select{width:100%;}
+      .bracket-board.auto-bracket{--round-width:360px;}
+    }
+    @media print{
+      .bracket-controls-v2{display:none!important;}
+      .bracket-scroll-v2{overflow:visible!important;}
+      .bracket-board.auto-bracket{zoom:.56!important;gap:18px!important;min-width:0!important;}
+    }
+
   </style>
 
 
   {% macro render_match(item, round_key, title, total_label, show_qual=False, extra_class='') %}
-  <div class="match-box {{ extra_class }}">
+  <div class="match-box {{ extra_class }}" data-bracket-match data-round="{{ round_key }}" data-match-no="{{ item.match.match_no }}">
     <div class="match-head"><div class="match-title">{{ title }}</div><span class="match-status {{ item.status.key }}">{{ item.status.label }}</span></div>
     <div class="table-wrap">
       <table class="match-row {% if not show_qual %}compact-match-row{% endif %}">
@@ -1650,84 +1711,281 @@
   </div>
   {% endmacro %}
 
-  <div class="bracket-board start-{{ start_round|lower }}">
+  <div class="bracket-controls-v2" data-bracket-controls data-event="{{ event.id }}">
+    <label>ย่อ/ขยาย<input name="scale" type="range" min="0.45" max="1.2" step="0.05" value="1"></label>
+    <label>ความกว้างคู่<input name="width" type="range" min="320" max="620" step="10" value="430"></label>
+    <label>ระยะระหว่างรอบ<input name="gap" type="range" min="12" max="100" step="4" value="34"></label>
+    <label>เลือกรอบที่จะเลื่อน<select name="shift_round">{% if start_round == 'R16' %}<option value="R16">Round of 16</option>{% endif %}{% if start_round in ['R16','QF'] %}<option value="QF">Quarter Final</option>{% endif %}{% if start_round in ['R16','QF','SF'] %}<option value="SF">Semi Final</option>{% endif %}<option value="F">Final</option></select></label>
+    <label>เลื่อนขึ้น–ลง<input name="shift" type="range" min="-260" max="260" step="8" value="0"></label>
+    <button class="btn secondary" type="button" data-bracket-fit>พอดีหน้าจอ</button>
+    <button class="btn secondary" type="button" data-bracket-reset>คืนค่า</button>
+  </div>
+
+  <div class="bracket-scroll-v2"><div class="bracket-board auto-bracket start-{{ start_round|lower }}">
     {% if start_round == 'R16' %}
-    <div class="round-col r16">
+    <div class="round-col r16" data-bracket-round="R16">
       <h2 class="round-title">Round of 16</h2>
       <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=3) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
+      <div class="round-matches">
       {% for item in grouped.get('R16', []) %}
         {{ render_match(item, 'R16', 'R16 ' ~ item.match.match_no, 'R16 TOTAL', start_round == 'R16') }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่รอบ 16 คน</p>
       {% endfor %}
+      </div>
     </div>
     {% endif %}
 
     {% if start_round in ['R16','QF'] %}
-    <div class="round-col qf">
+    <div class="round-col qf" data-bracket-round="QF">
       <h2 class="round-title">Quarter Final</h2>
       <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=4 if start_round == 'R16' else 3) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
+      <div class="round-matches">
       {% for item in grouped.get('QF', []) %}
         {{ render_match(item, 'QF', 'QF ' ~ item.match.match_no, 'QF TOTAL', start_round == 'QF', 'qf-pos-' ~ loop.index) }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่ Quarter Final</p>
       {% endfor %}
+      </div>
     </div>
     {% endif %}
 
     {% if start_round in ['R16','QF','SF'] %}
-    <div class="round-col sf">
+    <div class="round-col sf" data-bracket-round="SF">
       <h2 class="round-title">Semi Final</h2>
       <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=5 if start_round == 'R16' else (4 if start_round == 'QF' else 3)) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
+      <div class="round-matches">
       {% for item in grouped.get('SF', []) %}
         {{ render_match(item, 'SF', 'SF ' ~ item.match.match_no, 'SF TOTAL', start_round == 'SF', 'sf-pos-' ~ loop.index) }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่ Semi Final</p>
       {% endfor %}
+      </div>
     </div>
     {% endif %}
 
-    <div class="round-col final">
+    <div class="round-col final" data-bracket-round="F">
       <h2 class="round-title">Final</h2>
       <div class="round-actions"><a class="round-print-btn" href="{{ url_for('scorecards_print_bulk', event_id=event.id, round=6 if start_round == 'R16' else (5 if start_round == 'QF' else 4)) }}" target="_blank">🖨 พิมพ์ Score Sheet รอบนี้</a></div>
+      <div class="round-matches">
       {% for item in grouped.get('F', []) %}
         {{ render_match(item, 'F', 'Final', 'FINAL TOTAL', False, 'final-pos') }}
       {% else %}
       <p class="muted-box">ยังไม่มีคู่ Final</p>
       {% endfor %}
+      </div>
     </div>
-  </div>
+  </div></div>
 </section>
 {% endblock %}
 
 {% block scripts %}
 <script>
+function bracketNextPaint(){
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function bracketZoom(board){
+  return parseFloat(getComputedStyle(board).zoom) || 1;
+}
+
+function layoutShootingBracket(board){
+  if (!board) return;
+  const rounds = [...board.querySelectorAll('[data-bracket-round]')];
+  if (!rounds.length) return;
+  const firstContainer = rounds[0].querySelector('.round-matches');
+  if (!firstContainer) return;
+
+  const firstMatches = [...firstContainer.querySelectorAll(':scope > [data-bracket-match]')];
+  firstContainer.classList.remove('auto-centered');
+  firstMatches.forEach(match => match.style.removeProperty('top'));
+  rounds.forEach(round => {
+    const container = round.querySelector('.round-matches');
+    if (container) container.style.removeProperty('min-height');
+  });
+
+  const baseHeight = Math.max(180, firstContainer.scrollHeight);
+  rounds.forEach(round => {
+    const container = round.querySelector('.round-matches');
+    if (container) container.style.minHeight = `${baseHeight}px`;
+  });
+
+  const zoom = bracketZoom(board);
+  for (let roundIndex = 1; roundIndex < rounds.length; roundIndex += 1) {
+    const previousMatches = [...rounds[roundIndex - 1].querySelectorAll('[data-bracket-match]')];
+    const container = rounds[roundIndex].querySelector('.round-matches');
+    if (!container) continue;
+    const targets = [...container.querySelectorAll(':scope > [data-bracket-match]')];
+    container.classList.add('auto-centered');
+    const containerRect = container.getBoundingClientRect();
+
+    targets.forEach((target, targetIndex) => {
+      const incoming = previousMatches.slice(targetIndex * 2, targetIndex * 2 + 2);
+      let center;
+      if (incoming.length) {
+        const centers = incoming.map(source => {
+          const rect = source.getBoundingClientRect();
+          return rect.top + rect.height / 2;
+        });
+        center = centers.reduce((sum, value) => sum + value, 0) / centers.length;
+      } else {
+        center = containerRect.top + containerRect.height * ((targetIndex + .5) / Math.max(1, targets.length));
+      }
+      const top = (center - containerRect.top) / zoom - target.offsetHeight / 2;
+      target.style.top = `${Math.max(0, top)}px`;
+    });
+  }
+}
+
+function drawShootingBracketLines(board){
+  if (!board) return;
+  let svg = board.querySelector(':scope > .bracket-lines-v2');
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('bracket-lines-v2');
+    svg.setAttribute('aria-hidden', 'true');
+    board.prepend(svg);
+  }
+  const zoom = bracketZoom(board);
+  const boardRect = board.getBoundingClientRect();
+  const width = board.scrollWidth;
+  const height = board.scrollHeight;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', width);
+  svg.setAttribute('height', height);
+  svg.replaceChildren();
+
+  const rounds = [...board.querySelectorAll('[data-bracket-round]')];
+  const point = (element, side) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: ((side === 'right' ? rect.right : rect.left) - boardRect.left) / zoom,
+      y: (rect.top + rect.height / 2 - boardRect.top) / zoom,
+    };
+  };
+
+  for (let roundIndex = 0; roundIndex < rounds.length - 1; roundIndex += 1) {
+    const sources = [...rounds[roundIndex].querySelectorAll('[data-bracket-match]')];
+    const targets = [...rounds[roundIndex + 1].querySelectorAll('[data-bracket-match]')];
+    sources.forEach((source, sourceIndex) => {
+      const target = targets[Math.floor(sourceIndex / 2)];
+      if (!target) return;
+      const start = point(source, 'right');
+      const end = point(target, 'left');
+      const middle = start.x + Math.max(18, (end.x - start.x) / 2);
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${start.x} ${start.y} H ${middle} V ${end.y} H ${end.x}`);
+      svg.append(path);
+    });
+  }
+}
+
+function refreshShootingBracket(){
+  const board = document.querySelector('.bracket-board.auto-bracket');
+  if (!board) return;
+  layoutShootingBracket(board);
+  drawShootingBracketLines(board);
+}
+
+function setupShootingBracketControls(){
+  const controls = document.querySelector('[data-bracket-controls]');
+  const board = document.querySelector('.bracket-board.auto-bracket');
+  if (!controls || !board) return;
+  const scaleInput = controls.querySelector('[name="scale"]');
+  const widthInput = controls.querySelector('[name="width"]');
+  const gapInput = controls.querySelector('[name="gap"]');
+  const roundInput = controls.querySelector('[name="shift_round"]');
+  const shiftInput = controls.querySelector('[name="shift"]');
+  const storageKey = `shooting-bracket-v2-${controls.dataset.event}`;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); }
+  catch (_) { localStorage.removeItem(storageKey); }
+  let state = {scale:saved.scale || 1,width:saved.width || 430,gap:saved.gap || 34,shifts:saved.shifts || {}};
+
+  const apply = () => {
+    board.style.setProperty('--bracket-scale', Number(state.scale) || 1);
+    board.style.setProperty('--round-width', `${Number(state.width) || 430}px`);
+    board.style.setProperty('--bracket-gap', `${Number(state.gap) || 34}px`);
+    board.querySelectorAll('[data-bracket-round]').forEach(round => {
+      const container = round.querySelector('.round-matches');
+      if (container) container.style.setProperty('--round-shift', `${Number(state.shifts?.[round.dataset.bracketRound]) || 0}px`);
+    });
+    scaleInput.value = state.scale;
+    widthInput.value = state.width;
+    gapInput.value = state.gap;
+    shiftInput.value = Number(state.shifts?.[roundInput.value]) || 0;
+    requestAnimationFrame(refreshShootingBracket);
+  };
+
+  apply();
+  controls.addEventListener('input', event => {
+    if (event.target === roundInput) {
+      shiftInput.value = Number(state.shifts?.[roundInput.value]) || 0;
+      return;
+    }
+    const shifts = {...(state.shifts || {})};
+    if (event.target === shiftInput) shifts[roundInput.value] = Number(shiftInput.value);
+    state = {scale:Number(scaleInput.value),width:Number(widthInput.value),gap:Number(gapInput.value),shifts};
+    localStorage.setItem(storageKey, JSON.stringify(state));
+    apply();
+  });
+  controls.querySelector('[data-bracket-reset]')?.addEventListener('click', () => {
+    localStorage.removeItem(storageKey);
+    state = {scale:1,width:430,gap:34,shifts:{}};
+    apply();
+  });
+  controls.querySelector('[data-bracket-fit]')?.addEventListener('click', () => {
+    const wrap = board.closest('.bracket-scroll-v2');
+    if (!wrap) return;
+    board.style.setProperty('--bracket-scale', 1);
+    refreshShootingBracket();
+    const scale = Math.max(.45, Math.min(1, (wrap.clientWidth - 20) / board.scrollWidth));
+    state = {...state, scale:Number(scale.toFixed(2))};
+    localStorage.setItem(storageKey, JSON.stringify(state));
+    apply();
+  });
+}
+
 function downloadBracketImage(){
   const node = document.getElementById('bracketExportArea');
   if (!node) return;
+
+  if (typeof window.html2canvas !== 'function') {
+    alert('ไม่สามารถเปิดเครื่องมือบันทึกภาพได้ กรุณารีเฟรชหน้าแล้วลองใหม่');
+    return;
+  }
 
   const oldWidth = node.style.width;
   const oldOverflow = node.style.overflow;
   const board = node.querySelector('.bracket-board');
   const oldBoardOverflow = board ? board.style.overflow : '';
+  const oldScale = board ? board.style.getPropertyValue('--bracket-scale') : '';
+  const exportButton = document.querySelector('[data-bracket-download]');
+  const oldButtonText = exportButton?.textContent || '';
 
   node.classList.add('exporting-bracket');
-  node.style.width = Math.max(1800, node.scrollWidth) + 'px';
+  if (exportButton) { exportButton.disabled = true; exportButton.textContent = 'กำลังสร้างภาพ…'; }
+  if (board) board.style.setProperty('--bracket-scale', 1);
+  refreshShootingBracket();
+  node.style.width = Math.max(1500, (board?.scrollWidth || node.scrollWidth) + 44) + 'px';
   node.style.overflow = 'visible';
   if (board) board.style.overflow = 'visible';
 
-  html2canvas(node, {
-    scale: 2,
+  const renderScale = Math.max(1, Math.min(2, 15000 / Math.max(node.scrollWidth, node.scrollHeight)));
+  bracketNextPaint().then(() => html2canvas(node, {
+    scale: renderScale,
     backgroundColor: '#ffffff',
     width: node.scrollWidth,
     height: node.scrollHeight,
     windowWidth: node.scrollWidth,
     windowHeight: node.scrollHeight,
     scrollX: 0,
-    scrollY: 0
-  }).then(canvas => {
+    scrollY: 0,
+    useCORS: true,
+    logging: false
+  })).then(canvas => {
     const a = document.createElement('a');
-    a.download = `bracket-{{ event.id }}.png`;
+    a.download = `shooting-bracket-{{ event.id }}.png`;
     a.href = canvas.toDataURL('image/png');
     a.click();
   }).catch(() => {
@@ -1736,7 +1994,13 @@ function downloadBracketImage(){
     node.classList.remove('exporting-bracket');
     node.style.width = oldWidth;
     node.style.overflow = oldOverflow;
-    if (board) board.style.overflow = oldBoardOverflow;
+    if (board) {
+      board.style.overflow = oldBoardOverflow;
+      if (oldScale) board.style.setProperty('--bracket-scale', oldScale);
+      else board.style.removeProperty('--bracket-scale');
+    }
+    if (exportButton) { exportButton.disabled = false; exportButton.textContent = oldButtonText; }
+    refreshShootingBracket();
   });
 }
 
@@ -1915,7 +2179,7 @@ async function refreshBracketData(){
     if (data.SF) updateBracketGroup("SF", data.SF);
     if (data.F) updateBracketGroup("F", data.F);
     bindBracketScorecardClicks();
-    bindBracketScorecardClicks();
+    refreshShootingBracket();
   } catch (err) {
     console.error(err);
   } finally {
@@ -1931,6 +2195,9 @@ setInterval(() => {
 }, 1000);
 
 bindBracketScorecardClicks();
+setupShootingBracketControls();
 refreshBracketData();
+window.addEventListener('resize', refreshShootingBracket);
+window.addEventListener('load', refreshShootingBracket);
 </script>
 {% endblock %}
