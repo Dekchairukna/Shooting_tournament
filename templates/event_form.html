@@ -27,7 +27,7 @@
         <option value="no" {% if event and not event.has_round_two %}selected{% endif %}>ไม่มี</option>
       </select>
     </label>
-    <label>ถ้ามีรอบ 2 ให้ตีถึงลำดับที่เท่าไหร่<input type="number" min="1" name="round_two_cutoff_rank" value="{{ event.round_two_cutoff_rank if event else 16 }}"></label>
+    <label>ถ้ามีรอบ 2 ให้ผู้เล่นถัดจากผู้ผ่านตรงตีอย่างน้อยกี่คน<input type="number" min="1" name="round_two_cutoff_rank" value="{{ event.round_two_cutoff_rank if event else 16 }}"><small class="muted">เช่น 16 = หลังผู้ผ่านตรงแล้วเลือกอย่างน้อย 16 คน และรับเพิ่มทุกคนที่ Total เท่ากับคนที่ 16</small></label>
     <label>จากรอบ 2 คัดเข้ารอบต่อกี่คน<input id="round_two_advancers" type="number" min="1" name="round_two_advancers" value="{{ event.round_two_advancers if event else 4 }}"><small class="muted">ระบบใช้ตามรอบถัดไปอัตโนมัติ: รอบ 8 = 4, รอบ 16 = 8</small></label>
     <label>รอบถัดไปคือรอบอะไร
       <select name="next_round_label" id="next_round_label">

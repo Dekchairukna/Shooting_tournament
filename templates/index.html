@@ -473,6 +473,13 @@
     </section>
   </div>
 
+  {% if current_user.is_authenticated and current_user.role == 'court' %}
+  <section class="card" style="border-color:#86efac;background:#f0fdf4;">
+    <h2 style="margin:0;color:#166534;">เจ้าหน้าที่สนาม {{ current_user.court_no }}</h2>
+    <p style="margin:6px 0 0;color:#166534;">บัญชี {{ court_public_id(current_user) }} · แสดงเฉพาะอีเวนต์ที่ได้รับมอบหมายและสนาม {{ current_user.court_no }}</p>
+  </section>
+  {% endif %}
+
   <section class="card">
     <div class="section-head">
       <div>
@@ -523,8 +530,8 @@
             <td class="actions-cell">
               <div class="mobile-label">จัดการ</div>
               <div class="action-group">
-                <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">หน้ารวม</a>
-                <a class="btn secondary" href="{{ url_for('event_stats', event_id=event.id) }}">สถิติ</a>
+                <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">{% if current_user.is_authenticated and current_user.role == 'court' %}สนาม {{ current_user.court_no }}{% else %}หน้ารวม{% endif %}</a>
+                {% if not (current_user.is_authenticated and current_user.role == 'court') %}<a class="btn secondary" href="{{ url_for('event_stats', event_id=event.id) }}">สถิติ</a>{% endif %}
 
                 {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
                 <a class="btn secondary" href="{{ url_for('manage_athletes', event_id=event.id) }}">นักกีฬา</a>

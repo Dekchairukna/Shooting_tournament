@@ -1196,6 +1196,24 @@
         </tbody>
       </table>
 
+      {% if is_finalized %}
+      <div style="margin:12px 0;padding:12px;border:2px solid #f59e0b;border-radius:14px;background:#fffbeb;">
+        <div style="font-weight:950;color:#92400e;margin-bottom:6px;">⚠️ ผลรอบนี้ลงลายเซ็นยืนยันแล้ว</div>
+        <div style="font-size:.86rem;color:#78350f;margin-bottom:8px;">หากต้องแก้คะแนน ระบบจะเก็บค่าเดิม/ค่าใหม่ ผู้แก้ เวลา และต้องมีลายเซ็นผู้แก้ไข</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="btn secondary signature-open-btn" data-target="edit_signature_current" data-title="ลายเซ็นผู้แก้ไขคะแนน">ลงลายเซ็นผู้แก้ไข</button>
+          <button type="button" class="btn secondary signature-clear-btn" data-target="edit_signature_current">ล้างลายเซ็น</button>
+          <input id="edit_reason_current" type="text" placeholder="เหตุผลในการแก้ (ถ้ามี)" style="min-width:220px;flex:1;padding:9px;border:1px solid #d97706;border-radius:9px;">
+        </div>
+        <div class="sig-preview-box" data-preview-wrap="edit_signature_current" style="margin-top:8px;max-width:420px;">
+          <img class="sig-preview-image hidden" data-preview-img="edit_signature_current" src="" alt="ลายเซ็นผู้แก้ไข">
+          <div class="sig-preview-placeholder" data-preview-placeholder="edit_signature_current">ยังไม่ได้ลงลายเซ็นผู้แก้ไข</div>
+        </div>
+        <input type="hidden" id="edit_signature_current" value="">
+        {% if score_edit_count %}<a class="btn secondary" style="margin-top:8px;" href="{{ url_for('score_history', athlete_id=athlete.id, round=round_no) }}">ดูประวัติการแก้ {{ score_edit_count }} รายการ</a>{% endif %}
+      </div>
+      {% endif %}
+
       <div class="scorecard-signatures scorecard-signatures-rounds current-round-only">
         {% set r = round_no %}
         {% set round_label = round_labels[round_no-1] if round_labels and round_labels|length >= round_no else ('รอบที่ ' ~ round_no) %}
@@ -1628,6 +1646,7 @@
 
   signatureModalSave.addEventListener('click', () => {
     let dataUrl = '';
+    const savedTarget = activeSignatureTarget;
 
     if (signatureDirty) {
       dataUrl = exportCompactSignatureDataUrl();
@@ -1644,6 +1663,12 @@
     }
 
     closeSignatureModal();
+
+    if (savedTarget === 'edit_signature_current' && dataUrl && pendingEditAutosaveEl) {
+      const retryEl = pendingEditAutosaveEl;
+      pendingEditAutosaveEl = null;
+      window.setTimeout(() => autosaveCell(retryEl), 80);
+    }
   });
 
   window.addEventListener(
@@ -1662,6 +1687,7 @@
   });
 
   let autosaveStatusTimer = null;
+  let pendingEditAutosaveEl = null;
 
   function setAutosaveStatus(state, message) {
     const status = document.getElementById('autosaveStatus');
@@ -1733,7 +1759,9 @@
           distance_m: distanceM,
           score: el.value,
           red: red,
-          played: played
+          played: played,
+          edit_signature: document.getElementById('edit_signature_current')?.value || '',
+          edit_reason: document.getElementById('edit_reason_current')?.value || ''
         })
       });
 
@@ -1750,6 +1778,10 @@
       }
 
       if (!res.ok || data.ok === false) {
+        if (data.requires_edit_signature) {
+          pendingEditAutosaveEl = el;
+          openSignatureModal('edit_signature_current', 'ลายเซ็นผู้แก้ไขคะแนน');
+        }
         throw new Error(data.message || `บันทึกไม่สำเร็จ (${res.status})`);
       }
 

@@ -497,8 +497,10 @@
     <div class="section-head responsive-head">
       <div class="title-box">
         <h1>{{ event.name }}</h1>
-        <p class="muted">{{ event.event_group }} | {{ event.category }} | {{ event.next_round_label }} | รอบที่กำลังดู:
-          {{ round_no }}</p>
+        <p class="muted">{{ event.event_group }} | {{ event.category }} | {{ event.next_round_label }} | รอบที่กำลังดู: {{ round_no }}</p>
+        {% if current_user.is_authenticated and current_user.role == 'court' %}
+        <div style="margin-top:7px;display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-weight:950;">🔒 {{ court_public_id(current_user) }} · แสดงเฉพาะสนาม {{ current_user.court_no }}</div>
+        {% endif %}
       </div>
 
       <div class="toolbar responsive-toolbar">
@@ -506,8 +508,10 @@
         {% if event.has_round_two %}
         <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=2) }}">รอบ 2</a>
         {% endif %}
+        {% if not (current_user.is_authenticated and current_user.role == 'court') %}
         <a class="btn secondary" href="{{ url_for('bracket', event_id=event.id) }}">ตารางประกบ</a>
         <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">Results Approved</a>
+        {% endif %}
         {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
         <a class="btn secondary" href="{{ url_for('results_approved_settings', event_id=event.id) }}">ตั้งค่า Results</a>
         {% endif %}
@@ -516,7 +520,7 @@
         {% endif %}
         <button class="btn secondary"
           onclick="captureTable('overviewTableWrap','overview-{{ event.id }}-r{{ round_no }}')">บันทึกเป็นรูปภาพ</button>
-        {% if round_no == 1 %}
+        {% if round_no == 1 and not (current_user.is_authenticated and current_user.role == 'court') %}
         <button type="button" class="btn secondary" onclick="openStatsModal()">📊 ดูสถิติ 5/3</button>
         {% endif %}
         <button class="btn secondary" onclick="window.print()">พิมพ์ตาราง</button>
@@ -524,14 +528,9 @@
     </div>
 
     <div class="status-legend">
-      <span class="legend not-started">รอ</span>
+      <span class="legend not-started">รอตี</span>
       <span class="legend active">กำลังตี</span>
-      <span class="legend finished">จบ</span>
-      <span class="legend direct">เข้ารอบ</span>
-      <span class="legend r2">R2</span>
-      <span class="legend ko">KO</span>
-      <span class="legend out">ตกรอบ</span>
-      <span class="legend shoot">คะแนนเสมอ</span>
+      <span class="legend finished">ตีแล้ว</span>
     </div>
     <div id="statsModal" class="stats-modal-backdrop" onclick="closeStatsModal(event)">
       <div class="stats-modal" onclick="event.stopPropagation()">
@@ -593,7 +592,7 @@
           </thead>
           <tbody id="overviewTableBody">
             {% for row in rows %}
-            <tr class="status-{{ row.status }} {{ 'live-active' if row.status == 'active' else '' }} {{ row.progress_class }} {{ 'direct-placeholder' if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else '' }} {{ 'cut-line-after' if row.cut_line_after else '' }}" data-athlete-id="{{ row.athlete.id }}"
+            <tr class="status-{{ row.status }} {{ 'live-active' if row.status == 'active' else '' }} {{ 'direct-placeholder' if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else '' }} {{ 'cut-line-after' if row.cut_line_after else '' }}" data-athlete-id="{{ row.athlete.id }}"
               {% if not (row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder) %}onclick="window.location='{{ url_for('scorecard', athlete_id=row.athlete.id, round=round_no) }}'"{% endif %}>
               <td class="start-order">{{ row.display_order or row.athlete.start_order }}</td>
               <td class="lane-no">{{ row.display_lane_no or row.athlete.lane_no or '-' }}</td>
@@ -627,30 +626,24 @@
               {% endif %}
               <td class="overall-rank">{{ row.display_rank if row.display_rank is defined else row.rank }}</td>
               <td class="status-cell">
-                {% if row.shoot_off_required %}
-                  {% set status_text = 'Shoot-off' %}
-                {% elif row.progress_class == 'qualified-direct' %}
-                  {% set status_text = 'เข้ารอบ' %}
-                {% elif row.progress_class == 'round2-candidate' %}
-                  {% set status_text = 'R2' %}
-                {% elif row.progress_class == 'qualified-round2' %}
-                  {% set status_text = 'KO' %}
-                {% elif row.progress_class == 'eliminated' %}
-                  {% set status_text = 'ตกรอบ' %}
-                {% elif row.status == 'active' %}
-                  {% set status_text = 'กำลังตี' %}
-                {% elif row.status == 'finished' %}
-                  {% set status_text = 'จบ' %}
+                {% if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder %}
+                  <span class="status-pill direct-placeholder-pill">เข้ารอบตรง</span>
                 {% else %}
-                  {% set status_text = 'รอ' %}
-                {% endif %}
-                {% if row.shoot_off_required %}
-                  <div class="status-action-wrap">
-                    <span class="status-pill {{ row.status }}">Shoot-off</span>
-                    <a class="shoot-off-action" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.shoot_off_group_ids|join(','))) }}" title="กรอกผล Shoot-off">กรอกผล →</a>
-                  </div>
-                {% else %}
-                  <span class="status-pill {{ row.status }}">{{ status_text }}</span>
+                  {% if row.status == 'active' %}
+                    {% set status_text = 'กำลังตี' %}
+                  {% elif row.status == 'finished' %}
+                    {% set status_text = 'ตีแล้ว' %}
+                  {% else %}
+                    {% set status_text = 'รอตี' %}
+                  {% endif %}
+                  {% if row.shoot_off_required %}
+                    <div class="status-action-wrap">
+                      <span class="status-pill {{ row.status }}">{{ status_text }}</span>
+                      <a class="shoot-off-action" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.shoot_off_group_ids|join(','))) }}" title="กรอกผล Shoot-off">Shoot-off →</a>
+                    </div>
+                  {% else %}
+                    <span class="status-pill {{ row.status }}">{{ status_text }}</span>
+                  {% endif %}
                 {% endif %}
               </td>
             </tr>
@@ -666,6 +659,79 @@
   </section>
 </div>
 {% endblock %}
+
+
+<style id="shooting-status-row-colors-v2">
+/*
+  AUTHORITATIVE OVERVIEW STATE COLOURS
+  สีพื้นแถวใช้บอกสถานะการตีเท่านั้น:
+  รอตี = เทา / กำลังตี = เหลือง / ตีแล้ว = เขียว
+  สิทธิ์รอบ 2 และผลการจัดอันดับไม่ใช้สีพื้นแถว
+*/
+#overviewTableBody tr.status-waiting > td,
+#overviewTableBody tr.status-waiting > td.score-col,
+#overviewTableBody tr.status-waiting > td.score-total-col,
+#overviewTableBody tr.status-waiting > td.overall-total,
+#overviewTableBody tr.status-waiting > td.sum-total-cell,
+#overviewTableBody tr.status-waiting > td.overall-rank,
+#overviewTableBody tr.status-waiting > td.status-cell {
+  background:#f1f5f9 !important; color:#0f172a !important;
+}
+#overviewTableBody tr.status-active > td,
+#overviewTableBody tr.live-active > td,
+#overviewTableBody tr.status-active > td.score-col,
+#overviewTableBody tr.live-active > td.score-col,
+#overviewTableBody tr.status-active > td.score-total-col,
+#overviewTableBody tr.live-active > td.score-total-col,
+#overviewTableBody tr.status-active > td.overall-total,
+#overviewTableBody tr.live-active > td.overall-total,
+#overviewTableBody tr.status-active > td.sum-total-cell,
+#overviewTableBody tr.live-active > td.sum-total-cell,
+#overviewTableBody tr.status-active > td.overall-rank,
+#overviewTableBody tr.live-active > td.overall-rank,
+#overviewTableBody tr.status-active > td.status-cell,
+#overviewTableBody tr.live-active > td.status-cell {
+  background:#fef3c7 !important; color:#111827 !important;
+}
+#overviewTableBody tr.status-finished > td,
+#overviewTableBody tr.status-finished > td.score-col,
+#overviewTableBody tr.status-finished > td.score-total-col,
+#overviewTableBody tr.status-finished > td.overall-total,
+#overviewTableBody tr.status-finished > td.sum-total-cell,
+#overviewTableBody tr.status-finished > td.overall-rank,
+#overviewTableBody tr.status-finished > td.status-cell {
+  background:#dcfce7 !important; color:#0f172a !important;
+}
+
+#overviewTableBody tr.status-waiting > td:first-child { border-left:6px solid #94a3b8 !important; }
+#overviewTableBody tr.status-active > td:first-child,
+#overviewTableBody tr.live-active > td:first-child { border-left:6px solid #f59e0b !important; }
+#overviewTableBody tr.status-finished > td:first-child { border-left:6px solid #22c55e !important; }
+
+/* ป้ายสถานะก็ใช้สถานะการตีอย่างเดียว */
+#overviewTableBody tr.status-waiting td.status-cell .status-pill {
+  background:#e5e7eb !important; color:#111827 !important; border-color:#cbd5e1 !important;
+}
+#overviewTableBody tr.status-active td.status-cell .status-pill,
+#overviewTableBody tr.live-active td.status-cell .status-pill {
+  background:#fef3c7 !important; color:#78350f !important; border-color:#fbbf24 !important;
+}
+#overviewTableBody tr.status-finished td.status-cell .status-pill {
+  background:#dcfce7 !important; color:#166534 !important; border-color:#86efac !important;
+}
+#overviewTableBody td.status-cell .direct-placeholder-pill {
+  background:#f8fafc !important; color:#475569 !important; border-color:#cbd5e1 !important;
+}
+
+/* ไม่มีสีพิเศษสำหรับผู้ได้สิทธิ์รอบ 2; ใช้เส้น CUT LINE หลังจบรอบแทน */
+#overviewTableBody tr.direct-placeholder > td { background:#f8fafc !important; color:#475569 !important; }
+
+/* ระหว่างกำลังตี ให้ช่องคะแนนที่คีย์แล้วเป็น cursor สีแดงเพื่อมองตำแหน่งได้ */
+#overviewTableBody tr.status-active td.score-col.score-played,
+#overviewTableBody tr.live-active td.score-col.score-played {
+  background:#fee2e2 !important; color:#991b1b !important; box-shadow:inset 0 0 0 2px #f87171 !important;
+}
+</style>
 
 {% block scripts %}
 <script>
@@ -696,16 +762,10 @@
 }
 
   function statusLabel(item, currentStation) {
-    const progressClass = item.progress_class || '';
-    if (item.shoot_off_required || progressClass.includes('shoot-off-required')) return 'Shoot-off';
-    // Live shooting state always wins over qualification/ranking labels.
     if (item.status === 'active') return currentStation ? `กำลังตี ส${currentStation}` : 'กำลังตี';
-    if (progressClass.includes('qualified-direct')) return 'เข้ารอบ';
-    if (progressClass.includes('round2-candidate')) return 'R2';
-    if (progressClass.includes('qualified-round2')) return 'KO';
-    if (progressClass.includes('eliminated')) return 'ตกรอบ';
-    if (item.status === 'finished') return 'จบ';
-    return 'รอ';
+    if (item.status === 'finished') return 'ตีแล้ว';
+    if (item.is_round2_direct_placeholder) return 'เข้ารอบตรง';
+    return 'รอตี';
   }
 
   function deriveCurrentStation(item) {
@@ -731,7 +791,7 @@
       const row = rowMap.get(String(item.athlete_id));
       if (!row) return;
       const currentStation = deriveCurrentStation(item);
-      row.className = `status-${item.status} ${item.progress_class || ''} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''} ${item.status === 'active' ? 'live-active' : ''}`.trim();
+      row.className = `status-${item.status} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''} ${item.status === 'active' ? 'live-active' : ''}`.trim();
       row.dataset.currentStation = currentStation ? String(currentStation) : '';
       row.querySelectorAll('.cursor-station').forEach(cell => cell.classList.remove('cursor-station'));
       row.querySelectorAll('.current-station-total').forEach(cell => cell.classList.remove('current-station-total'));
@@ -757,8 +817,10 @@
       const statusCell = row.querySelector('.status-cell') || row.querySelector('td:last-child');
       if (statusCell) {
         const ids = (item.shoot_off_group_ids || [item.athlete_id]).join(',');
-        if (item.shoot_off_required) {
-          statusCell.innerHTML = `<div class="status-action-wrap"><span class="status-pill ${item.status}">Shoot-off</span><a class="shoot-off-action" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}" title="กรอกผล Shoot-off">กรอกผล →</a></div>`;
+        if (item.is_round2_direct_placeholder) {
+          statusCell.innerHTML = `<span class="status-pill direct-placeholder-pill">เข้ารอบตรง</span>`;
+        } else if (item.shoot_off_required) {
+          statusCell.innerHTML = `<div class="status-action-wrap"><span class="status-pill ${item.status}">${statusLabel(item, currentStation)}</span><a class="shoot-off-action" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}" title="กรอกผล Shoot-off">Shoot-off →</a></div>`;
         } else {
           statusCell.innerHTML = `<span class="status-pill ${item.status}">${statusLabel(item, currentStation)}</span>`;
         }

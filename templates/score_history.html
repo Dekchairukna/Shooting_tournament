@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card" style="max-width:1100px;margin:auto;">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div><h1 style="margin:0;">ประวัติการแก้คะแนน</h1><div style="color:#64748b;">{{ athlete.name }} · รอบ {{ round_no }} · สนาม {{ athlete.lane_no }}</div></div>
+    <a class="btn secondary" href="{{ url_for('scorecard', athlete_id=athlete.id, round=round_no) }}">กลับ Scorecard</a>
+  </div>
+  <div class="table-wrap" style="margin-top:14px;overflow-x:auto;">
+    <table class="table" style="min-width:900px;">
+      <thead><tr><th>เวลา</th><th>สถานี</th><th>ระยะ</th><th>เดิม</th><th>ใหม่</th><th>ผู้แก้</th><th>สนาม</th><th>เหตุผล</th><th>ลายเซ็น</th></tr></thead>
+      <tbody>
+      {% for log in logs %}
+      <tr>
+        <td>{{ log.edited_at.strftime('%d/%m/%Y %H:%M:%S') if log.edited_at else '-' }}</td>
+        <td>{{ log.station_no }}</td><td>{{ log.distance_m }}m</td>
+        <td>{{ 'แดง' if log.old_red else log.old_score }}{% if not log.old_played %} (ยังไม่ตี){% endif %}</td>
+        <td>{{ 'แดง' if log.new_red else log.new_score }}{% if not log.new_played %} (ยังไม่ตี){% endif %}</td>
+        <td>{{ log.editor_username or '-' }}</td><td>{{ log.editor_court_no or '-' }}</td><td>{{ log.reason or '-' }}</td>
+        <td>{% if log.editor_signature %}<img src="{{ log.editor_signature }}" style="max-width:130px;max-height:50px;object-fit:contain;">{% else %}-{% endif %}</td>
+      </tr>
+      {% else %}<tr><td colspan="9" style="text-align:center;color:#64748b;">ยังไม่มีการแก้คะแนนหลังลงลายเซ็น</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

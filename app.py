@@ -11,6 +11,7 @@ from flask import jsonify
 
 from flask import (
     Flask,
+    abort,
     flash,
     g,
     has_request_context,
@@ -140,12 +141,21 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="user")
+    # role=court: ผูกบัญชีกับหมายเลขสนาม เช่น court03 -> สนาม 3
+    court_no = db.Column(db.Integer, nullable=True)
+    # Court account is scoped to one event. Internal username stays globally unique.
+    court_event_id = db.Column(db.Integer, db.ForeignKey("event.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
 
+    def has_usable_password(self) -> bool:
+        return bool(self.password_hash and self.password_hash != "!UNSET!")
+
     def check_password(self, password: str) -> bool:
+        if not self.has_usable_password():
+            return False
         return check_password_hash(self.password_hash, password)
 
 
@@ -179,6 +189,10 @@ class Athlete(db.Model):
     lane_order = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), nullable=False, default="waiting")
     red_card_count = db.Column(db.Integer, nullable=False, default=0)
+    # ผู้ดูแลสามารถปิดสิทธิ์รอบ 2 รายคนได้ โดยไม่ลบคะแนน/อันดับรอบ 1
+    round_two_disabled = db.Column(db.Boolean, nullable=False, default=False)
+    round_two_disabled_at = db.Column(db.DateTime, nullable=True)
+    round_two_disabled_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     entries = db.relationship("ScoreEntry", backref="athlete", cascade="all, delete-orphan", lazy=True)
@@ -214,6 +228,27 @@ class ScoreSignature(db.Model):
     finished_at = db.Column(db.DateTime, nullable=True)
     # รอบถูกยุติอัตโนมัติเมื่อได้รับใบแดงครบ 2 ครั้งตามกติกา Precision Shooting
     stopped_by_red = db.Column(db.Boolean, nullable=False, default=False)
+
+
+class ScoreEditLog(db.Model):
+    """ประวัติการแก้คะแนนหลังจากผลถูกลงลายเซ็นยืนยันแล้ว"""
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    athlete_id = db.Column(db.Integer, db.ForeignKey("athlete.id"), nullable=False)
+    round_no = db.Column(db.Integer, nullable=False)
+    station_no = db.Column(db.Integer, nullable=False)
+    distance_m = db.Column(db.Integer, nullable=False)
+    old_score = db.Column(db.Integer, nullable=False, default=0)
+    new_score = db.Column(db.Integer, nullable=False, default=0)
+    old_red = db.Column(db.Boolean, nullable=False, default=False)
+    new_red = db.Column(db.Boolean, nullable=False, default=False)
+    old_played = db.Column(db.Boolean, nullable=False, default=False)
+    new_played = db.Column(db.Boolean, nullable=False, default=False)
+    edited_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    editor_username = db.Column(db.String(80), nullable=True)
+    editor_court_no = db.Column(db.Integer, nullable=True)
+    editor_signature = db.Column(db.Text, nullable=True)
+    reason = db.Column(db.String(500), nullable=True)
+    edited_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class TieBreakEntry(db.Model):
@@ -385,6 +420,7 @@ def ensure_schema() -> None:
             "athlete",
             "score_entry",
             "score_signature",
+            "score_edit_log",
             "tie_break_entry",
             "bracket_match",
             "results_approved_setting",
@@ -425,6 +461,11 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('ALTER TABLE "score_entry" ADD COLUMN IF NOT EXISTS is_scored BOOLEAN DEFAULT false')
             conn.exec_driver_sql('UPDATE "score_entry" SET is_scored = true WHERE COALESCE(score, 0) <> 0 OR COALESCE(is_red_card, false) = true')
             conn.exec_driver_sql('ALTER TABLE "score_signature" ADD COLUMN IF NOT EXISTS stopped_by_red BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS court_no INTEGER')
+            conn.exec_driver_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS court_event_id INTEGER')
+            conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_at TIMESTAMP')
+            conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_by INTEGER')
         return
 
     # SQLite migration เดิม
@@ -465,6 +506,12 @@ def ensure_schema() -> None:
         if "next_round_label" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN next_round_label VARCHAR(50)")
 
+        user_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)").fetchall()}
+        if "court_no" not in user_columns:
+            conn.exec_driver_sql("ALTER TABLE user ADD COLUMN court_no INTEGER")
+        if "court_event_id" not in user_columns:
+            conn.exec_driver_sql("ALTER TABLE user ADD COLUMN court_event_id INTEGER")
+
         athlete_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(athlete)").fetchall()}
         if "lane_no" not in athlete_columns:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN lane_no INTEGER")
@@ -472,6 +519,12 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN lane_order INTEGER")
         if "start_order" not in athlete_columns:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN start_order INTEGER")
+        if "round_two_disabled" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_disabled BOOLEAN DEFAULT 0")
+        if "round_two_disabled_at" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_disabled_at DATETIME")
+        if "round_two_disabled_by" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_disabled_by INTEGER")
 
         # Results Approved: คอลัมน์เก็บ path โลโก้ที่อัปโหลดเอง
         ra_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(results_approved_setting)").fetchall()}
@@ -758,18 +811,97 @@ def ranking_key(item: dict):
     )
 
 
-def apply_rank_by_tiebreak(rows: list[dict]) -> None:
-    """ใส่อันดับแบบต่อเนื่อง 1..คนสุดท้าย หลัง sort ด้วยกติกาจริงแล้ว
+def apply_round1_display_ranking(rows: list[dict], direct_limit: int) -> None:
+    """จัด Class รอบ 1 ตามกติกาที่ใช้ในงานนี้
 
-    กติกาใหม่ของระบบ: หน้า Overview ห้ามแสดง Class/Rank ซ้ำเอง
-    ถ้า TOTAL -> จำนวน 5 -> จำนวน 3 ยังเท่ากันในช่วงที่มีผล
-    จะให้ระบบขึ้น Shoot-off เพื่อแยกอันดับแทน
+    - ช่วงอันดับเข้ารอบตรง 1..direct_limit ใช้ TOTAL -> 5 -> 3 -> Shoot-off
+      เพื่อให้ seed ที่ผ่านตรงแยกกันชัดเจน
+    - หลังพ้นโควตาเข้ารอบตรงแล้ว ใช้ TOTAL เป็นตัวกำหนด Class เท่านั้น
+      ถ้า TOTAL เท่ากัน ให้ Class เท่ากันแบบ competition ranking เช่น 5,5,5,8
+    - ordinal_rank/view_order ยังเก็บตำแหน่งจริงของแถวไว้เพื่อใช้กับเส้นตัดและการเรียง
     """
+    if not rows:
+        return
+
+    direct_limit = max(int(direct_limit or 0), 0)
+    previous_direct_key = None
+    previous_direct_rank = None
+    previous_total = None
+    previous_total_rank = None
+
     for idx, row in enumerate(rows, start=1):
-        row["rank"] = idx
         row["ordinal_rank"] = idx
-        row["display_rank"] = idx
         row["view_order"] = idx
+
+        if idx <= direct_limit:
+            # ใน 1-4 (หรือจำนวน direct ที่ตั้งไว้) ต้องแยกด้วย 5/3/Shoot-off
+            direct_key = ranking_key(row)
+            if previous_direct_key is not None and direct_key == previous_direct_key:
+                rank = previous_direct_rank
+            else:
+                rank = idx
+            previous_direct_key = direct_key
+            previous_direct_rank = rank
+        else:
+            # หลังโควตา direct: คะแนนรวมเท่ากัน = Class เท่ากันทันที
+            total = row.get("total", 0)
+            if previous_total is not None and total == previous_total:
+                rank = previous_total_rank
+            else:
+                rank = idx
+            previous_total = total
+            previous_total_rank = rank
+
+        row["rank"] = rank
+        row["display_rank"] = rank
+
+
+def apply_round2_display_ranking(rows: list[dict], start_rank: int, advancer_limit: int) -> None:
+    """จัด Class ของผู้เล่นรอบ 2
+
+    ผู้ที่จะผ่านจากรอบ 2 จำนวน advancer_limit คน ต้องแยกด้วย
+    SUM -> จำนวน 5 รวม -> จำนวน 3 รวม -> Shoot-off
+    หลังพ้นโควตานี้แล้ว ถ้า SUM เท่ากันให้ Class เท่ากันแบบ competition ranking
+    """
+    if not rows:
+        return
+
+    start_rank = int(start_rank or 1)
+    advancer_limit = max(int(advancer_limit or 0), 0)
+    previous_seed_key = None
+    previous_seed_rank = None
+    previous_sum = None
+    previous_sum_rank = None
+
+    for offset, row in enumerate(rows):
+        position_rank = start_rank + offset
+        row["ordinal_rank"] = position_rank
+        row["view_order"] = position_rank
+
+        if offset < advancer_limit:
+            seed_key = (
+                row.get("combined_total", row.get("total", 0)),
+                row.get("count_5", 0),
+                row.get("count_3", 0),
+                row.get("tiebreak_total", 0),
+            )
+            if previous_seed_key is not None and seed_key == previous_seed_key:
+                rank = previous_seed_rank
+            else:
+                rank = position_rank
+            previous_seed_key = seed_key
+            previous_seed_rank = rank
+        else:
+            combined_total = row.get("combined_total", row.get("total", 0))
+            if previous_sum is not None and combined_total == previous_sum:
+                rank = previous_sum_rank
+            else:
+                rank = position_rank
+            previous_sum = combined_total
+            previous_sum_rank = rank
+
+        row["rank"] = rank
+        row["display_rank"] = rank
 
 
 
@@ -818,56 +950,53 @@ def round2_advancer_quota(event: Event) -> int:
     return remaining
 
 
-def round1_total_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
-    """สิทธิ์ตีรอบ 2 ใช้กติกาตามเอกสาร: ถ้าคะแนนรวมเท่ากับคนลำดับสุดท้าย ได้ตีรอบ 2 ทั้งหมด
-    ไม่ใช้ 5/3 มาตัดสิทธิ์ตีรอบสอง เพราะรอบสองคือการคัดต่อ ไม่ใช่ตัดเข้า Knockout
+def round2_min_players(event: Event) -> int:
+    """จำนวนขั้นต่ำของผู้เล่นที่ได้สิทธิ์ตีรอบ 2 หลังตัดผู้ผ่านตรงออกแล้ว.
+
+    หมายเหตุ: ใช้คอลัมน์ round_two_cutoff_rank เดิมเพื่อไม่ให้ฐานข้อมูลเดิมต้อง migrate
+    แต่ความหมายใหม่คือ "จำนวนผู้เล่นขั้นต่ำในรอบ 2" ไม่ใช่ "ถึงอันดับที่เท่าไร".
     """
-    if not cutoff_count or cutoff_count <= 0:
-        return set()
-    if not rows:
-        return set()
-    if len(rows) <= cutoff_count:
-        return {row["athlete"].id for row in rows}
-    cutoff_total = rows[cutoff_count - 1].get("total", 0)
-    return {row["athlete"].id for row in rows if row.get("total", 0) >= cutoff_total}
+    if not event.has_round_two:
+        return 0
+    return max(int(event.round_two_cutoff_rank or 0), 0)
 
 
-def apply_round1_round2_cutoff_display_rank(event: Event, rows: list[dict]) -> None:
-    """แสดงลำดับซ้ำได้เฉพาะกลุ่มสุดท้ายที่ได้สิทธิ์ตีรอบ 2
+def round1_round2_candidate_ids(
+    rows: list[dict],
+    direct_ids: set[int],
+    direct_pending_ids: set[int],
+    minimum_players: int,
+) -> set[int]:
+    """เลือกผู้เล่นรอบ 2 ตามกติกา "next N, at least".
 
-    กติกา: ภาพรวมรอบ 1 ต้องเรียง 1..คนสุดท้าย ไม่ให้ซ้ำเอง
-    ยกเว้นถ้ามีรอบ 2 และคะแนนรวมเท่ากับคนสุดท้ายของสิทธิ์รอบ 2
-    กลุ่มนั้นให้ได้สิทธิ์ตีรอบ 2 ทั้งหมด และแสดง Class เป็นเลขเส้นตัดเดียวกันได้
-    ส่วนลำดับจริงยังเก็บไว้ใน ordinal_rank สำหรับเรียงแถว/คำนวณต่อ
+    1) ตัดผู้ผ่านตรงออกก่อน
+    2) ตัดกลุ่มที่ยังรอ Shoot-off เพื่อแยกผู้ผ่านตรงออกชั่วคราว
+    3) เลือกผู้เล่นถัดมาอย่างน้อย minimum_players คน
+    4) ถ้าคนลำดับสุดท้ายของกลุ่มนี้มี TOTAL เท่ากับคนถัดไป ให้รับทุกคนที่ TOTAL เท่ากัน
+
+    rows ต้องเรียงจากผลรอบ 1 ดีที่สุดลงมาแล้ว.
     """
-    if not rows:
-        return
-    for idx, row in enumerate(rows, start=1):
-        row["rank"] = idx
-        row["ordinal_rank"] = idx
-        row["display_rank"] = idx
-        row["view_order"] = idx
+    minimum_players = max(int(minimum_players or 0), 0)
+    if minimum_players <= 0:
+        return set()
 
-    if not event.has_round_two or not event.round_two_cutoff_rank:
-        return
-
-    cutoff = int(event.round_two_cutoff_rank or 0)
-    direct = direct_quota(event)
-    if cutoff <= direct or cutoff <= 0 or len(rows) < cutoff:
-        return
-
-    cutoff_total = rows[cutoff - 1].get("total", 0)
-    final_total_indexes = [
-        idx for idx, row in enumerate(rows)
-        if idx >= direct and row.get("total", 0) == cutoff_total
+    pool = [
+        row for row in rows
+        if row["athlete"].id not in direct_ids
+        and row["athlete"].id not in direct_pending_ids
     ]
-    if len(final_total_indexes) < 2 or (cutoff - 1) not in final_total_indexes:
-        return
+    if not pool:
+        return set()
+    if len(pool) <= minimum_players:
+        return {row["athlete"].id for row in pool}
 
-    for idx in final_total_indexes:
-        rows[idx]["rank"] = cutoff
-        rows[idx]["display_rank"] = cutoff
-        rows[idx]["view_order"] = rows[idx].get("ordinal_rank", idx + 1)
+    cutoff_total = pool[minimum_players - 1].get("total", 0)
+    # rows เรียงคะแนนจากมากไปน้อย จึงรับทุกคนที่ TOTAL >= คะแนนของคนที่ N
+    return {
+        row["athlete"].id
+        for row in pool
+        if row.get("total", 0) >= cutoff_total
+    }
 
 
 def apply_sequential_rank(rows: list[dict], start: int = 1) -> None:
@@ -932,9 +1061,12 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             row.update(round2_display_map[athlete.id])
         rows.append(row)
     rows.sort(key=ranking_key, reverse=True)
-    apply_rank_by_tiebreak(rows)
     if round_no == 1:
-        apply_round1_round2_cutoff_display_rank(event, rows)
+        apply_round1_display_ranking(rows, direct_quota(event))
+    else:
+        # build_round_ranking(round 2) เป็นคะแนนรอบ 2 ดิบ ใช้ลำดับตำแหน่งภายในก่อน
+        # หน้า Overview รอบ 2 จะจัด Class จาก SUM แยกต่างหาก
+        apply_sequential_rank(rows)
     if has_request_context():
         cache[cache_key] = rows
     return rows
@@ -947,18 +1079,30 @@ def round_two_candidate_ids(event: Event) -> set[int]:
         return cache[cache_key]
 
     ids: set[int] = set()
-    if event.has_round_two and event.round_two_cutoff_rank:
-        cutoff = int(event.round_two_cutoff_rank or 0)
-        direct = direct_quota(event)
+    minimum_players = round2_min_players(event)
+    # ห้ามฟันธงสิทธิ์รอบ 2 ระหว่างที่รอบ 1 ยังยิงไม่ครบทั้งอีเวนต์
+    # Ranking ยังแสดงสดได้ แต่ candidate list ต้องรอผลรอบ 1 สุดท้ายก่อน
+    if event.has_round_two and minimum_players > 0 and is_round_one_complete(event):
         round1_rows = build_round_ranking(event, 1)
+        direct = direct_quota(event)
 
-        # สิทธิ์ตีรอบ 2 ตามกติกา: คนถัดจากเข้ารอบตรงจนถึงลำดับที่ตั้งไว้
-        # ถ้าคนลำดับสุดท้ายของสิทธิ์รอบ 2 คะแนนรวมเท่ากัน ให้ได้ตีรอบ 2 ทั้งหมด
-        # แต่ถ้ามี Shoot-off ที่เส้นเข้ารอบตรงอยู่ ให้รอผลก่อน ไม่ดันกลุ่มนั้นไปเป็นรอบ 2
+        # กติกา: หลังผู้ผ่านตรง ให้เลือก "คนถัดมาอย่างน้อย N คน"
+        # และถ้า TOTAL ของคนที่ N เท่ากับคนถัดไป ให้รับคนที่คะแนนเท่ากันทั้งหมด
         direct_ids = exact_cut_ids(round1_rows, direct)
         direct_shoot_ids = unresolved_tie_ids(round1_rows, direct)
-        cutoff_ids = round1_total_cut_ids(round1_rows, cutoff)
-        ids = cutoff_ids - direct_ids - direct_shoot_ids
+        ids = round1_round2_candidate_ids(
+            round1_rows,
+            direct_ids,
+            direct_shoot_ids,
+            minimum_players,
+        )
+
+        # Manual override: ผู้ดูแลสามารถปิดนักกีฬารายคนจากรอบ 2 ได้
+        disabled_ids = {
+            athlete.id for athlete in event.athletes
+            if bool(getattr(athlete, "round_two_disabled", False))
+        }
+        ids -= disabled_ids
 
     if has_request_context():
         cache[cache_key] = ids
@@ -1030,6 +1174,9 @@ def sync_round_two_candidates(event: Event) -> None:
 
 
 def build_round_two_start_list(event: Event) -> list[dict]:
+    # ยังไม่สร้างคิวรอบ 2 จนกว่ารอบ 1 จะจบครบทั้งอีเวนต์
+    if not is_round_one_complete(event):
+        return []
     round1_rows = build_round_ranking(event, 1)
 
     direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
@@ -1071,6 +1218,10 @@ def build_combined_qualifiers(event: Event) -> List[dict]:
     if has_request_context() and cache_key in cache:
         return cache[cache_key]
     round1_rows = build_round_ranking(event, 1)
+    if not is_round_one_complete(event):
+        if has_request_context():
+            cache[cache_key] = []
+        return []
     direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
     direct_pending_ids = unresolved_tie_ids(round1_rows, direct_quota(event))
     direct_rows = []
@@ -1126,7 +1277,12 @@ def build_combined_qualifiers(event: Event) -> List[dict]:
             "round2_by_station": row.get("by_station", {}),
         })
     combined_rows.sort(key=ranking_key, reverse=True)
-    apply_sequential_rank(combined_rows, start=1)
+    # Ranking ของผู้เล่นรอบ 2 เริ่มต่อจากผู้ผ่านตรง และ 4 ที่นั่งแรกต้องแยก seed ให้ชัด
+    apply_round2_display_ranking(
+        combined_rows,
+        start_rank=len(direct_rows) + 1,
+        advancer_limit=round2_advancer_quota(event),
+    )
 
     # คัดผู้ผ่านจากรอบ 2 ต้องเอาตามจำนวนที่ตั้งไว้จริง ๆ
     # ถ้าคะแนนเท่ากันที่เส้นตัด ให้ตัดสินตาม TOTAL -> จำนวน 5 -> จำนวน 3 -> Shoot-off
@@ -1236,7 +1392,7 @@ def unresolved_tie_ids(rows: list[dict], scope_count: int | None = None) -> set[
 
     scope_count ระบุจำนวนอันดับที่มีผล เช่น direct quota หรือจำนวนที่ผ่านจากรอบ 2
     ถ้ากลุ่มเสมอแตะอยู่ใน scope จะถือว่ายังตัดสินอันดับไม่ได้
-    ข้อยกเว้นสิทธิ์ตีรอบ 2 รอบแรกยังใช้ round1_total_cut_ids แยกต่างหาก
+    สิทธิ์ตีรอบ 2 รอบแรกใช้หลัก next N at least และขยายตาม TOTAL ที่เส้นตัดแยกต่างหาก
     """
     if not rows:
         return set()
@@ -1332,8 +1488,8 @@ def exact_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
     ต้องเรียงลำดับจริงด้วย TOTAL -> 5 -> 3 -> Shoot-off
     ถ้ากลุ่มเสมอแตะตำแหน่งที่มีผล ให้รอ Shoot-off ก่อน
 
-    ข้อยกเว้นสิทธิ์ตีรอบ 2 จากรอบแรกไม่ได้ใช้ฟังก์ชันนี้ แต่ใช้ round1_total_cut_ids
-    เพื่อให้คนที่คะแนนรวมเท่าลำดับสุดท้ายของสิทธิ์รอบ 2 ได้ตีทั้งหมดตามเอกสาร
+    สิทธิ์ตีรอบ 2 จากรอบแรกไม่ได้ใช้ฟังก์ชันนี้ แต่เลือกคนถัดมาอย่างน้อย N คน
+    แล้วขยายให้ทุกคนที่ TOTAL เท่ากับคนที่ N ได้ตีทั้งหมดตามเอกสาร
     """
     if not cutoff_count or cutoff_count <= 0:
         return set()
@@ -1366,88 +1522,46 @@ def _all_rows_finished_for_round(rows: list[dict], round_no: int) -> bool:
     return all(athlete_round_status(row["athlete"], round_no) == "finished" for row in rows if row.get("athlete"))
 
 
-def round1_overview_unresolved_shootoff_ids(event: Event, rows: list[dict]) -> set[int]:
-    """หา Shoot-off รอบ 1 ตามกติกาใหม่ของครูรัก
+def is_round_one_complete(event: Event) -> bool:
+    """รอบ 1 จะถือว่าจบเมื่อผู้เล่นของอีเวนต์ทุกคนจบการยิงรอบ 1 แล้ว
 
-    - ตรวจเฉพาะช่วงที่มีผล: ตั้งแต่อันดับบนสุดถึงเส้นสิทธิ์ตีรอบ 2
-      ถ้าไม่มีรอบ 2 ให้ตรวจเฉพาะเส้นเข้ารอบตรง/Knockout
-    - ถ้า TOTAL -> 5 -> 3 ยังเท่ากันในช่วงนั้น ให้ Shoot-off เพื่อแยกอันดับ
-    - ยกเว้นกลุ่มคะแนนรวมเท่าคนสุดท้ายของสิทธิ์ตีรอบ 2 ให้ได้ตีรอบ 2 ทั้งหมด
-    - คนที่ต่ำกว่าเส้นรอบ 2 แล้ว ไม่ต้อง Shoot-off
+    ระหว่างแข่ง Ranking ยังแสดงสดได้ตามคะแนนปัจจุบัน แต่สิทธิ์ผ่านตรง,
+    รายชื่อรอบ 2, Shoot-off เพื่อคัด Top และ Cut line จะยังไม่ถูกฟันธง
+    จนกว่ารอบ 1 จะจบครบทุกคน
+    """
+    rows = build_round_ranking(event, 1)
+    return _all_rows_finished_for_round(rows, 1)
+
+
+def round1_overview_unresolved_shootoff_ids(event: Event, rows: list[dict]) -> set[int]:
+    """Shoot-off รอบ 1 เฉพาะกลุ่มที่เกี่ยวกับอันดับเข้ารอบตรง
+
+    อันดับ 1..direct ต้องแยกด้วย TOTAL -> 5 -> 3 -> Shoot-off
+    ตั้งแต่อันดับถัดไป ไม่ทำ Shoot-off เพื่อจัด Class; คะแนนรวมเท่ากันให้ Class เท่ากันได้
+    สิทธิ์ไปตีรอบ 2 ใช้คนถัดมาอย่างน้อย N คน แล้วขยายตามคะแนนรวมของคนที่ N
     """
     if not rows:
         return set()
-
     direct = direct_quota(event)
-    if event.has_round_two and event.round_two_cutoff_rank:
-        scope_count = int(event.round_two_cutoff_rank or 0)
-    else:
-        scope_count = direct
-    if scope_count <= 0:
+    if direct <= 0:
         return set()
-    scope_count = min(scope_count, len(rows))
-
-    final_round2_total = None
-    if event.has_round_two and event.round_two_cutoff_rank and len(rows) >= scope_count and scope_count > direct:
-        final_round2_total = rows[scope_count - 1].get("total", 0)
-
-    groups: dict[tuple, list[tuple[int, dict]]] = {}
-    for idx, row in enumerate(rows):
-        groups.setdefault(base_shootoff_key(row), []).append((idx, row))
-
-    result: set[int] = set()
-    for indexed_group in groups.values():
-        if len(indexed_group) < 2:
-            continue
-        positions = [idx for idx, _ in indexed_group]
-        if not any(idx < scope_count for idx in positions):
-            # ต่ำกว่าเส้นรอบ 2/เส้นเข้ารอบแล้ว ไม่ต้อง Shoot-off
-            continue
-
-        group_rows = [row for _, row in indexed_group]
-
-        # ข้อยกเว้นเดียว: กลุ่มคะแนนรวมเท่าคนสุดท้ายของสิทธิ์ตีรอบ 2
-        # และไม่ได้คร่อมเส้นเข้ารอบตรง ให้ได้ตีรอบ 2 ทั้งหมด ไม่ต้อง Shoot-off
-        if final_round2_total is not None:
-            same_last_round2_total = all(row.get("total", 0) == final_round2_total for row in group_rows)
-            touches_round2_last_line = any(idx >= scope_count - 1 for idx in positions)
-            does_not_touch_direct_line = min(positions) >= direct
-            if same_last_round2_total and touches_round2_last_line and does_not_touch_direct_line:
-                continue
-
-        # ขึ้นเมื่อคนในกลุ่มตีจบครบแล้ว ไม่ขึ้นก่อนกรรมการกดจบ
-        if not all(athlete_round_status(row["athlete"], 1) == "finished" for row in group_rows):
-            continue
-
-        counts = [row.get("tiebreak_count", 0) for row in group_rows]
-        totals = [row.get("tiebreak_total", 0) for row in group_rows]
-
-        # ยังไม่ได้ยิงรอบพิเศษครบ หรือจำนวนเที่ยวไม่เท่ากัน = ต้องยิง/ยิงต่อ
-        if min(counts) == 0 or len(set(counts)) > 1:
-            result.update(row["athlete"].id for row in group_rows)
-            continue
-
-        # ยิงครบเท่ากันแล้วแต่คะแนนพิเศษยังเท่ากัน = ต้องยิงต่อ
-        if len(set(totals)) == 1:
-            result.update(row["athlete"].id for row in group_rows)
-
-    return result
-
+    return overview_unresolved_shootoff_ids(rows, direct, round_no=1)
 
 def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
     """ตรวจ Shoot-off สำหรับ Overview
 
     รอบ 1:
-    - ใช้ TOTAL -> 5 -> 3 เพื่อจัดลำดับทุกคน
-    - ถ้ายังเท่ากันในกลุ่มที่มีผลต่อ "เข้ารอบตรง" ต้อง Shoot-off
-    - ข้อยกเว้นมีแค่เส้นสุดท้ายของสิทธิ์ตีรอบ 2: ถ้าคะแนนรวมเท่ากัน ให้ได้ตีรอบ 2 ทั้งหมด
+    - อันดับเข้ารอบตรงใช้ TOTAL -> 5 -> 3 -> Shoot-off
+    - หลังพ้นโควตาเข้ารอบตรง คะแนนรวมเท่ากันให้ Class เท่ากันได้
+    - สิทธิ์ตีรอบ 2 เลือกคนถัดมาอย่างน้อย N คน และรับทุกคนที่ Total เท่ากับคนที่ N
 
     รอบ 2:
-    - ต้องไม่มีลำดับซ้ำ เพราะต้องเอาไปเป็น Seed ต่อ
-    - ใช้ SUM(R1+R2) -> จำนวน 5 รวม -> จำนวน 3 รวม
-    - ถ้ายังเท่ากันหลังกลุ่มนั้นกดจบการตีครบ ให้ขึ้น Shoot-off ทันที
+    - ที่นั่งผ่านจากรอบ 2 ใช้ SUM(R1+R2) -> จำนวน 5 รวม -> จำนวน 3 รวม -> Shoot-off
+    - หลังพ้นโควตาผ่าน SUM เท่ากันให้ Class เท่ากันได้
     """
     if round_no == 1:
+        if not is_round_one_complete(event):
+            return set()
         rows = build_round_ranking(event, 1)
         return round1_overview_unresolved_shootoff_ids(event, rows)
 
@@ -1466,18 +1580,24 @@ def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
             row.get("display_order") if row.get("display_order") is not None else 999999,
             row["athlete"].id,
         ))
-        # รอบ 2 จัดอันดับ/ตรวจ Shoot-off เฉพาะคนที่ตีจบแล้ว ไม่ลากคนที่ยังรอคิวมาคิด
-        return overview_unresolved_shootoff_ids(rows, None, round_no=2)
+        # รอบ 2 ยิง Shoot-off เฉพาะกลุ่มที่เกี่ยวกับโควตาผ่านจากรอบ 2
+        # หลังพ้นโควตาให้ SUM เท่ากันและ Class เท่ากันได้
+        return overview_unresolved_shootoff_ids(
+            rows,
+            round2_advancer_quota(event),
+            round_no=2,
+        )
 
     return set()
 
 def build_round_two_overview_rows(event: Event) -> List[dict]:
     """หน้า Overview รอบ 2 แบบ Official + realtime
 
-    แสดงรายชื่อทันทีตั้งแต่เปิดรอบ 2 โดยไม่ต้องรอคีย์ครบ
-    รูปแบบข้อมูลในแต่ละแถวเก็บทั้งรอบ 1 และรอบ 2 เพื่อให้ตารางเดียวแสดง:
-    Qualification Round 1 / Qualification Round 2 / SUM / RANKING
+    รายชื่อรอบ 2 จะเกิดขึ้นหลังรอบ 1 จบครบทั้งอีเวนต์แล้วเท่านั้น
+    จากนั้นจึงแสดง realtime ของรอบ 2 โดยเก็บทั้งคะแนนรอบ 1/รอบ 2/SUM/RANKING
     """
+    if not is_round_one_complete(event):
+        return []
     round1_rows = build_round_ranking(event, 1)
     direct_limit = direct_quota(event)
     lane_count = max(event.lane_count or 1, 1)
@@ -1501,7 +1621,7 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             direct_row["status"] = "direct"
             direct_rows.append(direct_row)
 
-    # Overview รอบ 2 ต้องไม่มีลำดับซ้ำ: แสดงลำดับจริงตามตำแหน่งหลังตัดสินด้วย TOTAL -> 5 -> 3 -> Shoot-off
+    # ผู้ผ่านตรงจากรอบ 1 ใช้อันดับที่ตัดสินไว้แล้ว
     for idx, direct_row in enumerate(direct_rows, start=1):
         direct_row["rank"] = idx
         direct_row["ordinal_rank"] = idx
@@ -1591,13 +1711,15 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
     ))
 
     base = len(direct_rows)
-    for idx, row in enumerate(played_rows, start=1):
-        real_rank = base + idx
-        row["rank"] = real_rank
-        row["ordinal_rank"] = real_rank
-        row["display_rank"] = real_rank
-        row["view_order"] = real_rank
+    # คนที่ตีรอบ 2 แล้ว: 4 ที่นั่ง (หรือค่าที่ตั้งไว้) ต้องแยก seed ด้วย SUM -> 5รวม -> 3รวม -> Shoot-off
+    # หลังพ้นโควตานี้ SUM เท่ากันให้ Class เท่ากัน
+    apply_round2_display_ranking(
+        played_rows,
+        start_rank=base + 1,
+        advancer_limit=round2_advancer_quota(event),
+    )
 
+    # คนที่ยังไม่ตี แสดงตามคิวชั่วคราว ไม่ถือเป็น Ranking สุดท้าย
     waiting_base = base + len(played_rows)
     for idx, row in enumerate(waiting_rows, start=1):
         real_rank = waiting_base + idx
@@ -1839,11 +1961,13 @@ def get_progression_groups(event: Event) -> dict:
     if has_request_context() and cache_key in cache:
         return cache[cache_key]
     round1_rows = build_round_ranking(event, 1)
-    direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
+    round1_complete = is_round_one_complete(event)
+    # ระหว่างรอบ 1 ยังไม่จบ: แสดง Ranking สดได้ แต่ยังไม่ประกาศสิทธิ์ผ่านตรง/R2
+    direct_ids = exact_cut_ids(round1_rows, direct_quota(event)) if round1_complete else set()
     round2_candidate_ids = set()
     passed_round2_ids = set()
     eliminated_ids = set()
-    if event.has_round_two:
+    if event.has_round_two and round1_complete:
         round2_candidate_ids = round_two_candidate_ids(event) - direct_ids
         combined = build_combined_qualifiers(event)
         passed_round2_ids = {
@@ -2092,7 +2216,11 @@ def dashboard_stats() -> dict:
 
 @app.context_processor
 def inject_globals():
-    return {"now": datetime.now(), "MAX_RED_CARDS": MAX_RED_CARDS}
+    return {
+        "now": datetime.now(),
+        "MAX_RED_CARDS": MAX_RED_CARDS,
+        "court_public_id": court_public_id,
+    }
 
 
 @app.route("/set-language/<lang>")
@@ -2103,11 +2231,145 @@ def set_language(lang):
     return redirect(next_url)
 
 
+def is_court_user() -> bool:
+    return bool(
+        current_user.is_authenticated
+        and current_user.role == "court"
+        and current_user.court_no
+        and current_user.court_event_id
+    )
+
+
+def court_public_id(user: User | None = None) -> str:
+    user = user or current_user
+    if not user or getattr(user, "role", None) != "court" or not getattr(user, "court_no", None):
+        return getattr(user, "username", "") if user else ""
+    return f"court{int(user.court_no):02d}"
+
+
+def court_can_access_event(event: Event) -> bool:
+    if not is_court_user():
+        return True
+    return int(current_user.court_event_id) == int(event.id)
+
+
+def effective_lane_for_athlete(event: Event, athlete: Athlete, round_no: int) -> int | None:
+    """เลขสนามที่นักกีฬาถูกจัดให้ในรอบที่กำลังดู/คีย์"""
+    if round_no == 1:
+        return athlete.lane_no
+    if round_no == 2 and event.has_round_two:
+        row = next((r for r in build_round_two_overview_rows(event) if r["athlete"].id == athlete.id), None)
+        lane = row.get("display_lane_no") if row else None
+        return lane if isinstance(lane, int) else None
+    # รอบ Knockout/รอบอื่น ใช้ข้อมูล display lane ถ้ามี
+    try:
+        row = next((r for r in build_round_ranking(event, round_no) if r["athlete"].id == athlete.id), None)
+        lane = row.get("display_lane_no") if row else athlete.lane_no
+        return lane if isinstance(lane, int) else athlete.lane_no
+    except Exception:
+        return athlete.lane_no
+
+
+def court_can_access_athlete(athlete: Athlete, round_no: int) -> bool:
+    if not is_court_user():
+        return True
+    if not court_can_access_event(athlete.event):
+        return False
+    return effective_lane_for_athlete(athlete.event, athlete, round_no) == current_user.court_no
+
+
+def filter_rows_for_court(rows: list[dict]) -> list[dict]:
+    if not is_court_user():
+        return rows
+    court_no = current_user.court_no
+    return [r for r in rows if r.get("display_lane_no", r["athlete"].lane_no) == court_no]
+
+
+def sync_event_court_users(event: Event) -> tuple[int, int]:
+    """Keep event-scoped court IDs aligned with event.lane_count.
+
+    Missing IDs are pre-created in a disabled state (!UNSET!) until superadmin
+    sets a password. IDs above the current lane_count are removed.
+    Returns (created_count, removed_count).
+    """
+    lane_count = max(1, int(event.lane_count or 1))
+    existing = {
+        int(u.court_no): u
+        for u in User.query.filter_by(role="court", court_event_id=event.id).all()
+        if u.court_no
+    }
+    created = 0
+    removed = 0
+    for court_no in range(1, lane_count + 1):
+        internal_username = f"event{event.id}_court{court_no:02d}"
+        user = existing.get(court_no)
+        if user is None:
+            user = User(
+                username=internal_username,
+                password_hash="!UNSET!",
+                role="court",
+                court_no=court_no,
+                court_event_id=event.id,
+            )
+            db.session.add(user)
+            created += 1
+        else:
+            user.username = internal_username
+    for court_no, user in existing.items():
+        if court_no > lane_count:
+            db.session.delete(user)
+            removed += 1
+    return created, removed
+
+
 @app.route("/")
 def index():
+    if is_court_user():
+        return redirect(url_for("event_overview", event_id=current_user.court_event_id, round=1))
     stats = dashboard_stats()
     events = Event.query.order_by(Event.competition_date.desc(), Event.id.desc()).all()
     return render_template("index.html", events=events, stats=stats)
+
+
+@app.route("/events/<int:event_id>/courts/create", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def create_event_court_user(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    try:
+        court_no = int(request.form.get("court_no", "0"))
+    except ValueError:
+        court_no = 0
+    password = request.form.get("password", "").strip()
+    if court_no < 1 or court_no > event.lane_count or not password:
+        flash(f"กรุณาระบุเลขสนาม 1-{event.lane_count} และรหัสผ่าน", "warning")
+        return redirect(url_for("manage_athletes", event_id=event.id))
+
+    # Court IDs are normally pre-created from lane_count. Sync here as a safety net
+    # for older events created before this feature existed.
+    sync_event_court_users(event)
+    user = User.query.filter_by(role="court", court_event_id=event.id, court_no=court_no).first()
+    if not user:
+        abort(500)
+    user.set_password(password)
+    db.session.commit()
+    flash(f"ตั้งรหัสให้ court{court_no:02d} แล้ว", "success")
+    return redirect(url_for("manage_athletes", event_id=event.id))
+
+
+@app.route("/events/<int:event_id>/courts/<int:user_id>/delete", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def delete_event_court_user(event_id: int, user_id: int):
+    event = Event.query.get_or_404(event_id)
+    user = User.query.get_or_404(user_id)
+    if user.role != "court" or user.court_event_id != event.id:
+        abort(404)
+    public_id = court_public_id(user)
+    db.session.delete(user)
+    db.session.commit()
+    flash(f"ลบ {public_id} ของอีเวนต์นี้แล้ว", "info")
+    return redirect(url_for("manage_athletes", event_id=event.id))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -2115,10 +2377,27 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        user = User.query.filter_by(username=username).first()
+        user = None
+        # Court staff type only court01/court02/... . The DB username is event-scoped
+        # (event12_court01) so different events never collide internally.
+        if username.lower().startswith("court") and username[5:].isdigit():
+            court_no = int(username[5:])
+            matches = [
+                u for u in User.query.filter_by(role="court", court_no=court_no).all()
+                if u.court_event_id and u.check_password(password)
+            ]
+            if len(matches) == 1:
+                user = matches[0]
+            elif len(matches) > 1:
+                flash("มี court ID นี้มากกว่า 1 อีเวนต์ที่ใช้รหัสเดียวกัน กรุณาเปลี่ยนรหัสของอีเวนต์ให้ไม่ซ้ำ", "danger")
+                return render_template("login.html")
+        else:
+            user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
             login_user(user)
             flash("เข้าสู่ระบบสำเร็จ", "success")
+            if user.role == "court" and user.court_event_id:
+                return redirect(url_for("event_overview", event_id=user.court_event_id, round=1))
             return redirect(url_for("index"))
         flash("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", "danger")
     return render_template("login.html")
@@ -2140,6 +2419,9 @@ def manage_users():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
         role = request.form.get("role", "user")
+        if role == "court":
+            flash("บัญชีสนามให้สร้างจากหน้านักกีฬาของอีเวนต์", "warning")
+            return redirect(url_for("manage_users"))
         if username and password and not User.query.filter_by(username=username).first():
             user = User(username=username, role=role)
             user.set_password(password)
@@ -2148,7 +2430,7 @@ def manage_users():
             flash("สร้างผู้ใช้สำเร็จ", "success")
         else:
             flash("สร้างผู้ใช้ไม่สำเร็จ กรุณาตรวจสอบข้อมูล", "danger")
-    users = User.query.order_by(User.id).all()
+    users = User.query.filter(User.role != "court").order_by(User.id).all()
     return render_template("users.html", users=users)
 
 
@@ -2172,8 +2454,10 @@ def create_event():
             created_by=current_user.id,
         )
         db.session.add(event)
+        db.session.flush()
+        created_courts, _ = sync_event_court_users(event)
         db.session.commit()
-        flash("สร้างอีเวนต์สำเร็จ", "success")
+        flash(f"สร้างอีเวนต์สำเร็จ · เตรียม Court ID {created_courts} สนามแล้ว", "success")
         return redirect(url_for("manage_athletes", event_id=event.id))
     return render_template("event_form.html")
 
@@ -2196,6 +2480,7 @@ def edit_event(event_id: int):
         event.next_round_label = request.form["next_round_label"]
         event.round_two_advancers = int(request.form.get("round_two_advancers") or 4)
         recalculate_event_orders(event)
+        created_courts, removed_courts = sync_event_court_users(event)
         db.session.commit()
         reset_event_bracket(event)
         flash("แก้ไขอีเวนต์สำเร็จ", "success")
@@ -2209,6 +2494,7 @@ def edit_event(event_id: int):
 def delete_event(event_id: int):
     event = Event.query.get_or_404(event_id)
     BracketMatch.query.filter_by(event_id=event.id).delete()
+    User.query.filter_by(role="court", court_event_id=event.id).delete(synchronize_session=False)
     db.session.delete(event)
     db.session.commit()
     flash("ลบอีเวนต์แล้ว", "info")
@@ -2241,7 +2527,46 @@ def manage_athletes(event_id: int):
         flash("เพิ่มนักกีฬาสำเร็จ", "success")
         return redirect(url_for("manage_athletes", event_id=event.id))
     athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.start_order).all()
-    return render_template("athletes.html", event=event, athletes=athletes)
+    # Backfill court IDs automatically for older events too.
+    if current_user.role == "superadmin":
+        created_courts, removed_courts = sync_event_court_users(event)
+        if created_courts or removed_courts:
+            db.session.commit()
+    court_users = (
+        User.query.filter_by(role="court", court_event_id=event.id)
+        .order_by(User.court_no, User.id)
+        .all()
+    )
+    return render_template("athletes.html", event=event, athletes=athletes, court_users=court_users)
+
+
+@app.route("/athletes/<int:athlete_id>/round2-toggle", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def toggle_athlete_round_two(athlete_id: int):
+    athlete = Athlete.query.get_or_404(athlete_id)
+    event = athlete.event
+    if not event.has_round_two:
+        flash("อีเวนต์นี้ไม่ได้เปิดใช้รอบ 2", "warning")
+        return redirect(url_for("manage_athletes", event_id=event.id))
+
+    athlete.round_two_disabled = not bool(getattr(athlete, "round_two_disabled", False))
+    if athlete.round_two_disabled:
+        athlete.round_two_disabled_at = datetime.utcnow()
+        athlete.round_two_disabled_by = current_user.id
+        message = f"ปิด {athlete.name} ไม่ให้ระบบส่งไปรอบ 2 แล้ว"
+    else:
+        athlete.round_two_disabled_at = None
+        athlete.round_two_disabled_by = None
+        message = f"เปิด {athlete.name} ให้ระบบพิจารณารอบ 2 ตามกติกาแล้ว"
+
+    db.session.commit()
+    clear_request_cache()
+    sync_round_two_candidates(event)
+    reset_event_bracket(event)
+    db.session.commit()
+    flash(message, "success")
+    return redirect(url_for("manage_athletes", event_id=event.id))
 
 
 @app.route("/athletes/<int:athlete_id>/delete", methods=["POST"])
@@ -2338,13 +2663,21 @@ def randomize_athletes(event_id: int):
 @app.route("/events/<int:event_id>/overview")
 def event_overview(event_id: int):
     event = Event.query.get_or_404(event_id)
+    if is_court_user() and not court_can_access_event(event):
+        abort(403)
     round_no = int(request.args.get("round", 1))
     if round_no == 2 and event.has_round_two:
         sync_round_two_candidates(event)
     if round_no == 2 and event.has_round_two:
-        rows = build_round_two_overview_rows(event)
+        all_rows = build_round_two_overview_rows(event)
+        round2_competitors = [row for row in all_rows if not row.get("is_round2_direct_placeholder")]
+        round_complete = bool(round2_competitors) and all(
+            athlete_round_status(row["athlete"], 2) == "finished" for row in round2_competitors
+        )
     else:
-        rows = build_round_ranking(event, round_no)
+        all_rows = build_round_ranking(event, round_no)
+        round_complete = _all_rows_finished_for_round(all_rows, round_no)
+    rows = filter_rows_for_court(all_rows)
     groups = get_progression_groups(event)
     shoot_off_ids = overview_shootoff_ids(event, round_no)
     for row in rows:
@@ -2363,7 +2696,7 @@ def event_overview(event_id: int):
     # เส้นแบ่งกลุ่มสำคัญบนหน้า Overview
     # รอบ 1: แยกคนเข้ารอบตรงออกจากคนมีสิทธิ์ตีรอบ 2
     # รอบ 2: ขีดใต้คนสุดท้ายที่ผ่านจากรอบ 2 เข้า Bracket
-    if round_no == 1:
+    if round_complete and round_no == 1:
         last_direct_idx = None
         last_round2_candidate_idx = None
         for idx, row in enumerate(rows):
@@ -2376,7 +2709,7 @@ def event_overview(event_id: int):
             rows[last_direct_idx]["cut_line_after"] = True
         if last_round2_candidate_idx is not None and last_round2_candidate_idx < len(rows) - 1:
             rows[last_round2_candidate_idx]["cut_line_after"] = True
-    elif round_no == 2:
+    elif round_complete and round_no == 2:
         last_passed_idx = None
         for idx, row in enumerate(rows):
             if row["athlete"].id in groups["round2_passed"]:
@@ -2400,20 +2733,28 @@ def event_overview(event_id: int):
 @app.route("/events/<int:event_id>/overview-data")
 def overview_data(event_id: int):
     event = Event.query.get_or_404(event_id)
+    if is_court_user() and not court_can_access_event(event):
+        return jsonify({"error": "forbidden"}), 403
     round_no = int(request.args.get("round", 1))
     if round_no == 2 and event.has_round_two:
         sync_round_two_candidates(event)
     if round_no == 2 and event.has_round_two:
-        rows = build_round_two_overview_rows(event)
+        all_rows = build_round_two_overview_rows(event)
+        round2_competitors = [row for row in all_rows if not row.get("is_round2_direct_placeholder")]
+        round_complete = bool(round2_competitors) and all(
+            athlete_round_status(row["athlete"], 2) == "finished" for row in round2_competitors
+        )
     else:
-        rows = build_round_ranking(event, round_no)
+        all_rows = build_round_ranking(event, round_no)
+        round_complete = _all_rows_finished_for_round(all_rows, round_no)
+    rows = filter_rows_for_court(all_rows)
     groups = get_progression_groups(event)
     shoot_off_ids = overview_shootoff_ids(event, round_no)
     for row in rows:
         row["shoot_off_required"] = row["athlete"].id in shoot_off_ids
         row["shoot_off_group_ids"] = shootoff_group_ids(rows, row["athlete"].id, round_no) if row["shoot_off_required"] else [row["athlete"].id]
         row["cut_line_after"] = False
-    if round_no == 1:
+    if round_complete and round_no == 1:
         last_direct_idx = None
         last_round2_candidate_idx = None
         for idx, row in enumerate(rows):
@@ -2426,7 +2767,7 @@ def overview_data(event_id: int):
             rows[last_direct_idx]["cut_line_after"] = True
         if last_round2_candidate_idx is not None and last_round2_candidate_idx < len(rows) - 1:
             rows[last_round2_candidate_idx]["cut_line_after"] = True
-    elif round_no == 2:
+    elif round_complete and round_no == 2:
         last_passed_idx = None
         for idx, row in enumerate(rows):
             if row["athlete"].id in groups["round2_passed"]:
@@ -2498,12 +2839,15 @@ def overview_data(event_id: int):
 def overview_stats(event_id: int):
     """สถิติ 5/3 สำหรับเปิดดูประกอบการจัดลำดับ โดยไม่ทำให้ตาราง Overview หลักรก"""
     event = Event.query.get_or_404(event_id)
+    if is_court_user() and not court_can_access_event(event):
+        return jsonify({"error": "forbidden"}), 403
     round_no = int(request.args.get("round", 1))
 
     if round_no == 2 and event.has_round_two:
         rows = [r for r in build_round_two_overview_rows(event) if not r.get("is_round2_direct_placeholder")]
     else:
         rows = build_round_ranking(event, 1)
+    rows = filter_rows_for_court(rows)
 
     # เรียงตามกติกาจริงที่ใช้ประกอบอันดับ: TOTAL -> 5 -> 3 -> Shoot-off
     rows = sorted(rows, key=lambda r: (
@@ -2531,11 +2875,13 @@ def overview_stats(event_id: int):
 
 @app.route("/api/scorecard/<int:athlete_id>/autosave", methods=["POST"])
 @login_required
-@role_required("admin", "superadmin")
+@role_required("admin", "superadmin", "court")
 def autosave_scorecard(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
     payload = request.get_json() or {}
     round_no = int(payload.get("round_no", 1))
+    if not court_can_access_athlete(athlete, round_no):
+        return jsonify({"ok": False, "message": f"บัญชีนี้คีย์ได้เฉพาะสนาม {current_user.court_no}"}), 403
     station_no = int(payload.get("station_no", 1))
     distance_m = int(payload.get("distance_m", 6))
     score_value = str(payload.get("score", "")).strip()
@@ -2545,8 +2891,23 @@ def autosave_scorecard(athlete_id: int):
     signature = ensure_signature(athlete.id, round_no)
     if not signature.started_at:
         signature.started_at = datetime.utcnow()
-    athlete.status = "active"
+    if not signature.finished_at:
+        athlete.status = "active"
     entry = ScoreEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no, station_no=station_no, distance_m=distance_m).first()
+    old_state = (entry.score, bool(entry.is_red_card), bool(entry.is_scored)) if entry else (0, False, False)
+    requested_value = max(0, min(5, 0 if score_value == "" else int(score_value)))
+    requested_state = (0 if red else requested_value, red, bool(played or red))
+    is_change = old_state != requested_state
+    already_signed = bool(signature.finished_at)
+    edit_signature = str(payload.get("edit_signature", "")).strip()
+    edit_reason = str(payload.get("edit_reason", "")).strip()
+    if already_signed and is_change and not edit_signature:
+        return jsonify({
+            "ok": False,
+            "requires_edit_signature": True,
+            "message": "ผลนี้ลงลายเซ็นแล้ว กรุณาลงลายเซ็นผู้แก้ไขก่อนแก้คะแนน",
+        }), 409
+
     round_entries = ScoreEntry.query.filter_by(
         athlete_id=athlete.id,
         round_no=round_no,
@@ -2567,8 +2928,7 @@ def autosave_scorecard(athlete_id: int):
         }), 409
 
     if entry:
-        value = 0 if score_value == "" else int(score_value)
-        value = max(0, min(5, value))
+        value = requested_value
         entry.is_red_card = red
         entry.score = 0 if red else value
         entry.is_scored = bool(played or red)
@@ -2589,6 +2949,25 @@ def autosave_scorecard(athlete_id: int):
         if not has_full_signoff:
             signature.finished_at = None
             athlete.status = "active"
+
+    if already_signed and is_change:
+        db.session.add(ScoreEditLog(
+            athlete_id=athlete.id,
+            round_no=round_no,
+            station_no=station_no,
+            distance_m=distance_m,
+            old_score=old_state[0],
+            new_score=requested_state[0],
+            old_red=old_state[1],
+            new_red=requested_state[1],
+            old_played=old_state[2],
+            new_played=requested_state[2],
+            edited_by=current_user.id,
+            editor_username=current_user.username,
+            editor_court_no=current_user.court_no if current_user.role == "court" else None,
+            editor_signature=edit_signature,
+            reason=edit_reason or "แก้ไขคะแนนหลังลงลายเซ็นยืนยัน",
+        ))
 
     db.session.commit()
     clear_request_cache()
@@ -2613,11 +2992,16 @@ def autosave_scorecard(athlete_id: int):
 
 @app.route("/athletes/<int:athlete_id>/scorecard", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "superadmin")
+@role_required("admin", "superadmin", "court")
 def scorecard(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
     event = athlete.event
     round_no = int(request.args.get("round", 1))
+    if not court_can_access_athlete(athlete, round_no):
+        flash(f"บัญชี {court_public_id(current_user)} ใช้งานได้เฉพาะอีเวนต์ที่ได้รับมอบหมายและสนาม {current_user.court_no}", "warning")
+        if is_court_user():
+            return redirect(url_for("event_overview", event_id=current_user.court_event_id, round=1))
+        return redirect(url_for("event_overview", event_id=event.id, round=round_no))
     if round_no == 2 and not is_round_two_candidate(event, athlete):
         flash("นักกีฬาคนนี้ไม่มีสิทธิ์ตีรอบ 2", "warning")
         return redirect(url_for("event_overview", event_id=event.id, round=1))
@@ -2782,6 +3166,8 @@ def scorecard(athlete_id: int):
         display_order=display_order,
         display_lane_no=display_lane_no,
         display_lane_order=display_lane_order,
+        score_edit_count=ScoreEditLog.query.filter_by(athlete_id=athlete.id, round_no=round_no).count(),
+        is_finalized=bool(signature and signature.finished_at),
         current_round_red_cards=sum(
             template_data["station_reds"].get((round_no, station_no), 0)
             for station_no in STATIONS
@@ -2794,6 +3180,21 @@ def scorecard(athlete_id: int):
             ) >= MAX_RED_CARDS
         ),
     )
+
+
+@app.route("/athletes/<int:athlete_id>/score-history")
+@login_required
+@role_required("admin", "superadmin", "court")
+def score_history(athlete_id: int):
+    athlete = Athlete.query.get_or_404(athlete_id)
+    round_no = int(request.args.get("round", 1))
+    if not court_can_access_athlete(athlete, round_no):
+        flash("ไม่มีสิทธิ์ดูประวัติคะแนนของอีเวนต์หรือสนามอื่น", "warning")
+        if is_court_user():
+            return redirect(url_for("event_overview", event_id=current_user.court_event_id, round=1))
+        return redirect(url_for("index"))
+    logs = ScoreEditLog.query.filter_by(athlete_id=athlete.id, round_no=round_no).order_by(ScoreEditLog.edited_at.desc()).all()
+    return render_template("score_history.html", athlete=athlete, event=athlete.event, round_no=round_no, logs=logs)
 
 
 @app.route("/events/<int:event_id>/scorecards-print-select", methods=["GET", "POST"])
