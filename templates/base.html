@@ -443,10 +443,135 @@
       }
     }
 
+
+
+    /* ===== KKU 2026 World Championship Theme ===== */
+    :root{
+      --kku-orange:#ef4b12;
+      --kku-orange-dark:#c9360b;
+      --kku-orange-soft:#fff1e8;
+      --kku-cream:#fffaf4;
+      --kku-teal:#37b8b1;
+      --kku-ink:#172033;
+      --kku-line:#f3d2bf;
+    }
+
+    body{
+      background:
+        radial-gradient(circle at 95% 8%, rgba(239,75,18,.09), transparent 26%),
+        linear-gradient(180deg,#fff8f1 0,#fffdfb 44%,#f7fbfb 100%);
+      color:var(--kku-ink);
+    }
+
+    .championship-hero{
+      position:relative;
+      min-height:190px;
+      overflow:hidden;
+      background:linear-gradient(112deg,#e8450c 0%,#f26120 48%,#d83b0b 100%);
+      border-bottom:4px solid rgba(55,184,177,.8);
+      isolation:isolate;
+    }
+    .championship-hero::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      z-index:-2;
+      background:url("{{ url_for('static', filename='kku2026_theme_poster.jpg') }}") center 39%/cover no-repeat;
+      opacity:.26;
+      filter:saturate(1.08) contrast(1.02);
+    }
+    .championship-hero::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      z-index:-1;
+      background:linear-gradient(90deg,rgba(194,45,0,.82) 0%,rgba(233,67,11,.72) 42%,rgba(214,56,5,.58) 100%);
+    }
+    .championship-hero-inner{
+      width:100%;
+      min-height:190px;
+      padding:20px clamp(18px,3vw,46px);
+      display:grid;
+      grid-template-columns:auto minmax(280px,1fr) auto;
+      align-items:center;
+      gap:24px;
+    }
+    .championship-event-logo{
+      width:132px;
+      height:132px;
+      border-radius:28px;
+      object-fit:cover;
+      object-position:center;
+      box-shadow:0 18px 45px rgba(86,24,0,.28);
+      border:2px solid rgba(255,255,255,.72);
+    }
+    .championship-copy{color:#fff;text-shadow:0 2px 12px rgba(74,22,0,.2)}
+    .championship-copy .eyebrow{font-size:.72rem;font-weight:900;letter-spacing:.28em;text-transform:uppercase;opacity:.9;margin-bottom:5px}
+    .championship-copy h2{margin:0;font-size:clamp(1.7rem,3vw,3rem);font-weight:950;line-height:1;letter-spacing:-.03em}
+    .championship-copy p{margin:8px 0 0;font-weight:800;font-size:clamp(.8rem,1.25vw,1rem);opacity:.94}
+    .championship-partners{
+      width:min(510px,38vw);
+      padding:9px 12px;
+      border-radius:18px;
+      background:rgba(255,255,255,.96);
+      box-shadow:0 12px 35px rgba(84,23,0,.2);
+    }
+    .championship-partners img{display:block;width:100%;height:54px;object-fit:cover;object-position:center;border-radius:10px}
+    .hero-wave{
+      position:absolute;left:-4%;right:-4%;bottom:-1px;height:18px;
+      background:linear-gradient(90deg,#fff 0 8%,#35b8b1 8% 27%,#fff 27% 33%,#ffd9b9 33% 47%,#fff 47% 100%);
+      transform:skewY(-1.2deg);opacity:.95;
+    }
+
+    .navbar-custom{
+      position:sticky;
+      top:0;
+      background:rgba(255,250,246,.96);
+      border-bottom:1px solid rgba(202,98,53,.24);
+      box-shadow:0 8px 24px rgba(100,45,18,.10);
+      backdrop-filter:blur(12px);
+    }
+    .navbar-brand{color:var(--kku-orange-dark)!important;max-width:none}
+    .navbar-brand h1{margin:0;font-size:1.18rem;font-weight:950;letter-spacing:-.02em}
+    .navbar-custom .nav-link{color:#283448!important}
+    .navbar-custom .nav-link:hover,.navbar-custom .nav-link.active{background:#fff0e8;color:var(--kku-orange-dark)!important}
+    .navbar-custom .nav-link.primary-link{background:linear-gradient(135deg,#f35b1f,#e8440d);color:#fff!important;box-shadow:0 7px 16px rgba(224,69,16,.22)}
+    .navbar-custom .nav-link.primary-link:hover{background:linear-gradient(135deg,#e84b12,#c9380b);color:#fff!important}
+    .navbar-custom .nav-link.logout-link{background:#fff1ee;color:#b52b1a!important;border:1px solid #ffd3ca}
+    .user-badge{color:#27344a;background:#fff;border:1px solid #efd8ca;box-shadow:0 4px 12px rgba(92,44,21,.07)}
+    .role-badge{background:#fff0e8;color:var(--kku-orange-dark)}
+    .language-switcher{color:#b93a0d;background:#fff;border:1px solid #efd8ca}
+    .navbar-toggler{border-color:rgba(196,58,10,.35)}
+    .navbar-toggler-icon{filter:invert(28%) sepia(81%) saturate(2431%) hue-rotate(356deg) brightness(91%) contrast(98%)}
+    .container-main{padding:18px 22px 34px}
+
+    @media(max-width:1024px){
+      .championship-hero-inner{grid-template-columns:auto 1fr;min-height:145px;padding:14px 18px}.championship-hero{min-height:145px}
+      .championship-event-logo{width:100px;height:100px;border-radius:22px}.championship-partners{grid-column:1/-1;width:100%;max-width:560px;justify-self:center}.championship-partners img{height:42px}
+    }
+    @media(max-width:767px){
+      .championship-hero{min-height:100px}.championship-hero-inner{min-height:100px;grid-template-columns:70px 1fr;padding:10px 12px;gap:12px}
+      .championship-event-logo{width:70px;height:70px;border-radius:17px}.championship-copy .eyebrow{font-size:.52rem}.championship-copy h2{font-size:1.25rem}.championship-copy p{font-size:.66rem;margin-top:4px}.championship-partners{display:none}
+      .container-main{padding:9px}
+    }
   </style>
 </head>
 
 <body>
+  <header class="championship-hero" aria-label="52nd Petanque World Championship 2026">
+    <div class="championship-hero-inner">
+      <img class="championship-event-logo" src="{{ url_for('static', filename='kku2026_event_logo.jpg') }}" alt="KKU 2026 World Championships">
+      <div class="championship-copy">
+        <div class="eyebrow">Khon Kaen University · Thailand</div>
+        <h2>Petanque Shooting</h2>
+        <p>52nd PÉTANQUE WORLD CHAMPIONSHIP 2026 · 48 Nations, One Spirit</p>
+      </div>
+      <div class="championship-partners">
+        <img src="{{ url_for('static', filename='kku2026_partner_logos.jpg') }}" alt="Championship partner logos">
+      </div>
+    </div>
+    <div class="hero-wave"></div>
+  </header>
   <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
     <div class="container-fluid">
       <a class="navbar-brand" href="{{ url_for('index') }}">

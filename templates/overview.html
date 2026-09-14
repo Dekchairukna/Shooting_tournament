@@ -490,6 +490,142 @@
 #overviewTableBody tr.live-active:hover td.score-col.score-played,
 #overviewTableBody tr.status-active:hover td.score-col.score-played{background:var(--safe-ov-active-input)!important;}
 
+
+/* ===== KKU 2026 overview polish + overflow fix ===== */
+.overview-page{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:14px;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+.overview-page>*{min-width:0;max-width:100%;}
+.overview-card{
+  min-width:0;
+  max-width:100%;
+  border:1px solid #f0cdbb;
+  border-radius:22px;
+  padding:14px;
+  background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(255,250,246,.98));
+  box-shadow:0 16px 42px rgba(126,55,21,.10);
+}
+.title-box h1{color:#9f2f0c;font-size:1.35rem;font-weight:950;}
+.title-box .muted{color:#7a5b4d;font-weight:750}
+.responsive-toolbar{min-width:0;}
+.responsive-toolbar .btn.secondary{
+  background:#fff;
+  color:#293347;
+  border:1px solid #edd6c9;
+  box-shadow:0 3px 9px rgba(98,51,28,.06);
+}
+.responsive-toolbar .btn.secondary:hover{background:#fff0e7;border-color:#f08b5f;color:#aa350d;}
+.responsive-toolbar .btn.secondary[href*="round=2"]{background:linear-gradient(135deg,#f35d21,#e7430d);border-color:#e7430d;color:#fff;}
+.status-legend{background:#fff8f3;border-color:#f0d1c1;}
+.qualification-wrap{width:100%;max-width:100%;min-width:0;overflow:hidden;border-color:#e6bca8;border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(96,48,24,.08)}
+.qualification-scroll{display:block;width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-color:#ef7542 #fff1e8;}
+.qualification-title{background:linear-gradient(90deg,#e7430d,#f36d31);color:#fff;font-size:1.03rem;letter-spacing:.02em;box-shadow:inset 0 -1px 0 rgba(255,255,255,.25)}
+.qualification-table thead th{background:#fff8f3;color:#283448;border-color:#d7b7a8;}
+.qualification-table thead th.atelier-head{background:linear-gradient(180deg,#eaf7fb,#d8eef7);color:#174c75;}
+.qualification-table thead th.station-image-cell{background:#fff;}
+.qualification-table thead th.score-col{background:#f3f8fb;color:#27344a;}
+.qualification-table thead th.score-total-col{background:#e6f1f7;color:#173b56;}
+.qualification-table thead th.round1-history-col{background:#3a9e9a;color:#fff;}
+.qualification-table thead th.round2-total-head{background:#266c91;color:#fff;}
+.qualification-table thead th.sum-head{background:#ffe7a0;color:#6d4200;}
+.qualification-table thead th.col-class{background:#ead9f7;color:#5a2681;}
+.qualification-table thead th.col-status{background:#f1ebe7;color:#483329;}
+#overviewTableBody tr[data-athlete-id]:hover>td{background:#fff4ec;}
+#overviewTableBody td.overall-total,#overviewTableBody td.round2-total-cell{background:#dff0f7!important;color:#163f59!important;}
+#overviewTableBody td.sum-total-cell{background:#fff0b7!important;color:#684000!important;}
+#overviewTableBody td.overall-rank{background:#eee0f8!important;color:#57257b!important;}
+.shoot-off-action{background:#d94712;}
+.shoot-off-action:hover,.shoot-off-action:focus-visible{background:#b9350d;}
+@media(max-width:640px){.overview-card{padding:8px;border-radius:14px}.title-box h1{font-size:1.1rem}}
+
+
+/* --- KKU 2026 themed image export (shown only while Save as image runs) --- */
+.export-theme-header,
+.export-theme-footer{display:none;}
+
+#overviewTableWrap.export-capture-mode{
+  overflow:visible!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:#fffaf4!important;
+  padding:0!important;
+}
+#overviewTableWrap.export-capture-mode .export-theme-header{
+  display:grid;
+  grid-template-columns:150px minmax(420px,1fr) minmax(360px,560px);
+  align-items:center;
+  gap:18px;
+  min-height:126px;
+  padding:14px 20px 15px;
+  color:#fff;
+  background:
+    linear-gradient(115deg,rgba(220,61,8,.98),rgba(246,91,26,.97) 54%,rgba(231,67,13,.98));
+  border-bottom:5px solid #24a8a3;
+  position:relative;
+  overflow:hidden;
+}
+#overviewTableWrap.export-capture-mode .export-theme-header:after{
+  content:'';
+  position:absolute;
+  left:-3%;right:-3%;bottom:-17px;height:32px;
+  background:#fff8ef;
+  border-radius:50% 50% 0 0/100% 100% 0 0;
+  opacity:.98;
+}
+.export-theme-logo{
+  width:115px;height:96px;object-fit:cover;object-position:center;
+  border-radius:18px;border:2px solid rgba(255,255,255,.82);
+  box-shadow:0 8px 20px rgba(111,35,11,.22);
+}
+.export-theme-copy{position:relative;z-index:1;min-width:0;}
+.export-theme-kicker{font-size:15px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;opacity:.95;}
+.export-theme-title{font-size:31px;line-height:1.02;font-weight:1000;letter-spacing:.01em;margin:3px 0 5px;white-space:nowrap;}
+.export-theme-sub{font-size:18px;font-weight:850;line-height:1.2;}
+.export-theme-meta{margin-top:7px;font-size:13px;font-weight:800;letter-spacing:.05em;opacity:.95;}
+.export-theme-partners{
+  width:100%;max-width:560px;height:auto;object-fit:contain;
+  border-radius:14px;box-shadow:0 7px 18px rgba(79,26,9,.18);
+  position:relative;z-index:1;
+}
+#overviewTableWrap.export-capture-mode .qualification-scroll{background:#fff;}
+#overviewTableWrap.export-capture-mode .qualification-title{
+  background:linear-gradient(90deg,#e9440d,#f36b2d)!important;
+  color:#fff!important;
+  font-size:20px!important;
+  padding:11px 16px!important;
+  letter-spacing:.015em!important;
+}
+#overviewTableWrap.export-capture-mode .qualification-table{
+  border-left:3px solid #ef5a1f;
+  border-right:3px solid #ef5a1f;
+}
+#overviewTableWrap.export-capture-mode .export-theme-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:12px 22px 14px;
+  min-height:52px;
+  color:#fff;
+  background:linear-gradient(90deg,#e7430d,#f16529 58%,#159a99);
+  border-top:4px solid #fff0df;
+  font-weight:900;
+}
+.export-theme-footer-main{font-size:14px;letter-spacing:.14em;white-space:nowrap;}
+.export-theme-footer-event{font-size:13px;text-align:right;white-space:nowrap;}
+
+@media(max-width:900px){
+  #overviewTableWrap.export-capture-mode .export-theme-header{grid-template-columns:120px 1fr;}
+  #overviewTableWrap.export-capture-mode .export-theme-partners{grid-column:1/-1;max-width:520px;justify-self:center;}
+  .export-theme-title{font-size:24px;}
+}
+
 </style>
 
 <div class="overview-page">
@@ -547,6 +683,17 @@
     </div>
 
     <div id="overviewTableWrap" class="table-export-block qualification-wrap {{ theme }}">
+
+      <div class="export-theme-header" aria-hidden="true">
+        <img class="export-theme-logo" src="{{ url_for('static', filename='kku2026_event_logo.jpg') }}" alt="KKU 2026">
+        <div class="export-theme-copy">
+          <div class="export-theme-kicker">Official Shooting Results</div>
+          <div class="export-theme-title">52nd PÉTANQUE WORLD CHAMPIONSHIP 2026</div>
+          <div class="export-theme-sub">Khon Kaen University, Thailand</div>
+          <div class="export-theme-meta">{{ event.name }} · {{ event.event_group }} · {{ event.category }} · Round {{ round_no }}</div>
+        </div>
+        <img class="export-theme-partners" src="{{ url_for('static', filename='kku2026_partner_logos.jpg') }}" alt="Official partner logos">
+      </div>
       <div class="qualification-scroll">
         <table class="qualification-table {{ theme }} overview-round-{{ round_no }}">
           <thead>
@@ -655,6 +802,11 @@
           </tbody>
         </table>
       </div>
+
+      <div class="export-theme-footer" aria-hidden="true">
+        <div class="export-theme-footer-main">SPORT &nbsp; | &nbsp; CULTURE &nbsp; | &nbsp; FRIENDSHIP &nbsp; | &nbsp; A BRIGHTER TOMORROW</div>
+        <div class="export-theme-footer-event">KKU 2026 · Pétanque Unites the World</div>
+      </div>
     </div>
   </section>
 </div>
@@ -735,30 +887,64 @@
 
 {% block scripts %}
 <script>
-  function captureTable(id, filename) {
+  async function captureTable(id, filename) {
   const el = document.getElementById(id);
   const scrollBox = el.querySelector('.qualification-scroll');
+  if (!el || !scrollBox) return;
 
   const oldOverflow = scrollBox.style.overflow;
   const oldWidth = scrollBox.style.width;
+  const oldMaxWidth = scrollBox.style.maxWidth;
+  const oldElWidth = el.style.width;
+  const oldElMaxWidth = el.style.maxWidth;
 
+  // ขยายเฉพาะกรอบตารางให้ครบทุกคอลัมน์ แล้วเปิดหัว/ท้ายธีมเฉพาะตอน export
+  const exportWidth = Math.max(scrollBox.scrollWidth, scrollBox.querySelector('table')?.scrollWidth || 0);
+  el.classList.add('export-capture-mode');
   scrollBox.style.overflow = 'visible';
-  scrollBox.style.width = scrollBox.scrollWidth + 'px';
+  scrollBox.style.width = exportWidth + 'px';
+  scrollBox.style.maxWidth = 'none';
+  el.style.width = exportWidth + 'px';
+  el.style.maxWidth = 'none';
 
-  html2canvas(el, {
-    scale: 2,
-    backgroundColor: '#ffffff',
-    width: el.scrollWidth,
-    windowWidth: el.scrollWidth
-  }).then(canvas => {
+  try {
+    // รอรูปโลโก้/ฟอนต์ให้พร้อมก่อน capture
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const imgs = Array.from(el.querySelectorAll('img'));
+    await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+      img.addEventListener('load', resolve, { once:true });
+      img.addEventListener('error', resolve, { once:true });
+    })));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const canvas = await html2canvas(el, {
+      scale: 2,
+      backgroundColor: '#fffaf4',
+      useCORS: true,
+      allowTaint: false,
+      width: el.scrollWidth,
+      height: el.scrollHeight,
+      windowWidth: el.scrollWidth,
+      windowHeight: el.scrollHeight,
+      scrollX: 0,
+      scrollY: 0,
+      logging: false
+    });
+
     const a = document.createElement('a');
-    a.download = filename + '.png';
-    a.href = canvas.toDataURL('image/png');
+    a.download = filename + '-KKU2026.png';
+    a.href = canvas.toDataURL('image/png', 1.0);
+    document.body.appendChild(a);
     a.click();
-
+    a.remove();
+  } finally {
+    el.classList.remove('export-capture-mode');
     scrollBox.style.overflow = oldOverflow;
     scrollBox.style.width = oldWidth;
-  });
+    scrollBox.style.maxWidth = oldMaxWidth;
+    el.style.width = oldElWidth;
+    el.style.maxWidth = oldElMaxWidth;
+  }
 }
 
   function statusLabel(item, currentStation) {
