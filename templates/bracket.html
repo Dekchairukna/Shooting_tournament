@@ -4,7 +4,13 @@
   <div class="page-top">
     <div class="title-wrap">
       <p class="eyebrow">Tournament</p>
-      <h1>KNOCKOUT CHAMPIONSHIP ROUND</h1>
+      {% if start_round == 'R16' %}
+      <h1>ROUND OF 16</h1>
+      {% elif start_round == 'SF' %}
+      <h1>SEMI FINAL</h1>
+      {% else %}
+      <h1>QUARTER FINAL</h1>
+      {% endif %}
       <p class="subtitle">กดที่ชื่อในแต่ละ match box เพื่อเปิด scorecard ของรอบนั้น</p>
     </div>
 
@@ -25,7 +31,7 @@
     <span>›</span>
     <a href="{{ url_for('event_overview', event_id=event.id) }}">{{ event.name }}</a>
     <span>›</span>
-    <strong>Tournament Bracket</strong>
+    <strong>{% if start_round == 'R16' %}Round of 16{% elif start_round == 'SF' %}Semi Final{% else %}Quarter Final{% endif %}</strong>
   </div>
 
   <style>

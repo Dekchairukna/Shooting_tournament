@@ -1,0 +1,22 @@
+DEMO FOR MEETING — TWO EVENTS IN ONE PROJECT
+
+Open the app normally. The Competition events page contains both demo states:
+
+1) DEMO • NOT STARTED • 48 NATIONS • PETANQUE SHOOTING 2026
+   - 48 countries
+   - 8 lanes / 6 countries per lane
+   - no score entries
+   - all athletes waiting
+   - initial 0-point tie displays Class 1 for everyone
+   - no Round 2 / Knockout results yet
+
+2) DEMO • FINISHED • 48 NATIONS • PETANQUE SHOOTING 2026
+   - Round 1 completed
+   - Round 2 completed
+   - Quarter Final, Semi Final and Final completed
+   - neutral meeting demo (Belgium vs Spain final)
+
+Both are inside the SAME instance/shooting.db.
+Do not replace the bundled database with an older instance/shooting.db before the meeting.
+
+If you run seed_demo_48_countries_sqlite.py, it resets ONLY the FINISHED demo event.

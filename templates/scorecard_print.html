@@ -401,16 +401,25 @@
     }
   }
 
+
+  @media print {
+    .championship-hero {
+      display: none !important;
+    }
+  }
+
 </style>
 
 <div class="print-tools">
   {% if is_bulk %}
   <a class="btn secondary" href="{{ url_for('scorecards_print_select', event_id=event.id, round=round_no) }}">← กลับหน้าเลือกนักกีฬา</a>
   <button class="btn" onclick="window.print()">พิมพ์ทั้งหมดที่แสดง</button>
+  <button type="button" class="btn secondary" id="downloadScorecardPrintJpgBtn" onclick="downloadScorecardPrintJpg()">บันทึกเป็น JPG ทั้งหมด</button>
   <span class="bulk-info">จำนวน {{ print_items|length }} คน | {{ round_labels[round_no-1] }}</span>
   {% elif print_items %}
   <a class="btn secondary" href="{{ url_for('scorecard', athlete_id=print_items[0].athlete.id, round=round_no) }}">← กลับ scorecard</a>
   <button class="btn secondary" onclick="window.print()">พิมพ์</button>
+  <button type="button" class="btn secondary" id="downloadScorecardPrintJpgBtn" onclick="downloadScorecardPrintJpg()">บันทึกเป็น JPG</button>
   {% endif %}
 </div>
 
@@ -425,7 +434,7 @@
 {% set display_order = item.display_order %}
 {% set display_lane_no = item.display_lane_no %}
 {% set display_lane_order = item.display_lane_order %}
-<div class="sheet">
+<div class="sheet" data-file-stem="scorecard-print-{{ event.id }}-r{{ round_no }}-a{{ athlete.id }}">
   <div class="header">
     <div class="header-left">
       <div class="event-name">{{ event.name }}</div>
@@ -584,4 +593,93 @@
 <div class="bulk-info">ยังไม่มีนักกีฬาสำหรับพิมพ์ในรอบนี้</div>
 {% endfor %}
 
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+  function sanitizeExportFilename(value) {
+    return String(value || 'scorecard-print')
+      .replace(/[\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  async function waitForCaptureAssets(root) {
+    if (document.fonts && document.fonts.ready) {
+      try { await document.fonts.ready; } catch (e) {}
+    }
+
+    const images = Array.from((root || document).querySelectorAll('img'));
+    await Promise.all(images.map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      });
+    }));
+
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
+  async function captureNodeToJpeg(node, filename) {
+    await waitForCaptureAssets(node);
+    const canvas = await html2canvas(node, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      allowTaint: false,
+      width: node.scrollWidth,
+      height: node.scrollHeight,
+      windowWidth: node.scrollWidth,
+      windowHeight: node.scrollHeight,
+      scrollX: 0,
+      scrollY: 0,
+      logging: false
+    });
+
+    const link = document.createElement('a');
+    link.download = `${sanitizeExportFilename(filename)}.jpg`;
+    link.href = canvas.toDataURL('image/jpeg', 0.95);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function downloadScorecardPrintJpg() {
+    const button = document.getElementById('downloadScorecardPrintJpgBtn');
+    const sheets = Array.from(document.querySelectorAll('.sheet'));
+    if (!sheets.length) return;
+
+    if (typeof window.html2canvas !== 'function') {
+      alert('ไม่สามารถบันทึกภาพได้ กรุณารีเฟรชหน้าแล้วลองใหม่');
+      return;
+    }
+
+    const oldText = button ? button.textContent : '';
+    try {
+      if (button) {
+        button.disabled = true;
+        button.textContent = sheets.length > 1 ? 'กำลังสร้าง JPG...' : 'กำลังสร้าง JPG...';
+      }
+
+      for (let i = 0; i < sheets.length; i += 1) {
+        const node = sheets[i];
+        const stem = node.dataset.fileStem || `scorecard-print-${i + 1}`;
+        const suffix = sheets.length > 1 ? `-${String(i + 1).padStart(2, '0')}` : '';
+        await captureNodeToJpeg(node, `${stem}${suffix}`);
+        await new Promise(resolve => setTimeout(resolve, 180));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('บันทึกเป็น JPG ไม่สำเร็จ');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = oldText || (sheets.length > 1 ? 'บันทึกเป็น JPG ทั้งหมด' : 'บันทึกเป็น JPG');
+      }
+    }
+  }
+</script>
 {% endblock %}

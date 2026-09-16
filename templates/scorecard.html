@@ -1015,6 +1015,13 @@
     }
   }
 
+
+  @media print {
+    .championship-hero {
+      display: none !important;
+    }
+  }
+
 </style>
 <section class="card scorecard-theme-{{ theme }}">
   <div class="section-head responsive-head">
@@ -1028,6 +1035,7 @@
       <a class="btn secondary" href="{{ url_for('scorecard_print', athlete_id=athlete.id, round=round_no) }}" target="_blank">
   พิมพ์แบบฟอร์ม
 </a>
+      <button type="button" class="btn secondary" id="downloadScorecardJpgBtn" onclick="downloadScorecardJpg()">บันทึกเป็น JPG</button>
     </div>
   </div>
 
@@ -1223,18 +1231,18 @@
 
           <div class="signature-round-grid">
             <div class="signature-col">
-              <div class="signature-title text-align">กรรมการตัดสิน</div>
+              <div class="signature-title text-align">กรรมการยกคะแนน</div>
               <input class="sig-text-input"
                      type="text"
                      name="referee_name_{{ r }}"
                      value="{{ (sig.referee_name if sig else '') or '' }}"
                      placeholder="พิมพ์ชื่อ ถ้าไม่เซ็นระบบจะใช้ชื่อนี้">
               <div class="sig-action-row">
-                <button type="button" class="btn secondary signature-open-btn" data-target="ref_sig_{{ r }}" data-title="ลายเซ็นกรรมการตัดสิน - {{ round_label }}">เซ็นชื่อเต็มหน้าจอ</button>
+                <button type="button" class="btn secondary signature-open-btn" data-target="ref_sig_{{ r }}" data-title="ลายเซ็นกรรมการยกคะแนน - {{ round_label }}">เซ็นชื่อเต็มหน้าจอ</button>
                 <button type="button" class="btn secondary signature-clear-btn" data-target="ref_sig_{{ r }}">ล้างลายเซ็น</button>
               </div>
               <div class="sig-preview-box" data-preview-wrap="ref_sig_{{ r }}">
-                <img class="sig-preview-image {% if not (sig and sig.referee_signature) %}hidden{% endif %}" data-preview-img="ref_sig_{{ r }}" src="{{ (sig.referee_signature if sig and sig.referee_signature else '') or '' }}" alt="ลายเซ็นกรรมการตัดสิน">
+                <img class="sig-preview-image {% if not (sig and sig.referee_signature) %}hidden{% endif %}" data-preview-img="ref_sig_{{ r }}" src="{{ (sig.referee_signature if sig and sig.referee_signature else '') or '' }}" alt="ลายเซ็นกรรมการยกคะแนน">
                 <div class="sig-preview-placeholder {% if sig and sig.referee_signature %}hidden{% endif %}" data-preview-placeholder="ref_sig_{{ r }}">แตะปุ่มเพื่อเปิดพื้นที่เซ็นเต็มหน้าจอ</div>
               </div>
               <input type="hidden" name="ref_sig_{{ r }}" id="ref_sig_{{ r }}" value="{{ (sig.referee_signature if sig and sig.referee_signature else '') or '' }}">
@@ -1278,6 +1286,30 @@
       </div>
       {% endif %}
     </div>
+
+    <input type="hidden" name="round" value="{{ round_no }}">
+
+    {% if current_round_approved %}
+    <div style="margin-top:14px;padding:12px 14px;border:2px solid #60a5fa;border-radius:14px;background:#dbeafe;color:#1e3a8a;font-weight:950;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="display:inline-flex;padding:6px 12px;border-radius:999px;background:#2563eb;color:#fff;">APPROVED</span>
+      <span>ผลคะแนนรอบนี้ได้รับการรับรองแล้ว</span>
+    </div>
+    {% elif current_round_score_complete %}
+    <div style="margin-top:14px;padding:12px 14px;border:2px solid #86efac;border-radius:14px;background:#f0fdf4;color:#166534;font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span>ยิงครบแล้ว แต่ยังไม่ได้รับรองผล</span>
+      {% if is_superadmin %}
+      <button type="submit"
+              name="next" value="scorecard"
+              formaction="{{ url_for('approve_score', athlete_id=athlete.id) }}"
+              formmethod="post"
+              class="btn"
+              style="background:#2563eb;color:#fff;border-color:#1d4ed8;"
+              onclick="return confirm('ยืนยัน Approve ผลของ {{ athlete.name|e }} ?');">Approve ผลคะแนน</button>
+      {% else %}
+      <span style="padding:6px 10px;border-radius:999px;background:#fff;border:1px solid #86efac;">รอ Superadmin ตรวจและ Approve</span>
+      {% endif %}
+    </div>
+    {% endif %}
 
     <div class="toolbar" style="margin-top:16px;">
       <button type="submit" name="action" value="finish" class="btn finish-score-btn">จบการตี</button>
@@ -1914,6 +1946,105 @@
       setActiveStation(btn.dataset.stationStep);
     });
   });
+
+
+  function sanitizeExportFilename(value) {
+    return String(value || 'scorecard')
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  async function waitForCaptureAssets(root) {
+    if (document.fonts && document.fonts.ready) {
+      try { await document.fonts.ready; } catch (e) {}
+    }
+
+    const images = Array.from((root || document).querySelectorAll('img'));
+    await Promise.all(images.map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      });
+    }));
+
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
+  async function downloadScorecardJpg() {
+    const button = document.getElementById('downloadScorecardJpgBtn');
+    const wrap = document.querySelector('.scorecard-table-wrap');
+    const node = document.getElementById('scorecardCapture');
+    if (!wrap || !node) return;
+
+    if (typeof window.html2canvas !== 'function') {
+      alert('ไม่สามารถบันทึกภาพได้ กรุณารีเฟรชหน้าแล้วลองใหม่');
+      return;
+    }
+
+    const oldWrapOverflowX = wrap.style.overflowX;
+    const oldWrapOverflowY = wrap.style.overflowY;
+    const oldWrapWidth = wrap.style.width;
+    const oldWrapMaxWidth = wrap.style.maxWidth;
+    const oldNodeWidth = node.style.width;
+    const oldNodeMinWidth = node.style.minWidth;
+    const oldButtonText = button ? button.textContent : '';
+    const exportWidth = Math.max(node.scrollWidth, node.querySelector('table')?.scrollWidth || 0, 1180);
+
+    try {
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'กำลังสร้าง JPG...';
+      }
+
+      wrap.style.overflowX = 'visible';
+      wrap.style.overflowY = 'visible';
+      wrap.style.width = exportWidth + 'px';
+      wrap.style.maxWidth = 'none';
+      node.style.width = exportWidth + 'px';
+      node.style.minWidth = exportWidth + 'px';
+
+      await waitForCaptureAssets(node);
+
+      const canvas = await html2canvas(node, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        allowTaint: false,
+        width: node.scrollWidth,
+        height: node.scrollHeight,
+        windowWidth: node.scrollWidth,
+        windowHeight: node.scrollHeight,
+        scrollX: 0,
+        scrollY: 0,
+        logging: false
+      });
+
+      const link = document.createElement('a');
+      const stem = sanitizeExportFilename('scorecard-{{ event.id }}-r{{ round_no }}-a{{ athlete.id }}');
+      link.download = `${stem}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.95);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error(err);
+      alert('บันทึกเป็น JPG ไม่สำเร็จ');
+    } finally {
+      wrap.style.overflowX = oldWrapOverflowX;
+      wrap.style.overflowY = oldWrapOverflowY;
+      wrap.style.width = oldWrapWidth;
+      wrap.style.maxWidth = oldWrapMaxWidth;
+      node.style.width = oldNodeWidth;
+      node.style.minWidth = oldNodeMinWidth;
+      if (button) {
+        button.disabled = false;
+        button.textContent = oldButtonText || 'บันทึกเป็น JPG';
+      }
+    }
+  }
 
   try {
     const savedStation =

@@ -766,6 +766,29 @@ def athlete_round_status(athlete: Athlete, round_no: int) -> str:
     return "waiting"
 
 
+def athlete_round_is_approved(athlete: Athlete, round_no: int) -> bool:
+    """Formal approval is separate from the live shooting/cursor state."""
+    signature = get_round_signature(athlete.id, round_no)
+    if not signature:
+        return False
+    if bool(getattr(signature, "bypass_signed", False)):
+        return True
+    return all([
+        bool(getattr(signature, "recorder_signature", None)),
+        bool(getattr(signature, "referee_signature", None)),
+        bool(getattr(signature, "athlete_signature", None)),
+    ])
+
+
+def overview_score_complete(summary: dict) -> bool:
+    """All 5 stations have recorded all 4 distances."""
+    by_station = summary.get("by_station") or {}
+    return bool(by_station) and all(
+        bool((by_station.get(station) or {}).get("is_complete", False))
+        for station in STATIONS
+    )
+
+
 def bracket_match_status(event: Event, match: BracketMatch) -> dict:
     """สถานะของคู่ใน bracket จากลายเซ็น/เวลาเริ่มของนักกีฬาทั้ง 2 ฝั่ง"""
     round_no = bracket_round_to_scorecard_round(match.round_name, event)
@@ -950,11 +973,13 @@ def round2_advancer_quota(event: Event) -> int:
     return remaining
 
 
-def round2_min_players(event: Event) -> int:
-    """จำนวนขั้นต่ำของผู้เล่นที่ได้สิทธิ์ตีรอบ 2 หลังตัดผู้ผ่านตรงออกแล้ว.
+def round2_cutoff_rank(event: Event) -> int:
+    """อันดับสูงสุด (Class) ที่มีสิทธิ์ตีรอบ 2 จากรอบ 1.
 
-    หมายเหตุ: ใช้คอลัมน์ round_two_cutoff_rank เดิมเพื่อไม่ให้ฐานข้อมูลเดิมต้อง migrate
-    แต่ความหมายใหม่คือ "จำนวนผู้เล่นขั้นต่ำในรอบ 2" ไม่ใช่ "ถึงอันดับที่เท่าไร".
+    ตัวอย่าง: ตั้งค่า 16 = ทุกคนที่ Class <= 16 และไม่ได้ผ่านตรง
+    มีสิทธิ์ตีรอบ 2 ทั้งหมด หากมีหลายคน Class 16 ก็ได้สิทธิ์ทุกคน.
+
+    ใช้คอลัมน์ round_two_cutoff_rank เดิม จึงไม่ต้อง migrate ฐานข้อมูล.
     """
     if not event.has_round_two:
         return 0
@@ -965,37 +990,27 @@ def round1_round2_candidate_ids(
     rows: list[dict],
     direct_ids: set[int],
     direct_pending_ids: set[int],
-    minimum_players: int,
+    cutoff_rank: int,
 ) -> set[int]:
-    """เลือกผู้เล่นรอบ 2 ตามกติกา "next N, at least".
+    """เลือกผู้มีสิทธิ์รอบ 2 โดยยึด Class ถึงอันดับที่กำหนด.
 
-    1) ตัดผู้ผ่านตรงออกก่อน
-    2) ตัดกลุ่มที่ยังรอ Shoot-off เพื่อแยกผู้ผ่านตรงออกชั่วคราว
-    3) เลือกผู้เล่นถัดมาอย่างน้อย minimum_players คน
-    4) ถ้าคนลำดับสุดท้ายของกลุ่มนี้มี TOTAL เท่ากับคนถัดไป ให้รับทุกคนที่ TOTAL เท่ากัน
-
-    rows ต้องเรียงจากผลรอบ 1 ดีที่สุดลงมาแล้ว.
+    กติกา:
+    - ผู้ผ่านตรงไม่ต้องตีรอบ 2
+    - กลุ่มที่ยังรอ Shoot-off เพื่อแยกผู้ผ่านตรงยังไม่ถูกฟันธง
+    - ผู้เล่นที่เหลือซึ่งมี Class <= cutoff_rank ได้ตีรอบ 2 ทุกคน
+    - ถ้ามีหลายคน Class เท่ากับ cutoff_rank (เช่น Class 16 หลายคน)
+      ได้สิทธิ์ทั้งหมด ไม่มีการจำกัดจำนวนคน
     """
-    minimum_players = max(int(minimum_players or 0), 0)
-    if minimum_players <= 0:
+    cutoff_rank = max(int(cutoff_rank or 0), 0)
+    if cutoff_rank <= 0:
         return set()
 
-    pool = [
-        row for row in rows
-        if row["athlete"].id not in direct_ids
-        and row["athlete"].id not in direct_pending_ids
-    ]
-    if not pool:
-        return set()
-    if len(pool) <= minimum_players:
-        return {row["athlete"].id for row in pool}
-
-    cutoff_total = pool[minimum_players - 1].get("total", 0)
-    # rows เรียงคะแนนจากมากไปน้อย จึงรับทุกคนที่ TOTAL >= คะแนนของคนที่ N
     return {
         row["athlete"].id
-        for row in pool
-        if row.get("total", 0) >= cutoff_total
+        for row in rows
+        if row["athlete"].id not in direct_ids
+        and row["athlete"].id not in direct_pending_ids
+        and int(row.get("display_rank", row.get("rank", 999999)) or 999999) <= cutoff_rank
     }
 
 
@@ -1042,6 +1057,9 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
         if round_no == 2 and not get_round_signature(athlete.id, 2):
             continue
         summary = summarize_round(athlete.id, round_no)
+        logical_status = athlete_round_status(athlete, round_no)
+        approved = athlete_round_is_approved(athlete, round_no)
+        score_complete = overview_score_complete(summary) or logical_status == "finished"
         row = {
             "athlete": athlete,
             "round_no": round_no,
@@ -1050,7 +1068,9 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             "count_3": summary["count_3"],
             "tiebreak_total": summary["tiebreak_total"],
             "tiebreak_count": summary.get("tiebreak_count", 0),
-            "status": athlete_round_status(athlete, round_no),
+            "status": logical_status,
+            "score_complete": score_complete,
+            "approved": approved,
             "by_station": summary["by_station"],
             "red_cards": summary["red_cards"],
             "display_order": athlete.start_order,
@@ -1079,22 +1099,22 @@ def round_two_candidate_ids(event: Event) -> set[int]:
         return cache[cache_key]
 
     ids: set[int] = set()
-    minimum_players = round2_min_players(event)
+    cutoff_rank = round2_cutoff_rank(event)
     # ห้ามฟันธงสิทธิ์รอบ 2 ระหว่างที่รอบ 1 ยังยิงไม่ครบทั้งอีเวนต์
     # Ranking ยังแสดงสดได้ แต่ candidate list ต้องรอผลรอบ 1 สุดท้ายก่อน
-    if event.has_round_two and minimum_players > 0 and is_round_one_complete(event):
+    if event.has_round_two and cutoff_rank > 0 and is_round_one_complete(event):
         round1_rows = build_round_ranking(event, 1)
         direct = direct_quota(event)
 
-        # กติกา: หลังผู้ผ่านตรง ให้เลือก "คนถัดมาอย่างน้อย N คน"
-        # และถ้า TOTAL ของคนที่ N เท่ากับคนถัดไป ให้รับคนที่คะแนนเท่ากันทั้งหมด
+        # กติกา: ผู้ที่ไม่ผ่านตรงและมี Class ถึงอันดับ cutoff_rank
+        # มีสิทธิ์ตีรอบ 2 ทุกคน รวมทุกคนที่ Class เท่ากับอันดับตัด
         direct_ids = exact_cut_ids(round1_rows, direct)
         direct_shoot_ids = unresolved_tie_ids(round1_rows, direct)
         ids = round1_round2_candidate_ids(
             round1_rows,
             direct_ids,
             direct_shoot_ids,
-            minimum_players,
+            cutoff_rank,
         )
 
         # Manual override: ผู้ดูแลสามารถปิดนักกีฬารายคนจากรอบ 2 ได้
@@ -1488,8 +1508,8 @@ def exact_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
     ต้องเรียงลำดับจริงด้วย TOTAL -> 5 -> 3 -> Shoot-off
     ถ้ากลุ่มเสมอแตะตำแหน่งที่มีผล ให้รอ Shoot-off ก่อน
 
-    สิทธิ์ตีรอบ 2 จากรอบแรกไม่ได้ใช้ฟังก์ชันนี้ แต่เลือกคนถัดมาอย่างน้อย N คน
-    แล้วขยายให้ทุกคนที่ TOTAL เท่ากับคนที่ N ได้ตีทั้งหมดตามเอกสาร
+    สิทธิ์ตีรอบ 2 จากรอบแรกไม่ได้ใช้ฟังก์ชันนี้ แต่ยึด Class ถึงอันดับ
+    ที่ตั้งไว้ (เช่น <= 16) และรับทุกคนที่มี Class เท่ากับอันดับตัด
     """
     if not cutoff_count or cutoff_count <= 0:
         return set()
@@ -1538,7 +1558,7 @@ def round1_overview_unresolved_shootoff_ids(event: Event, rows: list[dict]) -> s
 
     อันดับ 1..direct ต้องแยกด้วย TOTAL -> 5 -> 3 -> Shoot-off
     ตั้งแต่อันดับถัดไป ไม่ทำ Shoot-off เพื่อจัด Class; คะแนนรวมเท่ากันให้ Class เท่ากันได้
-    สิทธิ์ไปตีรอบ 2 ใช้คนถัดมาอย่างน้อย N คน แล้วขยายตามคะแนนรวมของคนที่ N
+    สิทธิ์ไปตีรอบ 2 ใช้ Class ถึงอันดับที่กำหนด เช่น <= 16 และรับ Class 16 ทุกคน
     """
     if not rows:
         return set()
@@ -1553,7 +1573,7 @@ def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
     รอบ 1:
     - อันดับเข้ารอบตรงใช้ TOTAL -> 5 -> 3 -> Shoot-off
     - หลังพ้นโควตาเข้ารอบตรง คะแนนรวมเท่ากันให้ Class เท่ากันได้
-    - สิทธิ์ตีรอบ 2 เลือกคนถัดมาอย่างน้อย N คน และรับทุกคนที่ Total เท่ากับคนที่ N
+    - สิทธิ์ตีรอบ 2 ใช้ Class ถึงอันดับที่กำหนด เช่น <= 16 และรับ Class 16 ทุกคน
 
     รอบ 2:
     - ที่นั่งผ่านจากรอบ 2 ใช้ SUM(R1+R2) -> จำนวน 5 รวม -> จำนวน 3 รวม -> Shoot-off
@@ -1619,6 +1639,8 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             direct_row["display_lane_no"] = "-"
             direct_row["display_lane_order"] = "-"
             direct_row["status"] = "direct"
+            direct_row["score_complete"] = False
+            direct_row["approved"] = False
             direct_rows.append(direct_row)
 
     # ผู้ผ่านตรงจากรอบ 1 ใช้อันดับที่ตัดสินไว้แล้ว
@@ -1647,6 +1669,9 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
         athlete = source_row["athlete"]
         r2 = summarize_round(athlete.id, 2)
         combined_total = source_row["total"] + r2["total"]
+        logical_status = athlete_round_status(athlete, 2)
+        approved = athlete_round_is_approved(athlete, 2)
+        score_complete = overview_score_complete(r2) or logical_status == "finished"
         row = {
             "athlete": athlete,
             "round_no": 2,
@@ -1667,7 +1692,9 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             "round1_tiebreak_count": source_row.get("tiebreak_count", 0),
             "round2_tiebreak_total": r2["tiebreak_total"],
             "round2_tiebreak_count": r2.get("tiebreak_count", 0),
-            "status": athlete_round_status(athlete, 2),
+            "status": logical_status,
+            "score_complete": score_complete,
+            "approved": approved,
             "by_station": r2["by_station"],
             "round1_by_station": source_row.get("by_station", {}),
             "round2_by_station": r2["by_station"],
@@ -2660,6 +2687,86 @@ def randomize_athletes(event_id: int):
 
 
 
+def apply_overview_cut_lines(event: Event, rows: list[dict], round_no: int, round_complete: bool, groups: dict) -> None:
+    """กำหนดเส้นแบ่งสิทธิ์บน Overview แบบสดตาม Class.
+
+    ROUND 1 มี 2 เส้น:
+    1) QUARTERFINALS = หลังโควตาผ่านตรงเข้าสู่ Knockout
+    2) QUALIFIED FOR ROUND 2 = หลังคนสุดท้ายที่ Class <= cutoff rank
+       เช่น cutoff 16: ถ้ามี Class 16 หลายคน เส้นอยู่หลัง Class 16 คนสุดท้าย
+
+    ROUND 2 มีเส้น QUARTERFINALS หลังจำนวนผู้ผ่านจากรอบ 2 ตามที่ตั้งค่าไว้.
+    """
+    for row in rows:
+        row["cut_line_after"] = False
+        row["cut_line_label"] = ""
+    if not rows:
+        return
+
+    def mark(idx: int | None, label: str) -> None:
+        if idx is None:
+            return
+        if 0 <= idx < len(rows) - 1:
+            rows[idx]["cut_line_after"] = True
+            rows[idx]["cut_line_label"] = label
+
+    if round_no == 1:
+        direct = max(direct_quota(event), 0)
+        cutoff_rank = max(round2_cutoff_rank(event), 0) if event.has_round_two else 0
+
+        if round_complete:
+            last_direct_idx = None
+            last_round2_candidate_idx = None
+            for idx, row in enumerate(rows):
+                aid = row["athlete"].id
+                if aid in groups.get("direct", set()):
+                    last_direct_idx = idx
+                if aid in groups.get("round2_candidates", set()):
+                    last_round2_candidate_idx = idx
+            mark(last_direct_idx, "QUARTERFINALS")
+            mark(last_round2_candidate_idx, "QUALIFIED FOR ROUND 2")
+            return
+
+        # LIVE: เส้นผ่านตรงขึ้นเมื่อมีคนยิงจบอย่างน้อยตามจำนวน direct
+        completed = [(idx, row) for idx, row in enumerate(rows) if row.get("score_complete")]
+        if direct > 0 and len(completed) >= direct:
+            mark(completed[direct - 1][0], "QUARTERFINALS")
+
+        # LIVE: เส้นรอบ 2 ยึด Class ถึงอันดับที่กำหนด ไม่ได้นับจำนวนคน
+        # จะแสดงเมื่อมีผลจบจนเกิด Class ถึง cutoff แล้ว และถ้า Class cutoff ซ้ำ
+        # จะวางหลังคนสุดท้ายที่มี Class เท่ากับ cutoff
+        if cutoff_rank > 0 and len(completed) >= cutoff_rank:
+            eligible = []
+            for idx, row in completed:
+                rank = int(row.get("display_rank", row.get("rank", 999999)) or 999999)
+                if rank <= cutoff_rank:
+                    eligible.append((idx, row, rank))
+            # เริ่มแสดงเมื่อมีผู้ตีจบอย่างน้อยถึงลำดับ cutoff แล้ว
+            # ไม่บังคับว่าต้องมี Class เลข cutoff จริง เพราะ competition ranking
+            # อาจกระโดด เช่น 15,15,17; ในกรณีนี้ทั้ง Class 15 ยังอยู่ในช่วง <=16
+            if eligible:
+                last_idx = max(idx for idx, _, _ in eligible)
+                mark(last_idx, "QUALIFIED FOR ROUND 2")
+        return
+
+    if round_no == 2 and event.has_round_two:
+        if round_complete:
+            last_passed_idx = None
+            for idx, row in enumerate(rows):
+                if row["athlete"].id in groups.get("round2_passed", set()):
+                    last_passed_idx = idx
+            mark(last_passed_idx, "QUARTERFINALS")
+            return
+
+        quota = max(round2_advancer_quota(event), 0)
+        completed_indices = [
+            idx for idx, row in enumerate(rows)
+            if not row.get("is_round2_direct_placeholder") and row.get("score_complete")
+        ]
+        if quota > 0 and len(completed_indices) >= quota:
+            mark(completed_indices[quota - 1], "QUARTERFINALS")
+
+
 @app.route("/events/<int:event_id>/overview")
 def event_overview(event_id: int):
     event = Event.query.get_or_404(event_id)
@@ -2693,29 +2800,7 @@ def event_overview(event_id: int):
             row["progress_class"] = ("qualified-round2" if aid in groups["round2_passed"] else ("eliminated" if aid in groups["eliminated"] else ""))
         row["cut_line_after"] = False
 
-    # เส้นแบ่งกลุ่มสำคัญบนหน้า Overview
-    # รอบ 1: แยกคนเข้ารอบตรงออกจากคนมีสิทธิ์ตีรอบ 2
-    # รอบ 2: ขีดใต้คนสุดท้ายที่ผ่านจากรอบ 2 เข้า Bracket
-    if round_complete and round_no == 1:
-        last_direct_idx = None
-        last_round2_candidate_idx = None
-        for idx, row in enumerate(rows):
-            aid = row["athlete"].id
-            if aid in groups["direct"]:
-                last_direct_idx = idx
-            if aid in groups["round2_candidates"]:
-                last_round2_candidate_idx = idx
-        if last_direct_idx is not None and last_direct_idx < len(rows) - 1:
-            rows[last_direct_idx]["cut_line_after"] = True
-        if last_round2_candidate_idx is not None and last_round2_candidate_idx < len(rows) - 1:
-            rows[last_round2_candidate_idx]["cut_line_after"] = True
-    elif round_complete and round_no == 2:
-        last_passed_idx = None
-        for idx, row in enumerate(rows):
-            if row["athlete"].id in groups["round2_passed"]:
-                last_passed_idx = idx
-        if last_passed_idx is not None and last_passed_idx < len(rows) - 1:
-            rows[last_passed_idx]["cut_line_after"] = True
+    apply_overview_cut_lines(event, rows, round_no, round_complete, groups)
 
     combined_rows = []
     return render_template(
@@ -2754,26 +2839,7 @@ def overview_data(event_id: int):
         row["shoot_off_required"] = row["athlete"].id in shoot_off_ids
         row["shoot_off_group_ids"] = shootoff_group_ids(rows, row["athlete"].id, round_no) if row["shoot_off_required"] else [row["athlete"].id]
         row["cut_line_after"] = False
-    if round_complete and round_no == 1:
-        last_direct_idx = None
-        last_round2_candidate_idx = None
-        for idx, row in enumerate(rows):
-            aid = row["athlete"].id
-            if aid in groups["direct"]:
-                last_direct_idx = idx
-            if aid in groups["round2_candidates"]:
-                last_round2_candidate_idx = idx
-        if last_direct_idx is not None and last_direct_idx < len(rows) - 1:
-            rows[last_direct_idx]["cut_line_after"] = True
-        if last_round2_candidate_idx is not None and last_round2_candidate_idx < len(rows) - 1:
-            rows[last_round2_candidate_idx]["cut_line_after"] = True
-    elif round_complete and round_no == 2:
-        last_passed_idx = None
-        for idx, row in enumerate(rows):
-            if row["athlete"].id in groups["round2_passed"]:
-                last_passed_idx = idx
-        if last_passed_idx is not None and last_passed_idx < len(rows) - 1:
-            rows[last_passed_idx]["cut_line_after"] = True
+    apply_overview_cut_lines(event, rows, round_no, round_complete, groups)
     payload = []
     for row in rows:
         stations = {}
@@ -2815,6 +2881,8 @@ def overview_data(event_id: int):
             "display_lane_no": row.get("display_lane_no", row["athlete"].lane_no),
             "display_lane_order": row.get("display_lane_order", row["athlete"].lane_order),
             "status": row["status"],
+            "score_complete": bool(row.get("score_complete", False)),
+            "approved": bool(row.get("approved", False)),
             "total": row.get("round2_total", row["total"]) if round_no == 2 and event.has_round_two and not row.get("is_round2_direct_placeholder") else row["total"],
             "round1_total": row.get("round1_total"),
             "round2_total": row.get("round2_total"),
@@ -2828,6 +2896,7 @@ def overview_data(event_id: int):
             "is_round2_direct_placeholder": row.get("is_round2_direct_placeholder", False),
             "round2_has_played": row.get("round2_has_played", False),
             "cut_line_after": row.get("cut_line_after", False),
+            "cut_line_label": row.get("cut_line_label", ""),
             # ใช้สำหรับเรียงแถว realtime: รอบ 1 ต้องเรียงตามคะแนน/Rank, รอบ 2 ใช้ view_order ที่ build_round_two_overview_rows กำหนด
             "view_order": row.get("view_order", row["rank"]),
             "stations": stations,
@@ -2990,6 +3059,45 @@ def autosave_scorecard(athlete_id: int):
     })
 
 
+@app.route("/athletes/<int:athlete_id>/approve-score", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def approve_score(athlete_id: int):
+    """Superadmin รับรองผลที่ยิงครบแล้วแต่ไม่มีลายเซ็นครบ 3 ฝ่าย."""
+    athlete = Athlete.query.get_or_404(athlete_id)
+    event = athlete.event
+    try:
+        round_no = int(request.form.get("round", request.args.get("round", 1)))
+    except (TypeError, ValueError):
+        round_no = 1
+
+    summary = summarize_round(athlete.id, round_no)
+    if not overview_score_complete(summary):
+        flash("ยังยิงไม่ครบทุกสถานี จึงยัง Approve ไม่ได้", "warning")
+        if request.form.get("next") == "scorecard":
+            return redirect(url_for("scorecard", athlete_id=athlete.id, round=round_no))
+        return redirect(url_for("event_overview", event_id=event.id, round=round_no))
+
+    signature = ensure_signature(athlete.id, round_no)
+    # bypass_signed มีความหมายใหม่: รับรองด้วย Superadmin โดยตรง
+    signature.bypass_signed = True
+    signature.finished_at = signature.finished_at or datetime.utcnow()
+    athlete.status = "finished"
+    db.session.commit()
+    clear_request_cache()
+
+    if round_no == 1 and event.has_round_two:
+        sync_round_two_candidates(event)
+        reset_event_bracket(event)
+    elif round_no == 2 and event.has_round_two:
+        reset_event_bracket(event)
+
+    flash(f"Approve ผลของ {athlete.name} แล้ว", "success")
+    if request.form.get("next") == "scorecard":
+        return redirect(url_for("scorecard", athlete_id=athlete.id, round=round_no))
+    return redirect(url_for("event_overview", event_id=event.id, round=round_no))
+
+
 @app.route("/athletes/<int:athlete_id>/scorecard", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "superadmin", "court")
@@ -3045,15 +3153,19 @@ def scorecard(athlete_id: int):
         signature.athlete_signature = request.form.get(athlete_sig_key, "").strip() or signature.athlete_signature
 
         bypass_code = request.form.get("bypass_code", "").strip()
+        # การข้ามลายเซ็นใช้เพื่อ “จบ/ส่งผล” เท่านั้น ไม่ถือว่า APPROVED
+        # APPROVED อัตโนมัติเกิดเฉพาะเมื่อมีลายเซ็นจริงครบ 3 ฝ่าย
+        # หรือ Superadmin กด Approve จากหน้า Overview ภายหลัง
         bypass_ok = current_user.role == "superadmin" or (current_user.role == "admin" and bypass_code == "7929")
         signed_ok = all([
-            bool(signature.recorder_name or signature.recorder_signature),
-            bool(signature.referee_name or signature.referee_signature),
-            bool(signature.athlete_name or signature.athlete_signature),
+            bool(signature.recorder_signature),
+            bool(signature.referee_signature),
+            bool(signature.athlete_signature),
         ])
 
         if bypass_ok or signed_ok:
-            signature.bypass_signed = bypass_ok
+            # ห้ามตั้ง bypass_signed จากการส่ง Scorecard เพราะจะทำให้แถวฟ้าทันที
+            # ค่านี้สงวนไว้สำหรับการกด Approve โดย Superadmin เท่านั้น
             signature.finished_at = datetime.utcnow()
             athlete.status = "finished"
             db.session.commit()
@@ -3167,6 +3279,8 @@ def scorecard(athlete_id: int):
         display_lane_no=display_lane_no,
         display_lane_order=display_lane_order,
         score_edit_count=ScoreEditLog.query.filter_by(athlete_id=athlete.id, round_no=round_no).count(),
+        current_round_score_complete=overview_score_complete(summarize_round(athlete.id, round_no)),
+        current_round_approved=athlete_round_is_approved(athlete, round_no),
         is_finalized=bool(signature and signature.finished_at),
         current_round_red_cards=sum(
             template_data["station_reds"].get((round_no, station_no), 0)

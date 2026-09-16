@@ -154,13 +154,6 @@
 #overviewTableBody tr:nth-child(even)>td{background:#f8fafc;}
 #overviewTableBody tr[data-athlete-id]:hover>td{background:#eaf2ff;}
 #overviewTableBody tr[data-athlete-id]>td:first-child{border-left:5px solid transparent;}
-#overviewTableBody tr.status-active>td:first-child,#overviewTableBody tr.live-active>td:first-child{border-left-color:#f59e0b;}
-#overviewTableBody tr.status-finished>td:first-child{border-left-color:#22c55e;}
-#overviewTableBody tr.qualified-direct>td:first-child{border-left-color:#2563eb;}
-#overviewTableBody tr.round2-candidate>td:first-child{border-left-color:#16a34a;}
-#overviewTableBody tr.qualified-round2>td:first-child{border-left-color:#7c3aed;}
-#overviewTableBody tr.eliminated>td:first-child{border-left-color:#64748b;}
-#overviewTableBody tr.shoot-off-required>td:first-child{border-left-color:#ef4444;}
 
 #overviewTableBody td.score-col{background:#fff;}
 #overviewTableBody tr:nth-child(even) td.score-col{background:#f8fafc;}
@@ -221,8 +214,6 @@
 .shoot-off-action:hover,
 .shoot-off-action:focus-visible{background:#2563eb;transform:translateY(-1px);}
 
-#overviewTableBody tr.live-active>td,#overviewTableBody tr.status-active>td{background:#fff7d6;}
-#overviewTableBody tr.live-active td.station-total,#overviewTableBody tr.status-active td.station-total{background:#fde68a!important;}
 #overviewTableBody tr.live-active td.cursor-station,#overviewTableBody tr.status-active td.cursor-station{
   background:#fee2e2!important;
   color:#991b1b!important;
@@ -240,7 +231,7 @@
 #overviewTableBody tr.cut-line-after>td{border-bottom:5px solid #dc2626!important;}
 #overviewTableBody tr.cut-line-after td:first-child{position:relative;}
 #overviewTableBody tr.cut-line-after td:first-child::after{
-  content:var(--i18n-cut-line,"CUT LINE / เส้นตัดเข้ารอบ");
+  content:attr(data-cut-label);
   position:absolute;
   z-index:3;
   left:4px;
@@ -385,36 +376,7 @@
 .legend.out{background:#ffedd5!important;color:#9a3412!important;border-color:#fdba74!important;}
 .legend.shoot{background:#ef4444!important;color:#fff!important;border-color:#ef4444!important;}
 
-/* keep each non-live row one flat color, as in the original */
-#overviewTableBody tr.status-waiting:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.eliminated):not(.shoot-off-required)>td{
-  background:var(--safe-ov-neutral)!important;color:#0f172a!important;box-shadow:none!important;
-}
-#overviewTableBody tr.qualified-direct:not(.status-active):not(.live-active)>td,
-#overviewTableBody tr.qualified-round2:not(.status-active):not(.live-active)>td{
-  background:var(--safe-ov-gold)!important;color:#0f172a!important;box-shadow:none!important;
-}
-#overviewTableBody tr.round2-candidate:not(.status-active):not(.live-active)>td{
-  background:var(--safe-ov-green)!important;color:#0f172a!important;box-shadow:none!important;
-}
-#overviewTableBody tr.eliminated:not(.status-active):not(.live-active)>td,
-#overviewTableBody tr.status-finished:not(.qualified-direct):not(.qualified-round2):not(.round2-candidate):not(.shoot-off-required):not(.status-active):not(.live-active)>td{
-  background:var(--safe-ov-orange)!important;color:#0f172a!important;box-shadow:none!important;
-}
-#overviewTableBody tr.shoot-off-required:not(.status-active):not(.live-active)>td{
-  background:var(--safe-ov-red)!important;color:#7f1d1d!important;box-shadow:none!important;font-weight:900!important;
-}
-
-/* current shooter = yellow row, keyed score cells = moving red cursor/progress */
-#overviewTableBody tr.live-active>td,
-#overviewTableBody tr.status-active>td{
-  background:var(--safe-ov-active)!important;
-  color:#111827!important;
-  box-shadow:none!important;
-}
-#overviewTableBody tr.live-active>td:first-child,
-#overviewTableBody tr.status-active>td:first-child{
-  border-left:6px solid var(--safe-ov-active-left)!important;
-}
+/* Old whole-row state/progression colours removed. Cursor rules below are preserved. */
 #overviewTableBody tr.live-active td.score-col.score-played,
 #overviewTableBody tr.status-active td.score-col.score-played,
 #overviewTableBody tr.live-active td.score-col.cursor-station.score-played,
@@ -443,10 +405,6 @@
   font-size:.48rem;
   line-height:1;
 }
-#overviewTableBody tr.live-active td.station-total:not(.current-station-total),
-#overviewTableBody tr.status-active td.station-total:not(.current-station-total){
-  background:var(--safe-ov-active)!important;color:#111827!important;box-shadow:none!important;
-}
 
 /* preserve original compact behavior: the moving cursor is visual, no S1 1/4 text in Total */
 #overviewTableBody .station-progress-mini{display:none!important;}
@@ -458,15 +416,10 @@
 #overviewTableBody tr.status-active td.status-cell .status-pill,
 #overviewTableBody tr.live-active td.status-cell .status-pill{background:#fef3c7!important;color:#78350f!important;border-color:#fbbf24!important;}
 #overviewTableBody tr.status-finished td.status-cell .status-pill{background:#dcfce7!important;color:#166534!important;border-color:#86efac!important;}
-#overviewTableBody tr.qualified-direct:not(.status-active) td.status-cell .status-pill,
-#overviewTableBody tr.qualified-round2:not(.status-active) td.status-cell .status-pill{background:#dbeafe!important;color:#1e3a8a!important;border-color:#93c5fd!important;}
-#overviewTableBody tr.round2-candidate:not(.status-active) td.status-cell .status-pill{background:#dcfce7!important;color:#166534!important;border-color:#86efac!important;}
-#overviewTableBody tr.eliminated:not(.status-active) td.status-cell .status-pill{background:#ffedd5!important;color:#9a3412!important;border-color:#fdba74!important;}
-#overviewTableBody tr.shoot-off-required:not(.status-active) td.status-cell .status-pill{background:#ef4444!important;color:#fff!important;border-color:#ef4444!important;}
 
 /* round 2 direct placeholders were green in the previous version */
 .qualification-table.overview-round-2 #overviewTableBody tr.direct-placeholder>td{
-  background:#dcfce7!important;color:#166534!important;
+  background:#f8fafc!important;color:#475569!important;
 }
 .qualification-table.overview-round-2 #overviewTableBody tr.direct-placeholder td.r2-disabled,
 .qualification-table.overview-round-2 #overviewTableBody tr.direct-placeholder td.round2-total-cell{
@@ -480,13 +433,6 @@
 #overviewTableBody tr[data-athlete-id]:hover>td:first-child{
   box-shadow:inset 5px 0 0 var(--safe-ov-frame),inset 0 1px 0 var(--safe-ov-frame),inset 0 -1px 0 var(--safe-ov-frame)!important;
 }
-#overviewTableBody tr.qualified-direct:not(.live-active):hover>td,
-#overviewTableBody tr.qualified-round2:not(.live-active):hover>td{background:var(--safe-ov-gold-hover)!important;}
-#overviewTableBody tr.round2-candidate:not(.live-active):hover>td{background:var(--safe-ov-green-hover)!important;}
-#overviewTableBody tr.eliminated:not(.live-active):hover>td{background:var(--safe-ov-orange-hover)!important;}
-#overviewTableBody tr.shoot-off-required:not(.live-active):hover>td{background:var(--safe-ov-red-hover)!important;}
-#overviewTableBody tr.live-active:hover>td,
-#overviewTableBody tr.status-active:hover>td{background:var(--safe-ov-active)!important;}
 #overviewTableBody tr.live-active:hover td.score-col.score-played,
 #overviewTableBody tr.status-active:hover td.score-col.score-played{background:var(--safe-ov-active-input)!important;}
 
@@ -626,6 +572,71 @@
   .export-theme-title{font-size:24px;}
 }
 
+
+
+/* ===== สีพื้นทั้งแถวตามสถานะการตี (กฎหลัก) =====
+   ไม่แตะ cursor/ช่องคะแนนที่กำลังตี และไม่แตะ Qualification Cut Line
+   รอตี = พื้นตารางเดิม
+   กำลังตี / กำลังคีย์ = เหลืองอ่อนทั้งแถว
+   ตีครบ/ส่งคะแนนแล้ว แต่ยังไม่ APPROVED = เขียว
+   APPROVED = ฟ้า
+*/
+/* กำลังตี: ทำให้ทั้งแถวต่างจากคนที่ยังรอ แต่ปล่อย cursor แดง/ชมพู
+   และ Total ของ station ปัจจุบัน (เหลือง + กรอบแดง) ทำงานตามกฎเดิม */
+#overviewTableBody tr.live-active:not(.visual-finished):not(.visual-approved) > td,
+#overviewTableBody tr.status-active:not(.visual-finished):not(.visual-approved) > td {
+  background:#fff7cc !important;
+  color:#0f172a !important;
+}
+#overviewTableBody tr.live-active:not(.visual-finished):not(.visual-approved) > td:first-child,
+#overviewTableBody tr.status-active:not(.visual-finished):not(.visual-approved) > td:first-child {
+  border-left:6px solid #f59e0b !important;
+}
+#overviewTableBody tr.live-active:not(.visual-finished):not(.visual-approved):hover > td,
+#overviewTableBody tr.status-active:not(.visual-finished):not(.visual-approved):hover > td {
+  background:#ffefad !important;
+}
+#overviewTableBody tr.visual-finished:not(.visual-approved) > td,
+#overviewTableBody tr.visual-finished:not(.visual-approved):hover > td {
+  background:#dcfce7 !important;
+  color:#0f172a !important;
+}
+#overviewTableBody tr.visual-finished:not(.visual-approved) > td:first-child {
+  border-left:6px solid #22c55e !important;
+}
+#overviewTableBody tr.visual-finished:not(.visual-approved) td.status-cell .status-pill {
+  background:#22c55e !important;
+  color:#052e16 !important;
+  border-color:#15803d !important;
+}
+#overviewTableBody tr.visual-approved > td,
+#overviewTableBody tr.visual-approved:hover > td {
+  background:#dbeafe !important;
+  color:#0f172a !important;
+}
+#overviewTableBody tr.visual-approved > td:first-child {
+  border-left:6px solid #2563eb !important;
+}
+#overviewTableBody tr.visual-approved td.status-cell .status-pill {
+  background:#2563eb !important;
+  color:#fff !important;
+  border-color:#1d4ed8 !important;
+}
+.approve-action-wrap{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;}
+.approve-action{
+  border:0;border-radius:999px;padding:5px 10px;cursor:pointer;
+  background:#2563eb;color:#fff;font-weight:900;font-size:11px;line-height:1.1;
+  box-shadow:0 1px 2px rgba(15,23,42,.12);
+}
+.approve-action:hover{background:#1d4ed8;}
+
+/* ===== แยกปุ่มรอบการแข่งขันออกจากเครื่องมือ ===== */
+.round-nav-group{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:6px;border:1px solid #fdba74;border-radius:14px;background:#fff7ed;box-shadow:0 3px 10px rgba(154,52,18,.08);}
+.round-nav-group .btn{font-weight:950;border-width:2px;min-height:40px;}
+.round-nav-group .btn.round-active{background:#ea580c!important;border-color:#ea580c!important;color:#fff!important;}
+.round-nav-group .btn.round-next{background:#fff!important;border-color:#fb923c!important;color:#9a3412!important;}
+.utility-nav-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+@media(max-width:900px){.round-nav-group,.utility-nav-group{width:100%;}.round-nav-group .btn{flex:1 1 auto;}}
 </style>
 
 <div class="overview-page">
@@ -640,26 +651,36 @@
       </div>
 
       <div class="toolbar responsive-toolbar">
-        <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">รอบ 1</a>
-        {% if event.has_round_two %}
-        <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=2) }}">รอบ 2</a>
-        {% endif %}
-        {% if not (current_user.is_authenticated and current_user.role == 'court') %}
-        <a class="btn secondary" href="{{ url_for('bracket', event_id=event.id) }}">ตารางประกบ</a>
-        <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">Results Approved</a>
-        {% endif %}
-        {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
-        <a class="btn secondary" href="{{ url_for('results_approved_settings', event_id=event.id) }}">ตั้งค่า Results</a>
-        {% endif %}
-        {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
-        <a class="btn secondary" href="{{ url_for('scorecards_print_select', event_id=event.id, round=round_no) }}">พิมพ์ Scorecard หลายคน</a>
-        {% endif %}
-        <button class="btn secondary"
-          onclick="captureTable('overviewTableWrap','overview-{{ event.id }}-r{{ round_no }}')">บันทึกเป็นรูปภาพ</button>
-        {% if round_no == 1 and not (current_user.is_authenticated and current_user.role == 'court') %}
-        <button type="button" class="btn secondary" onclick="openStatsModal()">📊 ดูสถิติ 5/3</button>
-        {% endif %}
-        <button class="btn secondary" onclick="window.print()">พิมพ์ตาราง</button>
+        <div class="round-nav-group" aria-label="รอบการแข่งขัน">
+          <a class="btn secondary {{ 'round-active' if round_no == 1 else 'round-next' }}" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">ROUND 1</a>
+          {% if event.has_round_two %}
+          <a class="btn secondary {{ 'round-active' if round_no == 2 else 'round-next' }}" href="{{ url_for('event_overview', event_id=event.id, round=2) }}">ROUND 2</a>
+          {% endif %}
+          {% if not (current_user.is_authenticated and current_user.role == 'court') %}
+            {% if event.next_round_label == 'รอบ 16 คน' %}
+              {% set ko_button_label = 'Round of 16' %}
+            {% elif event.next_round_label == 'รอบ 4 คน' or event.next_round_label == 'รอบรองชนะเลิศ' %}
+              {% set ko_button_label = 'Semi Final' %}
+            {% else %}
+              {% set ko_button_label = 'Quarter Final' %}
+            {% endif %}
+          <a class="btn secondary round-next" href="{{ url_for('bracket', event_id=event.id) }}">{{ ko_button_label }}</a>
+          {% endif %}
+        </div>
+        <div class="utility-nav-group">
+          {% if not (current_user.is_authenticated and current_user.role == 'court') %}
+          <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">Results Approved</a>
+          {% endif %}
+          {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
+          <a class="btn secondary" href="{{ url_for('results_approved_settings', event_id=event.id) }}">ตั้งค่า Results</a>
+          <a class="btn secondary" href="{{ url_for('scorecards_print_select', event_id=event.id, round=round_no) }}">พิมพ์ Scorecard หลายคน</a>
+          {% endif %}
+          <button class="btn secondary" onclick="captureTable('overviewTableWrap','overview-{{ event.id }}-r{{ round_no }}')">บันทึกเป็นรูปภาพ</button>
+          {% if round_no == 1 and not (current_user.is_authenticated and current_user.role == 'court') %}
+          <button type="button" class="btn secondary" onclick="openStatsModal()">📊 ดูสถิติ 5/3</button>
+          {% endif %}
+          <button class="btn secondary" onclick="window.print()">พิมพ์ตาราง</button>
+        </div>
       </div>
     </div>
 
@@ -699,7 +720,7 @@
           <thead>
             <tr class="qualification-title-row">
               <th colspan="{{ 34 if round_no == 2 and event.has_round_two else 32 }}">
-                <div class="qualification-title">Qualification Shooting</div>
+                <div class="qualification-title">Qualification Shooting ROUND {{ round_no }}</div>
               </th>
             </tr>
             <tr>
@@ -739,9 +760,9 @@
           </thead>
           <tbody id="overviewTableBody">
             {% for row in rows %}
-            <tr class="status-{{ row.status }} {{ 'live-active' if row.status == 'active' else '' }} {{ 'direct-placeholder' if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else '' }} {{ 'cut-line-after' if row.cut_line_after else '' }}" data-athlete-id="{{ row.athlete.id }}"
+            <tr class="status-{{ row.status }} {{ 'live-active' if row.status == 'active' and not row.score_complete and not row.approved else '' }} {{ 'visual-approved' if row.approved else ('visual-finished' if row.score_complete else '') }} {{ 'direct-placeholder' if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else '' }} {{ 'cut-line-after' if row.cut_line_after else '' }}" data-athlete-id="{{ row.athlete.id }}"
               {% if not (row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder) %}onclick="window.location='{{ url_for('scorecard', athlete_id=row.athlete.id, round=round_no) }}'"{% endif %}>
-              <td class="start-order">{{ row.display_order or row.athlete.start_order }}</td>
+              <td class="start-order" data-cut-label="{{ row.cut_line_label or '' }}">{{ row.display_order or row.athlete.start_order }}</td>
               <td class="lane-no">{{ row.display_lane_no or row.athlete.lane_no or '-' }}</td>
               <td class="lane-order">{{ row.display_lane_order or row.athlete.lane_order or '-' }}</td>
               <td class="cell-affiliation">{{ row.athlete.affiliation }}</td>
@@ -776,10 +797,12 @@
                 {% if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder %}
                   <span class="status-pill direct-placeholder-pill">เข้ารอบตรง</span>
                 {% else %}
-                  {% if row.status == 'active' %}
-                    {% set status_text = 'กำลังตี' %}
-                  {% elif row.status == 'finished' %}
+                  {% if row.approved %}
+                    {% set status_text = 'APPROVED' %}
+                  {% elif row.score_complete %}
                     {% set status_text = 'ตีแล้ว' %}
+                  {% elif row.status == 'active' %}
+                    {% set status_text = 'กำลังตี' %}
                   {% else %}
                     {% set status_text = 'รอตี' %}
                   {% endif %}
@@ -813,77 +836,7 @@
 {% endblock %}
 
 
-<style id="shooting-status-row-colors-v2">
-/*
-  AUTHORITATIVE OVERVIEW STATE COLOURS
-  สีพื้นแถวใช้บอกสถานะการตีเท่านั้น:
-  รอตี = เทา / กำลังตี = เหลือง / ตีแล้ว = เขียว
-  สิทธิ์รอบ 2 และผลการจัดอันดับไม่ใช้สีพื้นแถว
-*/
-#overviewTableBody tr.status-waiting > td,
-#overviewTableBody tr.status-waiting > td.score-col,
-#overviewTableBody tr.status-waiting > td.score-total-col,
-#overviewTableBody tr.status-waiting > td.overall-total,
-#overviewTableBody tr.status-waiting > td.sum-total-cell,
-#overviewTableBody tr.status-waiting > td.overall-rank,
-#overviewTableBody tr.status-waiting > td.status-cell {
-  background:#f1f5f9 !important; color:#0f172a !important;
-}
-#overviewTableBody tr.status-active > td,
-#overviewTableBody tr.live-active > td,
-#overviewTableBody tr.status-active > td.score-col,
-#overviewTableBody tr.live-active > td.score-col,
-#overviewTableBody tr.status-active > td.score-total-col,
-#overviewTableBody tr.live-active > td.score-total-col,
-#overviewTableBody tr.status-active > td.overall-total,
-#overviewTableBody tr.live-active > td.overall-total,
-#overviewTableBody tr.status-active > td.sum-total-cell,
-#overviewTableBody tr.live-active > td.sum-total-cell,
-#overviewTableBody tr.status-active > td.overall-rank,
-#overviewTableBody tr.live-active > td.overall-rank,
-#overviewTableBody tr.status-active > td.status-cell,
-#overviewTableBody tr.live-active > td.status-cell {
-  background:#fef3c7 !important; color:#111827 !important;
-}
-#overviewTableBody tr.status-finished > td,
-#overviewTableBody tr.status-finished > td.score-col,
-#overviewTableBody tr.status-finished > td.score-total-col,
-#overviewTableBody tr.status-finished > td.overall-total,
-#overviewTableBody tr.status-finished > td.sum-total-cell,
-#overviewTableBody tr.status-finished > td.overall-rank,
-#overviewTableBody tr.status-finished > td.status-cell {
-  background:#dcfce7 !important; color:#0f172a !important;
-}
 
-#overviewTableBody tr.status-waiting > td:first-child { border-left:6px solid #94a3b8 !important; }
-#overviewTableBody tr.status-active > td:first-child,
-#overviewTableBody tr.live-active > td:first-child { border-left:6px solid #f59e0b !important; }
-#overviewTableBody tr.status-finished > td:first-child { border-left:6px solid #22c55e !important; }
-
-/* ป้ายสถานะก็ใช้สถานะการตีอย่างเดียว */
-#overviewTableBody tr.status-waiting td.status-cell .status-pill {
-  background:#e5e7eb !important; color:#111827 !important; border-color:#cbd5e1 !important;
-}
-#overviewTableBody tr.status-active td.status-cell .status-pill,
-#overviewTableBody tr.live-active td.status-cell .status-pill {
-  background:#fef3c7 !important; color:#78350f !important; border-color:#fbbf24 !important;
-}
-#overviewTableBody tr.status-finished td.status-cell .status-pill {
-  background:#dcfce7 !important; color:#166534 !important; border-color:#86efac !important;
-}
-#overviewTableBody td.status-cell .direct-placeholder-pill {
-  background:#f8fafc !important; color:#475569 !important; border-color:#cbd5e1 !important;
-}
-
-/* ไม่มีสีพิเศษสำหรับผู้ได้สิทธิ์รอบ 2; ใช้เส้น CUT LINE หลังจบรอบแทน */
-#overviewTableBody tr.direct-placeholder > td { background:#f8fafc !important; color:#475569 !important; }
-
-/* ระหว่างกำลังตี ให้ช่องคะแนนที่คีย์แล้วเป็น cursor สีแดงเพื่อมองตำแหน่งได้ */
-#overviewTableBody tr.status-active td.score-col.score-played,
-#overviewTableBody tr.live-active td.score-col.score-played {
-  background:#fee2e2 !important; color:#991b1b !important; box-shadow:inset 0 0 0 2px #f87171 !important;
-}
-</style>
 
 {% block scripts %}
 <script>
@@ -947,14 +900,17 @@
   }
 }
 
+
   function statusLabel(item, currentStation) {
-    if (item.status === 'active') return currentStation ? `กำลังตี ส${currentStation}` : 'กำลังตี';
-    if (item.status === 'finished') return 'ตีแล้ว';
     if (item.is_round2_direct_placeholder) return 'เข้ารอบตรง';
+    if (item.approved) return 'APPROVED';
+    if (item.score_complete) return 'ตีแล้ว';
+    if (item.status === 'active') return currentStation ? `กำลังตี ส${currentStation}` : 'กำลังตี';
     return 'รอตี';
   }
 
   function deriveCurrentStation(item) {
+    if (item.approved || item.score_complete) return null;
     const stations = Object.entries(item.stations || {}).map(([stationNo, stationData]) => ({
       stationNo: Number(stationNo),
       playedCount: Number(stationData?.played_count || 0),
@@ -977,7 +933,11 @@
       const row = rowMap.get(String(item.athlete_id));
       if (!row) return;
       const currentStation = deriveCurrentStation(item);
-      row.className = `status-${item.status} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''} ${item.status === 'active' ? 'live-active' : ''}`.trim();
+      const visualClass = item.approved ? 'visual-approved' : (item.score_complete ? 'visual-finished' : '');
+      const isShooting = item.status === 'active' && !item.score_complete && !item.approved;
+      row.className = `status-${item.status} ${visualClass} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''} ${isShooting ? 'live-active' : ''}`.trim();
+      const cutLabelCell = row.querySelector('.start-order');
+      if (cutLabelCell) cutLabelCell.dataset.cutLabel = item.cut_line_label || '';
       row.dataset.currentStation = currentStation ? String(currentStation) : '';
       row.querySelectorAll('.cursor-station').forEach(cell => cell.classList.remove('cursor-station'));
       row.querySelectorAll('.current-station-total').forEach(cell => cell.classList.remove('current-station-total'));
@@ -1026,7 +986,7 @@
             if (cell) {
               cell.textContent = stationData[distance] ?? 0;
               cell.classList.toggle('score-played', !!playedMap[distance]);
-              cell.classList.toggle('cursor-station', item.status === 'active' && !!playedMap[distance]);
+              cell.classList.toggle('cursor-station', isShooting && !!playedMap[distance]);
             }
           });
           const totalCell = row.querySelector(`[data-station="${station}"][data-distance="total"]`);
@@ -1049,7 +1009,7 @@
             totalCell.classList.toggle('station-partial', playedCount > 0 && !stationData.is_complete);
             totalCell.classList.toggle('station-complete', !!stationData.is_complete);
             totalCell.classList.remove('cursor-station');
-            totalCell.classList.toggle('current-station-total', item.status === 'active' && Number(station) === currentStation);
+            totalCell.classList.toggle('current-station-total', isShooting && Number(station) === currentStation);
           }
         }
       }
