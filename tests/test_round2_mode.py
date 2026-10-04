@@ -86,3 +86,14 @@ class Round2ModeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DatabaseUrlTests(unittest.TestCase):
+    def test_postgres_urls_pin_psycopg2(self):
+        from app import normalize_database_url as n
+        self.assertEqual(n("postgres://u:p@h:5432/db"), "postgresql+psycopg2://u:p@h:5432/db")
+        self.assertEqual(n("postgresql://u:p@h/db"), "postgresql+psycopg2://u:p@h/db")
+        self.assertEqual(n("postgresql+psycopg://u:p@h/db"), "postgresql+psycopg://u:p@h/db")
+        self.assertEqual(n("sqlite:////tmp/x.db"), "sqlite:////tmp/x.db")
+        from sqlalchemy.engine import make_url
+        self.assertEqual(make_url(n("postgresql://u:p@h/db")).get_dialect().driver, "psycopg2")

@@ -91,10 +91,23 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "1" if os.environ.get("RAILWAY_ENVIRONMENT") else "0") == "1"
 
+def normalize_database_url(url: str) -> str:
+    """ระบุไดรเวอร์ psycopg2 ให้ชัดเจน
+
+    SQLAlchemy 2.1 เปลี่ยนไดรเวอร์ตั้งต้นของ postgresql:// เป็น psycopg (v3)
+    แต่ระบบติดตั้ง psycopg2-binary ถ้าไม่ระบุ Railway จะ deploy ไม่ขึ้น (No module named 'psycopg')
+    URL ที่ระบุไดรเวอร์มาเองแล้ว (เช่น postgresql+psycopg://) จะไม่ถูกแก้
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg2://" + url[len("postgresql://"):]
+    return url
+
+
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    database_url = normalize_database_url(database_url)
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 else:
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
