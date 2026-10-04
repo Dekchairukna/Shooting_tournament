@@ -14,3 +14,7 @@ static/uploads/
 __pycache__/
 *.pyc
 instance/krurakson.db
+.DS_Store
+__pycache__/
+*.pyc
+instance/krurakson.db
