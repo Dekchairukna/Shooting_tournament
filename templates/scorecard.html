@@ -213,6 +213,12 @@
   .autosave-status.saving{background:#fff7ed;border-color:#fb923c;color:#9a3412;}
   .autosave-status.saved{background:#ecfdf5;border-color:#22c55e;color:#166534;}
   .autosave-status.error{background:#fef2f2;border-color:#ef4444;color:#991b1b;}
+  .scorecard-lock-banner{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    margin:0 0 10px;padding:12px 14px;border:2px solid #f59e0b;background:#fffbeb;color:#78350f;border-radius:14px;}
+  .scorecard-lock-banner[hidden]{display:none;}
+  .scorecard-lock-banner .small{font-size:.85rem;margin-top:2px;}
+  .scorecard-lock-banner .btn{background:#b45309;color:#fff;border:0;font-weight:800;}
+  form.scorecard-locked .editable-round{pointer-events:none;opacity:.55;}
   .score-cell-wrap.red-shot .score-input{background:#fee2e2!important;color:#991b1b!important;}
   .round-row.red-card-stopped .score-cell-wrap{opacity:.72;}
   .round-row.red-card-stopped .score-cell-wrap.red-shot{opacity:1;}
@@ -1043,6 +1049,13 @@
     <div id="redCardStopNotice" class="red-card-stop-notice" {% if not round_stopped_by_red %}hidden{% endif %}>
       ใบแดงครบ 2 ครั้ง: ยุติการยิงรอบนี้และคงคะแนนที่ทำได้ไว้
     </div>
+    <div id="scorecardLockBanner" class="scorecard-lock-banner" hidden>
+      <div>
+        <strong>ใบนี้กำลังถูกคีย์โดย <span id="scorecardLockHolder">-</span></strong>
+        <div class="small">เพื่อกันคะแนนทับกัน หน้านี้จึงดูได้อย่างเดียว ถ้าเครื่องเดิมเลิกใช้แล้วให้กดรับช่วงคีย์ต่อ</div>
+      </div>
+      <button type="button" class="btn" id="scorecardTakeOverBtn">รับช่วงคีย์ต่อ</button>
+    </div>
     <div id="autosaveStatus" class="autosave-status" role="status" aria-live="polite">พร้อมบันทึก</div>
     <div class="station-stepper" id="stationStepper" aria-label="เลือกสถานีสำหรับหน้าจอแนวตั้ง">
       <span class="station-stepper-label">กรอกทีละสถานี</span>
@@ -1151,7 +1164,7 @@
                         data-distance="{{ distance }}">
                   <option value="" {% if item.get('score','') == '' %}selected{% endif %}></option>
                   <option value="0" {% if item.get('score','') == 0 or item.get('score','') == '0' %}selected{% endif %}>0</option>
-                  <option value="1" {% if item.get('score','') == 1 or item.get('score','') == '1' %}selected{% endif %}>1</option>
+                  {% if station != 5 %}<option value="1" {% if item.get('score','') == 1 or item.get('score','') == '1' %}selected{% endif %}>1</option>{% endif %}
                   <option value="3" {% if item.get('score','') == 3 or item.get('score','') == '3' %}selected{% endif %}>3</option>
                   <option value="5" {% if item.get('score','') == 5 or item.get('score','') == '5' %}selected{% endif %}>5</option>
                 </select>
@@ -1792,6 +1805,7 @@
           score: el.value,
           red: red,
           played: played,
+          page_token: window.SCORECARD_PAGE_TOKEN || '',
           edit_signature: document.getElementById('edit_signature_current')?.value || '',
           edit_reason: document.getElementById('edit_reason_current')?.value || ''
         })
@@ -1809,6 +1823,9 @@
         applyRedCardStop(roundNo, Boolean(data.round_stopped));
       }
 
+      if (res.status === 423 && window.showScorecardLocked) {
+        window.showScorecardLocked(data.locked_by || '-');
+      }
       if (!res.ok || data.ok === false) {
         if (data.requires_edit_signature) {
           pendingEditAutosaveEl = el;
@@ -1817,6 +1834,7 @@
         throw new Error(data.message || `บันทึกไม่สำเร็จ (${res.status})`);
       }
 
+      if (window.markScorecardHolding) window.markScorecardHolding();
       const stationTotalEl = document.getElementById(`station-total-${roundNo}-${stationNo}`);
 
       const roundTotalEl = document.getElementById(`round-total-${roundNo}`);
@@ -2057,5 +2075,59 @@
       setActiveStation(savedStation);
     }
   } catch (e) {}
+</script>
+
+<script>
+  // ล็อก Scorecard ต่อหน้าเว็บ: ถ้ามีอีกเครื่องเปิดคีย์ใบเดียวกันอยู่ จะดูได้อย่างเดียวจนกว่าจะกดรับช่วง
+  (function () {
+    const form = document.getElementById('scorecardForm');
+    if (!form || !document.querySelector('.editable-round .auto-score')) return;
+    const roundNo = form.dataset.round;
+    const lockUrl = `{{ url_for('scorecard_lock_api', athlete_id=athlete.id) }}`;
+    const token = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+    window.SCORECARD_PAGE_TOKEN = token;
+    const banner = document.getElementById('scorecardLockBanner');
+    const holderEl = document.getElementById('scorecardLockHolder');
+
+    window.showScorecardLocked = function (holder) {
+      holderEl.textContent = holder || '-';
+      banner.hidden = false;
+      form.classList.add('scorecard-locked');
+    };
+    function showUnlocked() {
+      banner.hidden = true;
+      form.classList.remove('scorecard-locked');
+    }
+    // ยึดล็อกเมื่อเริ่มคีย์จริงเท่านั้น (autosave ครั้งแรกจะยึดให้) การเปิดดูเฉย ๆ ไม่กันคนอื่น
+    let holding = false;
+    window.markScorecardHolding = function () { holding = true; showUnlocked(); };
+    async function lockRequest(mode) {
+      try {
+        const res = await fetch(lockUrl, {
+          method: 'POST', credentials: 'same-origin', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ round_no: roundNo, page_token: token,
+                                 action: mode === 'check' ? 'check' : '', take_over: mode === 'take' ? '1' : '' })
+        });
+        const data = await res.json();
+        if (data.ok) { if (mode !== 'check') holding = true; showUnlocked(); }
+        else { if (mode !== 'check') holding = false; if (data.locked_by) window.showScorecardLocked(data.locked_by); }
+      } catch (_) { /* เน็ตสะดุดชั่วคราว: รอบถัดไปจะลองใหม่ */ }
+    }
+    const tick = () => lockRequest(holding ? 'hold' : 'check');
+    document.getElementById('scorecardTakeOverBtn').addEventListener('click', () => {
+      if (confirm('รับช่วงคีย์ใบนี้ต่อ? เครื่องที่เปิดอยู่เดิมจะบันทึกไม่ได้จนกว่าจะรับช่วงคืน')) lockRequest('take');
+    });
+    tick();
+    setInterval(() => { if (!document.hidden) tick(); }, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+    window.addEventListener('pagehide', () => {
+      if (!holding) return;
+      const fd = new FormData();
+      fd.append('round_no', roundNo); fd.append('page_token', token); fd.append('action', 'release');
+      fd.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
+      navigator.sendBeacon && navigator.sendBeacon(lockUrl, fd);
+    });
+  })();
 </script>
 {% endblock %}

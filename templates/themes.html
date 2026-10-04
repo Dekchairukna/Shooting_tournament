@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}ธีมของระบบ · Petanque Shooting{% endblock %}
+{% block content %}
+<style>
+  .themes-page{display:grid;gap:18px}
+  .themes-page h1{margin:0 0 4px}
+  .theme-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .theme-card{border:1px solid #e2e8f0;border-radius:18px;overflow:hidden;background:#fff;display:flex;flex-direction:column;box-shadow:0 8px 22px rgba(15,23,42,.05)}
+  .theme-card.is-active{border:2px solid var(--th-primary);box-shadow:0 10px 28px rgba(var(--th-primary-rgb),.18)}
+  .tc-hero{position:relative;height:104px;display:flex;align-items:center;gap:12px;padding:12px 14px;color:#fff;overflow:hidden;isolation:isolate}
+  .tc-hero .bg{position:absolute;inset:0;z-index:-2;background-size:cover;background-position:center;opacity:.28}
+  .tc-hero .grad{position:absolute;inset:0;z-index:-3}
+  .tc-hero img{width:58px;height:58px;border-radius:14px;object-fit:cover;border:2px solid rgba(255,255,255,.75);flex:none}
+  .tc-hero .t{font-weight:950;font-size:1.05rem;line-height:1.1}
+  .tc-hero .s{font-size:.72rem;font-weight:800;opacity:.92;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .tc-hero.off::after{content:"ไม่แสดงแบนเนอร์";position:absolute;right:10px;top:8px;font-size:.68rem;font-weight:800;background:rgba(0,0,0,.35);padding:2px 8px;border-radius:999px}
+  .tc-swatches{display:flex;height:10px}
+  .tc-swatches span{flex:1}
+  .tc-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;flex:1}
+  .tc-name{display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .tc-name strong{font-size:1rem}
+  .badge-on{background:var(--th-primary);color:#fff;font-size:.72rem;font-weight:900;padding:3px 10px;border-radius:999px;white-space:nowrap}
+  .badge-builtin{background:#f1f5f9;color:#475569;font-size:.7rem;font-weight:800;padding:2px 8px;border-radius:999px}
+  .tc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+  .tc-actions form{margin:0}
+  .tc-actions .btn{padding:7px 12px;font-size:.85rem}
+  .btn.danger-lite{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}
+</style>
+<div class="themes-page">
+  <section class="card">
+    <div class="section-head">
+      <div>
+        <h1>ธีมของระบบ</h1>
+        <p class="muted" style="margin:0;">ใช้ได้ครั้งละ 1 ธีมทั้งเว็บ (แบนเนอร์ สีปุ่ม/เมนู และหัว–ท้ายภาพผลคะแนนที่บันทึกจากหน้ารวม) · สร้างธีมใหม่จากภาพของงานได้ ระบบดึงสีจากภาพให้อัตโนมัติ</p>
+      </div>
+      <a class="btn" href="{{ url_for('edit_theme') }}">+ สร้างธีมใหม่จากภาพ</a>
+    </div>
+  </section>
+
+  <div class="theme-grid">
+    {% for t, v in themes %}
+    <article class="theme-card {% if t.is_active %}is-active{% endif %}">
+      <div class="tc-hero {% if not t.show_hero %}off{% endif %}">
+        <div class="grad" style="background:linear-gradient(112deg,{{ t.color_primary }},{{ t.color_primary_dark }})"></div>
+        {% if v.poster_url %}<div class="bg" style="background-image:url('{{ v.poster_url }}')"></div>{% endif %}
+        {% if v.logo_url %}<img src="{{ v.logo_url }}" alt="">{% endif %}
+        <div>
+          <div class="t">{{ t.title or t.name }}</div>
+          <div class="s">{{ t.subtitle }}</div>
+        </div>
+      </div>
+      <div class="tc-swatches" aria-hidden="true">
+        {% for c in [t.color_primary, t.color_primary_dark, t.color_accent, t.color_soft, t.color_line, t.color_ink] %}<span style="background:{{ c }}"></span>{% endfor %}
+      </div>
+      <div class="tc-body">
+        <div class="tc-name">
+          <strong>{{ t.name }}</strong>
+          {% if t.is_active %}<span class="badge-on">กำลังใช้</span>{% elif t.is_builtin %}<span class="badge-builtin">มากับระบบ</span>{% endif %}
+        </div>
+        <div class="tc-actions">
+          {% if not t.is_active %}
+          <form method="post" action="{{ url_for('activate_theme', theme_id=t.id) }}"><button class="btn" type="submit">เปิดใช้ทั้งระบบ</button></form>
+          {% endif %}
+          <a class="btn secondary" href="{{ url_for('edit_theme', theme_id=t.id) }}">แก้ไข</a>
+          <form method="post" action="{{ url_for('duplicate_theme', theme_id=t.id) }}"><button class="btn secondary" type="submit">คัดลอก</button></form>
+          {% if not t.is_active and not t.is_builtin %}
+          <form method="post" action="{{ url_for('delete_theme', theme_id=t.id) }}" data-name="{{ t.name }}" onsubmit="return confirm('ลบธีม “' + this.dataset.name + '”?');"><button class="btn danger-lite" type="submit">ลบ</button></form>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

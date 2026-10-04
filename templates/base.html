@@ -3,6 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <style id="site-theme-vars">:root{ {{- site_theme.css_vars|safe -}} }</style>
+  <script>
+    // ใส่ CSRF token ให้ทุกฟอร์มและทุก fetch/POST ภายในเว็บอัตโนมัติ ไม่ต้องแก้ทีละฟอร์ม
+    (function () {
+      var token = document.querySelector('meta[name="csrf-token"]').content;
+      function addToken(form) {
+        if (!form || (form.method || 'get').toLowerCase() === 'get') return;
+        if (form.querySelector('input[name="csrf_token"]')) return;
+        var input = document.createElement('input');
+        input.type = 'hidden'; input.name = 'csrf_token'; input.value = token;
+        form.appendChild(input);
+      }
+      document.addEventListener('submit', function (e) { addToken(e.target); }, true);
+      var nativeSubmit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function () { addToken(this); return nativeSubmit.call(this); };
+      var nativeFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        init = init || {};
+        var method = String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        var url = new URL(input instanceof Request ? input.url : input, location.href);
+        if (url.origin === location.origin && ['GET', 'HEAD', 'OPTIONS'].indexOf(method) === -1) {
+          var headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+          headers.set('X-CSRFToken', token);
+          init = Object.assign({}, init, { headers: headers });
+        }
+        return nativeFetch(input, init);
+      };
+    })();
+  </script>
   <title>{% block title %}Petanque Shooting{% endblock %}</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -447,19 +477,19 @@
 
     /* ===== KKU 2026 World Championship Theme ===== */
     :root{
-      --kku-orange:#ef4b12;
-      --kku-orange-dark:#c9360b;
-      --kku-orange-soft:#fff1e8;
-      --kku-cream:#fffaf4;
-      --kku-teal:#37b8b1;
-      --kku-ink:#172033;
-      --kku-line:#f3d2bf;
+      --kku-orange:var(--th-primary);
+      --kku-orange-dark:var(--th-primary-dark);
+      --kku-orange-soft:var(--th-soft);
+      --kku-cream:var(--th-cream);
+      --kku-teal:var(--th-accent);
+      --kku-ink:var(--th-ink);
+      --kku-line:var(--th-line);
     }
 
     body{
       background:
-        radial-gradient(circle at 95% 8%, rgba(239,75,18,.09), transparent 26%),
-        linear-gradient(180deg,#fff8f1 0,#fffdfb 44%,#f7fbfb 100%);
+        radial-gradient(circle at 95% 8%, rgba(var(--th-primary-rgb),.09), transparent 26%),
+        linear-gradient(180deg,var(--th-cream) 0,var(--th-cream) 44%,#f7fbfb 100%);
       color:var(--kku-ink);
     }
 
@@ -467,8 +497,8 @@
       position:relative;
       min-height:190px;
       overflow:hidden;
-      background:linear-gradient(112deg,#e8450c 0%,#f26120 48%,#d83b0b 100%);
-      border-bottom:4px solid rgba(55,184,177,.8);
+      background:linear-gradient(112deg,var(--th-primary) 0%,var(--th-primary-light) 48%,var(--th-primary-dark) 100%);
+      border-bottom:4px solid rgba(var(--th-accent-rgb),.8);
       isolation:isolate;
     }
     .championship-hero::before{
@@ -476,7 +506,7 @@
       position:absolute;
       inset:0;
       z-index:-2;
-      background:url("{{ url_for('static', filename='kku2026_theme_poster.jpg') }}") center 39%/cover no-repeat;
+      {% if site_theme.poster_url %}background:url("{{ site_theme.poster_url }}") center 39%/cover no-repeat;{% else %}display:none;{% endif %}
       opacity:.26;
       filter:saturate(1.08) contrast(1.02);
     }
@@ -485,7 +515,7 @@
       position:absolute;
       inset:0;
       z-index:-1;
-      background:linear-gradient(90deg,rgba(194,45,0,.82) 0%,rgba(233,67,11,.72) 42%,rgba(214,56,5,.58) 100%);
+      background:linear-gradient(90deg,rgba(var(--th-dark-rgb),.82) 0%,rgba(var(--th-primary-rgb),.72) 42%,rgba(var(--th-primary-rgb),.58) 100%);
     }
     .championship-hero-inner{
       width:100%;
@@ -502,10 +532,10 @@
       border-radius:28px;
       object-fit:cover;
       object-position:center;
-      box-shadow:0 18px 45px rgba(86,24,0,.28);
+      box-shadow:0 18px 45px rgba(var(--th-dark-rgb),.28);
       border:2px solid rgba(255,255,255,.72);
     }
-    .championship-copy{color:#fff;text-shadow:0 2px 12px rgba(74,22,0,.2)}
+    .championship-copy{color:#fff;text-shadow:0 2px 12px rgba(var(--th-dark-rgb),.2)}
     .championship-copy .eyebrow{font-size:.72rem;font-weight:900;letter-spacing:.28em;text-transform:uppercase;opacity:.9;margin-bottom:5px}
     .championship-copy h2{margin:0;font-size:clamp(1.7rem,3vw,3rem);font-weight:950;line-height:1;letter-spacing:-.03em}
     .championship-copy p{margin:8px 0 0;font-weight:800;font-size:clamp(.8rem,1.25vw,1rem);opacity:.94}
@@ -514,34 +544,34 @@
       padding:9px 12px;
       border-radius:18px;
       background:rgba(255,255,255,.96);
-      box-shadow:0 12px 35px rgba(84,23,0,.2);
+      box-shadow:0 12px 35px rgba(var(--th-dark-rgb),.2);
     }
     .championship-partners img{display:block;width:100%;height:54px;object-fit:cover;object-position:center;border-radius:10px}
     .hero-wave{
       position:absolute;left:-4%;right:-4%;bottom:-1px;height:18px;
-      background:linear-gradient(90deg,#fff 0 8%,#35b8b1 8% 27%,#fff 27% 33%,#ffd9b9 33% 47%,#fff 47% 100%);
+      background:linear-gradient(90deg,#fff 0 8%,var(--th-accent) 8% 27%,#fff 27% 33%,var(--th-tint) 33% 47%,#fff 47% 100%);
       transform:skewY(-1.2deg);opacity:.95;
     }
 
     .navbar-custom{
       position:sticky;
       top:0;
-      background:rgba(255,250,246,.96);
-      border-bottom:1px solid rgba(202,98,53,.24);
-      box-shadow:0 8px 24px rgba(100,45,18,.10);
+      background:rgba(var(--th-cream-rgb),.96);
+      border-bottom:1px solid rgba(var(--th-dark-rgb),.24);
+      box-shadow:0 8px 24px rgba(var(--th-dark-rgb),.10);
       backdrop-filter:blur(12px);
     }
     .navbar-brand{color:var(--kku-orange-dark)!important;max-width:none}
     .navbar-brand h1{margin:0;font-size:1.18rem;font-weight:950;letter-spacing:-.02em}
     .navbar-custom .nav-link{color:#283448!important}
-    .navbar-custom .nav-link:hover,.navbar-custom .nav-link.active{background:#fff0e8;color:var(--kku-orange-dark)!important}
-    .navbar-custom .nav-link.primary-link{background:linear-gradient(135deg,#f35b1f,#e8440d);color:#fff!important;box-shadow:0 7px 16px rgba(224,69,16,.22)}
-    .navbar-custom .nav-link.primary-link:hover{background:linear-gradient(135deg,#e84b12,#c9380b);color:#fff!important}
+    .navbar-custom .nav-link:hover,.navbar-custom .nav-link.active{background:var(--th-soft);color:var(--kku-orange-dark)!important}
+    .navbar-custom .nav-link.primary-link{background:linear-gradient(135deg,var(--th-primary-light),var(--th-primary));color:#fff!important;box-shadow:0 7px 16px rgba(var(--th-primary-rgb),.22)}
+    .navbar-custom .nav-link.primary-link:hover{background:linear-gradient(135deg,var(--th-primary),var(--th-primary-dark));color:#fff!important}
     .navbar-custom .nav-link.logout-link{background:#fff1ee;color:#b52b1a!important;border:1px solid #ffd3ca}
-    .user-badge{color:#27344a;background:#fff;border:1px solid #efd8ca;box-shadow:0 4px 12px rgba(92,44,21,.07)}
-    .role-badge{background:#fff0e8;color:var(--kku-orange-dark)}
-    .language-switcher{color:#b93a0d;background:#fff;border:1px solid #efd8ca}
-    .navbar-toggler{border-color:rgba(196,58,10,.35)}
+    .user-badge{color:#27344a;background:#fff;border:1px solid var(--th-line);box-shadow:0 4px 12px rgba(var(--th-dark-rgb),.07)}
+    .role-badge{background:var(--th-soft);color:var(--kku-orange-dark)}
+    .language-switcher{color:var(--th-primary-dark);background:#fff;border:1px solid var(--th-line)}
+    .navbar-toggler{border-color:rgba(var(--th-primary-rgb),.35)}
     .navbar-toggler-icon{filter:invert(28%) sepia(81%) saturate(2431%) hue-rotate(356deg) brightness(91%) contrast(98%)}
     .container-main{padding:18px 22px 34px}
 
@@ -554,24 +584,61 @@
       .championship-event-logo{width:70px;height:70px;border-radius:17px}.championship-copy .eyebrow{font-size:.52rem}.championship-copy h2{font-size:1.25rem}.championship-copy p{font-size:.66rem;margin-top:4px}.championship-partners{display:none}
       .container-main{padding:9px}
     }
+
+    /* ===== แบนเนอร์แบบบางสำหรับหน้าทำงาน ===== */
+    .championship-hero.hero-compact{min-height:0 !important;}
+    .championship-hero.hero-compact .championship-hero-inner{min-height:0 !important;padding:8px 16px !important;grid-template-columns:44px 1fr !important;gap:12px !important;}
+    .championship-hero.hero-compact .championship-event-logo{width:44px !important;height:44px !important;border-radius:12px !important;}
+    .championship-hero.hero-compact .championship-copy h2{font-size:1.15rem !important;margin:0 !important;}
+    .championship-hero.hero-compact .championship-copy .eyebrow,
+    .championship-hero.hero-compact .championship-copy p,
+    .championship-hero.hero-compact .championship-partners,
+    .championship-hero.hero-compact .hero-wave{display:none !important;}
+    .championship-hero.hero-compact::before,.championship-hero.hero-compact::after{display:none !important;}
+    /* มือถือ: ชื่อระบบอยู่ในแถบเมนูแล้ว ไม่ต้องมีแถบโลโก้ซ้ำในหน้าทำงาน */
+    @media (max-width: 767px){ .championship-hero.hero-compact{display:none !important;} }
+    /* แท็บเล็ตแนวนอน (992-1199px): เมนูไม่ตัดบรรทัด */
+    @media (min-width: 992px) and (max-width: 1199.98px){
+      .navbar-custom .nav-link{padding:.45rem .7rem !important;font-size:.95rem !important;white-space:nowrap;}
+      .navbar-custom .navbar-brand{display:none !important;}
+      .navbar-custom .user-badge{font-size:.85rem;white-space:nowrap;}
+      .championship-partners{display:none !important;}
+    }
+    .navbar-custom .nav-link{white-space:nowrap;}
+    /* ธีมที่ไม่มีโลโก้: ให้ข้อความชิดซ้าย */
+    .championship-hero.no-logo .championship-hero-inner{grid-template-columns:minmax(280px,1fr) auto}
+    .championship-hero.no-logo.hero-compact .championship-hero-inner{grid-template-columns:1fr !important}
+    @media(max-width:767px){.championship-hero.no-logo .championship-hero-inner{grid-template-columns:1fr}}
+    /* ===== โหมดจอแสดงผล (?display=1): ซ่อนแถบเมนูและปุ่มจัดการ ===== */
+    body.display-mode .championship-hero,
+    body.display-mode .navbar-custom,
+    body.display-mode .flashes{display:none !important;}
+    body.display-mode .container-main{padding:8px !important;max-width:none !important;}
   </style>
 </head>
 
-<body>
-  <header class="championship-hero" aria-label="52nd Petanque World Championship 2026">
+{# แบนเนอร์เต็มเฉพาะหน้าแรก/หน้า login/ใบรับรองผล หน้าทำงานอื่นใช้แถบบางเพื่อเหลือพื้นที่ให้ตารางและปุ่มคะแนน #}
+{% set full_hero = request.endpoint in ['index', 'login', 'results_approved'] %}
+{% set display_mode = request.args.get('display') == '1' %}
+<body class="{% if display_mode %}display-mode{% endif %}">
+  {% if site_theme.show_hero %}
+  <header class="championship-hero {% if not full_hero %}hero-compact{% endif %} {% if not site_theme.logo_url %}no-logo{% endif %}" aria-label="{{ site_theme.subtitle or site_theme.title }}">
     <div class="championship-hero-inner">
-      <img class="championship-event-logo" src="{{ url_for('static', filename='kku2026_event_logo.jpg') }}" alt="KKU 2026 World Championships">
+      {% if site_theme.logo_url %}<img class="championship-event-logo" src="{{ site_theme.logo_url }}" alt="{{ site_theme.short_name or site_theme.name }}">{% endif %}
       <div class="championship-copy">
-        <div class="eyebrow">Khon Kaen University · Thailand</div>
-        <h2>Petanque Shooting</h2>
-        <p>52nd PÉTANQUE WORLD CHAMPIONSHIP 2026 · 48 Nations, One Spirit</p>
+        {% if site_theme.eyebrow %}<div class="eyebrow">{{ site_theme.eyebrow }}</div>{% endif %}
+        <h2>{{ site_theme.title or 'Petanque Shooting' }}</h2>
+        {% if site_theme.subtitle %}<p>{{ site_theme.subtitle }}</p>{% endif %}
       </div>
+      {% if site_theme.partners_url %}
       <div class="championship-partners">
-        <img src="{{ url_for('static', filename='kku2026_partner_logos.jpg') }}" alt="Championship partner logos">
+        <img src="{{ site_theme.partners_url }}" alt="Partner logos">
       </div>
+      {% endif %}
     </div>
     <div class="hero-wave"></div>
   </header>
+  {% endif %}
   <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
     <div class="container-fluid">
       <a class="navbar-brand" href="{{ url_for('index') }}">
@@ -606,6 +673,18 @@
               สร้างอีเวนต์
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.endpoint in ['bulk_create_events','bulk_import_events','bulk_import_events_confirm'] %}active{% endif %}"
+              href="{{ url_for('bulk_create_events') }}">
+              สร้างหลายอีเวนต์
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.endpoint == 'draw_center' %}active{% endif %}"
+              href="{{ url_for('draw_center') }}">
+              ศูนย์จับสลาก
+            </a>
+          </li>
           {% endif %}
 
           {% if current_user.is_authenticated and current_user.role == 'superadmin' %}
@@ -613,6 +692,12 @@
             <a class="nav-link {% if request.endpoint == 'manage_users' %}active{% endif %}"
               href="{{ url_for('manage_users') }}">
               ผู้ใช้
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.endpoint in ['manage_themes','edit_theme'] %}active{% endif %}"
+              href="{{ url_for('manage_themes') }}">
+              ธีม
             </a>
           </li>
           {% endif %}

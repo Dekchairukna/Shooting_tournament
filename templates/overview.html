@@ -450,28 +450,28 @@
 .overview-card{
   min-width:0;
   max-width:100%;
-  border:1px solid #f0cdbb;
+  border:1px solid var(--th-line);
   border-radius:22px;
   padding:14px;
-  background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(255,250,246,.98));
-  box-shadow:0 16px 42px rgba(126,55,21,.10);
+  background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(var(--th-cream-rgb),.98));
+  box-shadow:0 16px 42px rgba(var(--th-dark-rgb),.10);
 }
-.title-box h1{color:#9f2f0c;font-size:1.35rem;font-weight:950;}
+.title-box h1{color:var(--th-primary-dark);font-size:1.35rem;font-weight:950;}
 .title-box .muted{color:#7a5b4d;font-weight:750}
 .responsive-toolbar{min-width:0;}
 .responsive-toolbar .btn.secondary{
   background:#fff;
   color:#293347;
-  border:1px solid #edd6c9;
-  box-shadow:0 3px 9px rgba(98,51,28,.06);
+  border:1px solid var(--th-line);
+  box-shadow:0 3px 9px rgba(var(--th-dark-rgb),.06);
 }
-.responsive-toolbar .btn.secondary:hover{background:#fff0e7;border-color:#f08b5f;color:#aa350d;}
-.responsive-toolbar .btn.secondary[href*="round=2"]{background:linear-gradient(135deg,#f35d21,#e7430d);border-color:#e7430d;color:#fff;}
-.status-legend{background:#fff8f3;border-color:#f0d1c1;}
-.qualification-wrap{width:100%;max-width:100%;min-width:0;overflow:hidden;border-color:#e6bca8;border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(96,48,24,.08)}
-.qualification-scroll{display:block;width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-color:#ef7542 #fff1e8;}
-.qualification-title{background:linear-gradient(90deg,#e7430d,#f36d31);color:#fff;font-size:1.03rem;letter-spacing:.02em;box-shadow:inset 0 -1px 0 rgba(255,255,255,.25)}
-.qualification-table thead th{background:#fff8f3;color:#283448;border-color:#d7b7a8;}
+.responsive-toolbar .btn.secondary:hover{background:var(--th-soft);border-color:var(--th-primary-light);color:var(--th-primary-dark);}
+.responsive-toolbar .btn.secondary[href*="round=2"]{background:linear-gradient(135deg,var(--th-primary-light),var(--th-primary));border-color:var(--th-primary);color:#fff;}
+.status-legend{background:var(--th-soft);border-color:var(--th-line);}
+.qualification-wrap{width:100%;max-width:100%;min-width:0;overflow:hidden;border-color:var(--th-line);border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(var(--th-dark-rgb),.08)}
+.qualification-scroll{display:block;width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-color:var(--th-primary-light) var(--th-soft);}
+.qualification-title{background:linear-gradient(90deg,var(--th-primary),var(--th-primary-light));color:#fff;font-size:1.03rem;letter-spacing:.02em;box-shadow:inset 0 -1px 0 rgba(255,255,255,.25)}
+.qualification-table thead th{background:var(--th-soft);color:#283448;border-color:var(--th-line);}
 .qualification-table thead th.atelier-head{background:linear-gradient(180deg,#eaf7fb,#d8eef7);color:#174c75;}
 .qualification-table thead th.station-image-cell{background:#fff;}
 .qualification-table thead th.score-col{background:#f3f8fb;color:#27344a;}
@@ -481,12 +481,12 @@
 .qualification-table thead th.sum-head{background:#ffe7a0;color:#6d4200;}
 .qualification-table thead th.col-class{background:#ead9f7;color:#5a2681;}
 .qualification-table thead th.col-status{background:#f1ebe7;color:#483329;}
-#overviewTableBody tr[data-athlete-id]:hover>td{background:#fff4ec;}
+#overviewTableBody tr[data-athlete-id]:hover>td{background:var(--th-soft);}
 #overviewTableBody td.overall-total,#overviewTableBody td.round2-total-cell{background:#dff0f7!important;color:#163f59!important;}
 #overviewTableBody td.sum-total-cell{background:#fff0b7!important;color:#684000!important;}
 #overviewTableBody td.overall-rank{background:#eee0f8!important;color:#57257b!important;}
-.shoot-off-action{background:#d94712;}
-.shoot-off-action:hover,.shoot-off-action:focus-visible{background:#b9350d;}
+.shoot-off-action{background:var(--th-primary);}
+.shoot-off-action:hover,.shoot-off-action:focus-visible{background:var(--th-primary-dark);}
 @media(max-width:640px){.overview-card{padding:8px;border-radius:14px}.title-box h1{font-size:1.1rem}}
 
 
@@ -499,7 +499,7 @@
   border:0!important;
   border-radius:0!important;
   box-shadow:none!important;
-  background:#fffaf4!important;
+  background:var(--th-cream)!important;
   padding:0!important;
 }
 #overviewTableWrap.export-capture-mode .export-theme-header{
@@ -511,8 +511,8 @@
   padding:14px 20px 15px;
   color:#fff;
   background:
-    linear-gradient(115deg,rgba(220,61,8,.98),rgba(246,91,26,.97) 54%,rgba(231,67,13,.98));
-  border-bottom:5px solid #24a8a3;
+    linear-gradient(115deg,rgba(var(--th-primary-rgb),.98),rgba(var(--th-primary-rgb),.97) 54%,rgba(var(--th-primary-rgb),.98));
+  border-bottom:5px solid var(--th-accent);
   position:relative;
   overflow:hidden;
 }
@@ -520,14 +520,14 @@
   content:'';
   position:absolute;
   left:-3%;right:-3%;bottom:-17px;height:32px;
-  background:#fff8ef;
+  background:var(--th-cream);
   border-radius:50% 50% 0 0/100% 100% 0 0;
   opacity:.98;
 }
 .export-theme-logo{
   width:115px;height:96px;object-fit:cover;object-position:center;
   border-radius:18px;border:2px solid rgba(255,255,255,.82);
-  box-shadow:0 8px 20px rgba(111,35,11,.22);
+  box-shadow:0 8px 20px rgba(var(--th-dark-rgb),.22);
 }
 .export-theme-copy{position:relative;z-index:1;min-width:0;}
 .export-theme-kicker{font-size:15px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;opacity:.95;}
@@ -536,20 +536,20 @@
 .export-theme-meta{margin-top:7px;font-size:13px;font-weight:800;letter-spacing:.05em;opacity:.95;}
 .export-theme-partners{
   width:100%;max-width:560px;height:auto;object-fit:contain;
-  border-radius:14px;box-shadow:0 7px 18px rgba(79,26,9,.18);
+  border-radius:14px;box-shadow:0 7px 18px rgba(var(--th-dark-rgb),.18);
   position:relative;z-index:1;
 }
 #overviewTableWrap.export-capture-mode .qualification-scroll{background:#fff;}
 #overviewTableWrap.export-capture-mode .qualification-title{
-  background:linear-gradient(90deg,#e9440d,#f36b2d)!important;
+  background:linear-gradient(90deg,var(--th-primary),var(--th-primary-light))!important;
   color:#fff!important;
   font-size:20px!important;
   padding:11px 16px!important;
   letter-spacing:.015em!important;
 }
 #overviewTableWrap.export-capture-mode .qualification-table{
-  border-left:3px solid #ef5a1f;
-  border-right:3px solid #ef5a1f;
+  border-left:3px solid var(--th-primary);
+  border-right:3px solid var(--th-primary);
 }
 #overviewTableWrap.export-capture-mode .export-theme-footer{
   display:flex;
@@ -559,11 +559,11 @@
   padding:12px 22px 14px;
   min-height:52px;
   color:#fff;
-  background:linear-gradient(90deg,#e7430d,#f16529 58%,#159a99);
-  border-top:4px solid #fff0df;
+  background:linear-gradient(90deg,var(--th-primary),var(--th-primary-light) 58%,var(--th-accent));
+  border-top:4px solid var(--th-soft);
   font-weight:900;
 }
-.export-theme-footer-main{font-size:14px;letter-spacing:.14em;white-space:nowrap;}
+.export-theme-footer-main{font-size:14px;letter-spacing:.14em;white-space:pre;}
 .export-theme-footer-event{font-size:13px;text-align:right;white-space:nowrap;}
 
 @media(max-width:900px){
@@ -637,6 +637,44 @@
 .round-nav-group .btn.round-next{background:#fff!important;border-color:#fb923c!important;color:#9a3412!important;}
 .utility-nav-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 @media(max-width:900px){.round-nav-group,.utility-nav-group{width:100%;}.round-nav-group .btn{flex:1 1 auto;}}
+
+/* ===== มือถือ: ปุ่มรอบเรียงแถวเดียว เครื่องมืออื่นพับไว้ใต้ปุ่ม "เครื่องมือ" ให้ตารางขึ้นมาเร็ว ===== */
+.tools-toggle{display:none !important;}
+@media (max-width: 767px){
+  .responsive-toolbar{display:flex !important;flex-direction:column;gap:8px !important;margin-top:8px;}
+  .responsive-toolbar .round-nav-group{display:flex !important;flex-wrap:nowrap !important;gap:6px !important;overflow-x:auto;padding:0 !important;border:0 !important;background:none !important;}
+  .responsive-toolbar .round-nav-group .btn{flex:1 0 auto !important;width:auto !important;min-height:42px;}
+  .tools-toggle{display:inline-flex !important;align-self:flex-start;min-height:40px;}
+  .responsive-toolbar .utility-nav-group{display:none !important;}
+  .responsive-toolbar .utility-nav-group.open{display:grid !important;grid-template-columns:1fr 1fr;gap:6px !important;}
+  .responsive-toolbar .utility-nav-group.open .btn{width:100% !important;min-height:42px;}
+}
+/* ===== โหมดจอแสดงผล ===== */
+body.display-mode .responsive-toolbar,
+body.display-mode .status-legend{display:none !important;}
+body.display-mode .overview-card{border-radius:0;box-shadow:none;border:0;}
+body.display-mode .title-box h1{font-size:2rem;}
+body.display-mode .title-box .muted{font-size:1rem;}
+body.display-mode #overviewTableWrap{font-size:1.1rem;}
+
+/* ===== ไฮไลต์คะแนน 5 / 3 เฉพาะคนที่ตีเสร็จแล้ว (ตีครบ + APPROVED) =====
+   ดูได้ทันทีว่าแต่ละคนได้ 5 กี่ครั้ง 3 กี่ครั้ง · ช่อง 1/0/Total ไม่เปลี่ยน */
+#overviewTableBody tr.visual-finished > td.score-col[data-score="5"],
+#overviewTableBody tr.visual-approved > td.score-col[data-score="5"],
+#overviewTableBody tr.visual-finished:hover > td.score-col[data-score="5"],
+#overviewTableBody tr.visual-approved:hover > td.score-col[data-score="5"]{
+  background:#ffd9d9 !important;
+  color:#b42318 !important;
+  font-weight:900 !important;
+}
+#overviewTableBody tr.visual-finished > td.score-col[data-score="3"],
+#overviewTableBody tr.visual-approved > td.score-col[data-score="3"],
+#overviewTableBody tr.visual-finished:hover > td.score-col[data-score="3"],
+#overviewTableBody tr.visual-approved:hover > td.score-col[data-score="3"]{
+  background:#fff1a8 !important;
+  color:#8a5a00 !important;
+  font-weight:900 !important;
+}
 </style>
 
 <div class="overview-page">
@@ -667,7 +705,13 @@
           <a class="btn secondary round-next" href="{{ url_for('bracket', event_id=event.id) }}">{{ ko_button_label }}</a>
           {% endif %}
         </div>
-        <div class="utility-nav-group">
+        <button type="button" class="btn secondary tools-toggle" aria-expanded="false"
+                onclick="const g=document.getElementById('overviewTools');const open=g.classList.toggle('open');this.setAttribute('aria-expanded',open)">เครื่องมือ ▾</button>
+        <div class="utility-nav-group" id="overviewTools">
+          {% if current_user.is_authenticated and current_user.role in ['court','admin','superadmin'] and round_no in (1, 2) %}
+          <a class="btn secondary queue-link" href="{{ url_for('court_queue', event_id=event.id, round=round_no) }}">คิวสนาม</a>
+          {% endif %}
+          <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=round_no, display=1) }}" target="_blank" rel="noopener">โหมดจอแสดงผล</a>
           {% if not (current_user.is_authenticated and current_user.role == 'court') %}
           <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">Results Approved</a>
           {% endif %}
@@ -706,14 +750,14 @@
     <div id="overviewTableWrap" class="table-export-block qualification-wrap {{ theme }}">
 
       <div class="export-theme-header" aria-hidden="true">
-        <img class="export-theme-logo" src="{{ url_for('static', filename='kku2026_event_logo.jpg') }}" alt="KKU 2026">
+        {% if site_theme.logo_url %}<img class="export-theme-logo" src="{{ site_theme.logo_url }}" alt="{{ site_theme.short_name }}">{% else %}<span></span>{% endif %}
         <div class="export-theme-copy">
-          <div class="export-theme-kicker">Official Shooting Results</div>
-          <div class="export-theme-title">52nd PÉTANQUE WORLD CHAMPIONSHIP 2026</div>
-          <div class="export-theme-sub">Khon Kaen University, Thailand</div>
+          {% if site_theme.export_kicker %}<div class="export-theme-kicker">{{ site_theme.export_kicker }}</div>{% endif %}
+          <div class="export-theme-title">{{ site_theme.export_title or site_theme.title }}</div>
+          {% if site_theme.export_subtitle %}<div class="export-theme-sub">{{ site_theme.export_subtitle }}</div>{% endif %}
           <div class="export-theme-meta">{{ event.name }} · {{ event.event_group }} · {{ event.category }} · Round {{ round_no }}</div>
         </div>
-        <img class="export-theme-partners" src="{{ url_for('static', filename='kku2026_partner_logos.jpg') }}" alt="Official partner logos">
+        {% if site_theme.partners_url %}<img class="export-theme-partners" src="{{ site_theme.partners_url }}" alt="Official partner logos">{% endif %}
       </div>
       <div class="qualification-scroll">
         <table class="qualification-table {{ theme }} overview-round-{{ round_no }}">
@@ -778,10 +822,10 @@
                 <td class="score-col r2-disabled" data-station="{{ station }}" data-distance="9">-</td>
                 <td class="score-total-col station-total r2-disabled" data-station="{{ station }}" data-distance="total">-</td>
                 {% else %}
-                <td class="score-col {% if row.by_station[station].played_distances.get(6) %}score-played{% endif %}" data-station="{{ station }}" data-distance="6">{{ row.by_station[station].distances.get(6,0) }}</td>
-                <td class="score-col {% if row.by_station[station].played_distances.get(7) %}score-played{% endif %}" data-station="{{ station }}" data-distance="7">{{ row.by_station[station].distances.get(7,0) }}</td>
-                <td class="score-col {% if row.by_station[station].played_distances.get(8) %}score-played{% endif %}" data-station="{{ station }}" data-distance="8">{{ row.by_station[station].distances.get(8,0) }}</td>
-                <td class="score-col {% if row.by_station[station].played_distances.get(9) %}score-played{% endif %}" data-station="{{ station }}" data-distance="9">{{ row.by_station[station].distances.get(9,0) }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(6) %}score-played{% endif %}" data-station="{{ station }}" data-distance="6" data-score="{{ row.by_station[station].distances.get(6,0) }}">{{ row.by_station[station].distances.get(6,0) }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(7) %}score-played{% endif %}" data-station="{{ station }}" data-distance="7" data-score="{{ row.by_station[station].distances.get(7,0) }}">{{ row.by_station[station].distances.get(7,0) }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(8) %}score-played{% endif %}" data-station="{{ station }}" data-distance="8" data-score="{{ row.by_station[station].distances.get(8,0) }}">{{ row.by_station[station].distances.get(8,0) }}</td>
+                <td class="score-col {% if row.by_station[station].played_distances.get(9) %}score-played{% endif %}" data-station="{{ station }}" data-distance="9" data-score="{{ row.by_station[station].distances.get(9,0) }}">{{ row.by_station[station].distances.get(9,0) }}</td>
                 <td class="score-total-col station-total {% if row.by_station[station].is_complete %}station-complete{% elif row.by_station[station].played_count %}station-partial{% endif %}" data-station="{{ station }}" data-distance="total" data-played-count="{{ row.by_station[station].played_count }}">
                   <span class="station-total-value">{{ row.by_station[station].total }}</span>
                   {% if row.by_station[station].played_count %}<span class="station-progress-mini">ส{{ station }} {{ row.by_station[station].played_count }}/4</span>{% endif %}
@@ -827,8 +871,8 @@
       </div>
 
       <div class="export-theme-footer" aria-hidden="true">
-        <div class="export-theme-footer-main">SPORT &nbsp; | &nbsp; CULTURE &nbsp; | &nbsp; FRIENDSHIP &nbsp; | &nbsp; A BRIGHTER TOMORROW</div>
-        <div class="export-theme-footer-event">KKU 2026 · Pétanque Unites the World</div>
+        <div class="export-theme-footer-main">{{ site_theme.footer_tagline }}</div>
+        <div class="export-theme-footer-event">{{ site_theme.footer_event }}</div>
       </div>
     </div>
   </section>
@@ -885,7 +929,7 @@
     });
 
     const a = document.createElement('a');
-    a.download = filename + '-KKU2026.png';
+    a.download = filename + '-' + {{ site_theme.download_suffix|tojson }} + '.png';
     a.href = canvas.toDataURL('image/png', 1.0);
     document.body.appendChild(a);
     a.click();
@@ -985,6 +1029,7 @@
             const cell = row.querySelector(`[data-station="${station}"][data-distance="${distance}"]`);
             if (cell) {
               cell.textContent = stationData[distance] ?? 0;
+              cell.dataset.score = String(stationData[distance] ?? 0);
               cell.classList.toggle('score-played', !!playedMap[distance]);
               cell.classList.toggle('cursor-station', isShooting && !!playedMap[distance]);
             }
@@ -1052,16 +1097,22 @@
   }
 
   let isRefreshing = false;
+  let lastOverviewEtag = null;
   async function refreshOverviewData() {
     if (isRefreshing) return;
     isRefreshing = true;
     try {
       const response = await fetch('{{ url_for("overview_data", event_id=event.id) }}?round={{ round_no }}', {
+        cache: 'no-cache',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
       if (!response.ok) return;
+      // ข้อมูลเหมือนรอบก่อน (เซิร์ฟเวอร์ตอบ 304) ไม่ต้องวาดตารางใหม่
+      const etag = response.headers.get('ETag');
+      if (etag && etag === lastOverviewEtag) return;
       const data = await response.json();
       updateOverviewRows(data);
+      lastOverviewEtag = etag;
     } catch (err) {
       console.error(err);
     } finally {
@@ -1071,7 +1122,22 @@
 
   setInterval(() => {
     if (!document.hidden) refreshOverviewData();
-  }, 700);
+  }, 1500);
   refreshOverviewData();
+
+  // โหมดจอแสดงผล: เลื่อนตารางลงช้า ๆ ถึงท้ายแล้วพัก แล้วกลับขึ้นบน วนไปเรื่อย ๆ
+  if (document.body.classList.contains('display-mode')) {
+    let pauseUntil = Date.now() + 6000;
+    setInterval(() => {
+      if (Date.now() < pauseUntil) return;
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (atBottom) {
+        pauseUntil = Date.now() + 6000;
+        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 5000);
+        return;
+      }
+      window.scrollBy(0, 1);
+    }, 40);
+  }
 </script>
 {% endblock %}

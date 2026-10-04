@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}คิวสนาม {{ court_no }} · {{ event.name }}{% endblock %}
+{% block content %}
+<style>
+  .cq-wrap{max-width:720px;margin:0 auto;}
+  .cq-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  .cq-event{font-size:.9rem;color:#64748b;font-weight:700;}
+  .cq-title{font-size:1.6rem;font-weight:900;color:#9a3412;margin:2px 0 0;}
+  .cq-progress{background:#fff;border:1px solid #fed7aa;border-radius:14px;padding:8px 14px;text-align:center;}
+  .cq-progress b{display:block;font-size:1.4rem;color:#7c2d12;}
+  .cq-progress small{color:#9a3412;font-weight:700;}
+  .cq-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .cq-chip{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:999px;border:2px solid #fed7aa;
+    background:#fff;color:#9a3412;font-weight:800;text-decoration:none;}
+  .cq-chip.on{background:#ea580c;border-color:#ea580c;color:#fff;}
+  .cq-court-select{min-height:44px;border-radius:999px;border:2px solid #fed7aa;padding:0 14px;font-weight:800;color:#9a3412;background:#fff;}
+  .cq-list{display:grid;gap:10px;}
+  .cq-card{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;background:#fff;border:2px solid #e2e8f0;border-radius:18px;padding:12px 14px;}
+  .cq-order{width:48px;height:48px;border-radius:14px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:900;color:#334155;}
+  .cq-name{font-size:1.15rem;font-weight:900;color:#0f172a;line-height:1.2;}
+  .cq-aff{font-size:.85rem;color:#64748b;margin-top:2px;}
+  .cq-status{display:inline-block;margin-top:6px;font-size:.78rem;font-weight:800;border-radius:999px;padding:2px 10px;background:#f1f5f9;color:#475569;}
+  .cq-right{text-align:right;}
+  .cq-total{font-size:1.5rem;font-weight:900;color:#0f172a;}
+  .cq-total small{display:block;font-size:.7rem;color:#64748b;font-weight:700;}
+  .cq-open{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;margin-top:6px;border-radius:12px;
+    background:#fff;border:2px solid #cbd5e1;color:#1e293b;font-weight:800;text-decoration:none;}
+  .cq-card.waiting .cq-status{background:#f1f5f9;color:#475569;}
+  .cq-card.active{border-color:#f59e0b;background:#fffbeb;}
+  .cq-card.active .cq-status{background:#fef3c7;color:#92400e;}
+  .cq-card.finished{border-color:#86efac;background:#f0fdf4;}
+  .cq-card.finished .cq-status{background:#dcfce7;color:#166534;}
+  .cq-card.approved{border-color:#93c5fd;background:#eff6ff;}
+  .cq-card.approved .cq-status{background:#dbeafe;color:#1e40af;}
+  .cq-card.next{border-color:#ea580c;box-shadow:0 0 0 3px rgba(234,88,12,.18);}
+  .cq-card.next .cq-order{background:#ea580c;color:#fff;}
+  .cq-card.next .cq-open{background:#ea580c;border-color:#ea580c;color:#fff;min-height:52px;font-size:1.05rem;}
+  .cq-next-label{display:inline-block;font-size:.72rem;font-weight:900;color:#ea580c;letter-spacing:.03em;margin-bottom:2px;}
+  .cq-empty{background:#fff;border:2px dashed #cbd5e1;border-radius:18px;padding:28px;text-align:center;color:#64748b;}
+  .cq-foot{margin-top:14px;font-size:.8rem;color:#64748b;text-align:center;}
+  @media (max-width:420px){
+    .cq-card{grid-template-columns:44px 1fr;}
+    .cq-order{width:42px;height:42px;font-size:1.2rem;}
+    .cq-right{grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;text-align:left;}
+    .cq-open{margin-top:0;}
+  }
+</style>
+
+<div class="cq-wrap">
+  <div class="cq-head">
+    <div>
+      <div class="cq-event">{{ event.name }}</div>
+      <h1 class="cq-title">สนาม {{ court_no }} · รอบ {{ round_no }}</h1>
+    </div>
+    <div class="cq-progress"><b>{{ done }} / {{ rows|length }}</b><small>ตีจบแล้ว</small></div>
+  </div>
+
+  <div class="cq-bar">
+    <a class="cq-chip {% if round_no == 1 %}on{% endif %}" href="{{ url_for('court_queue', event_id=event.id, round=1, court=court_no) }}">รอบ 1</a>
+    {% if event.has_round_two %}
+    <a class="cq-chip {% if round_no == 2 %}on{% endif %}" href="{{ url_for('court_queue', event_id=event.id, round=2, court=court_no) }}">รอบ 2</a>
+    {% endif %}
+    {% if current_user.role != 'court' %}
+    <select class="cq-court-select" aria-label="เลือกสนาม"
+            onchange="location.href='{{ url_for('court_queue', event_id=event.id, round=round_no) }}&court=' + this.value">
+      {% for n in range(1, lane_count + 1) %}
+      <option value="{{ n }}" {% if n == court_no %}selected{% endif %}>สนาม {{ n }}</option>
+      {% endfor %}
+    </select>
+    <a class="cq-chip" href="{{ url_for('event_overview', event_id=event.id, round=round_no) }}">หน้ารวมทุกสนาม</a>
+    {% endif %}
+  </div>
+
+  {% if rows %}
+  <div class="cq-list">
+    {% for row in rows %}
+    {% set a = row.athlete %}
+    <div class="cq-card {{ 'approved' if row.approved else row.status }} {% if row.is_next %}next{% endif %}">
+      <div class="cq-order">{{ row.order if row.order != 999 else '-' }}</div>
+      <div>
+        {% if row.is_next %}<span class="cq-next-label">{{ 'กำลังตี' if row.status == 'active' else 'คนถัดไป' }}</span>{% endif %}
+        <div class="cq-name">{{ a.name }}</div>
+        <div class="cq-aff">{{ a.affiliation }}{% if a.bib_no %} · #{{ a.bib_no }}{% endif %}</div>
+        <span class="cq-status">
+          {% if row.approved %}รับรองผลแล้ว{% elif row.status == 'finished' %}ตีจบแล้ว{% elif row.status == 'active' %}กำลังตี{% else %}รอคิว{% endif %}
+        </span>
+      </div>
+      <div class="cq-right">
+        <div class="cq-total">{{ row.total }}<small>คะแนน</small></div>
+        <a class="cq-open" href="{{ url_for('scorecard', athlete_id=a.id, round=round_no) }}">
+          {% if row.status == 'finished' %}ดู / แก้ไข{% elif row.status == 'active' %}คีย์ต่อ{% else %}เริ่มคีย์{% endif %}
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="cq-empty">
+    {% if round_no == 2 %}ยังไม่มีรายชื่อรอบ 2 ในสนามนี้ (รายชื่อจะขึ้นหลังรอบ 1 จบครบทุกสนาม){% else %}ยังไม่มีนักกีฬาในสนามนี้{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="cq-foot">หน้านี้อัปเดตเองทุก 15 วินาที</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // รีเฟรชเบา ๆ ให้สถานะคิวตรงกับสนามอื่น (เฉพาะตอนเปิดหน้าอยู่)
+  setInterval(() => { if (!document.hidden) location.reload(); }, 15000);
+</script>
+{% endblock %}

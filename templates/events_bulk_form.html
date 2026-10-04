@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% block title %}สร้างหลายอีเวนต์ · Petanque Shooting{% endblock %}
+{% block content %}
+<style>
+  .bulk-page{display:grid;gap:18px}
+  .bulk-page h1{margin:0 0 4px}
+  .bulk-page h2{margin:0 0 6px;font-size:1.15rem}
+  .bulk-page .step{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:var(--th-soft);color:var(--th-primary-dark);font-weight:900;margin-right:8px}
+  .bulk-shared{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .bulk-shared label,.gen-grid label{display:flex;flex-direction:column;font-weight:700;font-size:.92rem;gap:6px}
+  .bulk-page input,.bulk-page select{padding:9px 10px;border:1px solid #cbd5e1;border-radius:10px;font:inherit;background:#fff}
+  .gen-grid{display:grid;grid-template-columns:minmax(200px,1.3fr) 1fr 1fr auto;gap:12px;align-items:end}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chips label{flex-direction:row;align-items:center;gap:6px;padding:7px 11px;border:1px solid #cbd5e1;border-radius:999px;font-weight:700;cursor:pointer;background:#fff}
+  .chips input{padding:0;margin:0}
+  .rows-table{width:100%;border-collapse:collapse}
+  .rows-table th{background:#f8fafc;text-align:left;font-size:.82rem;padding:8px;border-bottom:1px solid #e2e8f0}
+  .rows-table td{padding:6px 8px;border-bottom:1px solid #eef2f7}
+  .rows-table td input,.rows-table td select{width:100%;font-size:.95rem}
+  .rows-table td.num{width:42px;color:#64748b;font-weight:800;text-align:center}
+  .rows-table td.lanes{width:110px}
+  .rows-table td.del{width:56px;text-align:center}
+  .icon-btn{border:1px solid #fecdd3;background:#fff1f2;color:#be123c;border-radius:10px;width:36px;height:36px;font-weight:900;cursor:pointer}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:12px}
+  .count-pill{font-weight:800;color:#334155}
+  .import-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px;align-items:end}
+  .import-grid label{display:flex;flex-direction:column;font-weight:700;font-size:.92rem;gap:6px}
+  @media (max-width:900px){.gen-grid,.import-grid{grid-template-columns:1fr 1fr}}
+  @media (max-width:640px){.gen-grid,.import-grid{grid-template-columns:1fr}.rows-table thead{display:none}.rows-table tr{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 0;border-bottom:1px solid #e2e8f0}.rows-table td{border:0;padding:0}.rows-table td.num{display:none}.rows-table td.name{grid-column:1/-1}.rows-table td.lanes,.rows-table td.del{width:auto}}
+</style>
+
+<div class="bulk-page">
+  <section class="card">
+    <h1>สร้างหลายอีเวนต์พร้อมกัน</h1>
+    <p class="muted" style="margin:0;">เลือกได้ 2 วิธี: <strong>นำเข้าจากไฟล์ใบสมัคร</strong> (สร้างอีเวนต์พร้อมรายชื่อ) หรือ <strong>กรอกตาราง</strong> หลายรายการแล้วกดสร้างครั้งเดียว · เมื่อสร้างเสร็จจะไปหน้า <a href="{{ url_for('draw_center') }}">ศูนย์จับสลาก</a> เพื่อสั่งจับพร้อมกัน</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">A</span>นำเข้าจากไฟล์ใบสมัคร (.xls / .xlsx)</h2>
+    <p class="muted">ไฟล์ที่มีหัวข้อแต่ละประเภท เช่น <em>“ประเภทชู้ตติ้งชาย รุ่นอายุ 12 ปี”</em> ตามด้วยตาราง <em>ที่ · ชื่ออปท. · อำเภอ · จังหวัด</em> ระบบจะแยกเป็น 1 อีเวนต์ต่อ 1 หัวข้อ และให้ตรวจสอบก่อนสร้างจริง</p>
+    <form method="post" action="{{ url_for('bulk_import_events') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="import-grid">
+        <label>ไฟล์ใบสมัคร<input type="file" name="entry_file" accept=".xlsx,.xls" required></label>
+        <label>เฉพาะหัวข้อที่มีคำว่า<input name="keyword" value="ชู้ตติ้ง" placeholder="เว้นว่าง = ทุกประเภท"></label>
+        <label>คนต่อสนามไม่เกิน<input type="number" min="0" name="per_lane" value="6"><small class="muted">ใช้คำนวณจำนวนสนาม (0 = ใช้ค่าคงที่)</small></label>
+        <label>จำนวนสนาม (ค่าคงที่)<input type="number" min="1" name="default_lane_count" value="4"></label>
+      </div>
+      <div class="bar">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:700;">คำนำหน้าชื่องาน<input name="name_prefix" placeholder="เช่น กีฬาอปท. ครั้งที่ 41" style="min-width:260px;"></label>
+        <button class="btn" type="submit">อ่านไฟล์และแสดงตัวอย่าง</button>
+      </div>
+    </form>
+  </section>
+
+  <form method="post" class="card" id="bulkForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2><span class="step">B</span>กรอกหลายอีเวนต์ในตาราง</h2>
+
+    <h3 style="font-size:1rem;margin:14px 0 8px;">ตั้งค่าร่วม (ใช้กับทุกอีเวนต์ในชุดนี้)</h3>
+    {% include '_bulk_shared_settings.html' %}
+
+    <h3 style="font-size:1rem;margin:18px 0 8px;">สร้างแถวอัตโนมัติ</h3>
+    <div class="gen-grid">
+      <label>ชื่อประเภท<input id="genBase" value="ชู้ตติ้ง" placeholder="เช่น ชู้ตติ้ง"></label>
+      <div>
+        <div style="font-weight:700;font-size:.92rem;margin-bottom:6px;">รุ่น</div>
+        <div class="chips" id="genGroups">
+          {% for age in [12,14,16,18] %}<label><input type="checkbox" value="รุ่นอายุ {{ age }} ปี" checked>{{ age }} ปี</label>{% endfor %}
+          <label><input type="checkbox" value="ทั่วไป">ทั่วไป</label>
+        </div>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:.92rem;margin-bottom:6px;">ประเภท</div>
+        <div class="chips" id="genCats">
+          {% for c in categories %}<label><input type="checkbox" value="{{ c }}" {% if c != 'ผสม' %}checked{% endif %}>{{ c }}</label>{% endfor %}
+        </div>
+      </div>
+      <button class="btn secondary" type="button" id="genBtn">+ เพิ่มแถวตามที่เลือก</button>
+    </div>
+
+    <h3 style="font-size:1rem;margin:18px 0 8px;">รายการอีเวนต์</h3>
+    <div class="table-wrap">
+      <table class="rows-table">
+        <thead><tr><th>#</th><th>ชื่องาน</th><th>รุ่น</th><th>ประเภท</th><th>จำนวนสนาม</th><th></th></tr></thead>
+        <tbody id="rowsBody"></tbody>
+      </table>
+    </div>
+    <datalist id="groupList">{% for g in group_presets %}<option value="{{ g }}">{% endfor %}</datalist>
+    <div class="bar">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary" type="button" id="addRowBtn">+ เพิ่ม 1 แถว</button>
+        <button class="btn secondary" type="button" id="clearBtn">ล้างทั้งหมด</button>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <span class="count-pill" id="rowCount">0 อีเวนต์</span>
+        <button class="btn" type="submit">สร้างอีเวนต์ทั้งหมด</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<template id="rowTpl">
+  <tr>
+    <td class="num"></td>
+    <td class="name"><input name="row_name" required placeholder="ชื่องาน"></td>
+    <td><input name="row_group" list="groupList" value="ทั่วไป"></td>
+    <td><select name="row_category">{% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></td>
+    <td class="lanes"><input name="row_lanes" type="number" min="1"></td>
+    <td class="del"><button type="button" class="icon-btn" title="ลบแถว" aria-label="ลบแถว">×</button></td>
+  </tr>
+</template>
+
+<script>
+(function(){
+  const body = document.getElementById('rowsBody');
+  const tpl = document.getElementById('rowTpl');
+  const defaultLanes = document.getElementById('default_lane_count');
+  const MAX = {{ 60 }};
+
+  function renumber(){
+    const rows = body.querySelectorAll('tr');
+    rows.forEach((tr, i) => tr.querySelector('.num').textContent = i + 1);
+    document.getElementById('rowCount').textContent = rows.length + ' อีเวนต์';
+  }
+  function addRow(name, group, cat){
+    if (body.querySelectorAll('tr').length >= MAX) { alert('สร้างได้ครั้งละไม่เกิน ' + MAX + ' อีเวนต์'); return false; }
+    const tr = tpl.content.firstElementChild.cloneNode(true);
+    tr.querySelector('[name=row_name]').value = name || '';
+    if (group) tr.querySelector('[name=row_group]').value = group;
+    if (cat) tr.querySelector('[name=row_category]').value = cat;
+    tr.querySelector('[name=row_lanes]').value = (defaultLanes && defaultLanes.value) || 4;
+    tr.querySelector('.icon-btn').addEventListener('click', () => { tr.remove(); renumber(); });
+    body.appendChild(tr);
+    renumber();
+    return true;
+  }
+  document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+  document.getElementById('clearBtn').addEventListener('click', () => { body.innerHTML = ''; renumber(); });
+  document.getElementById('genBtn').addEventListener('click', () => {
+    const base = (document.getElementById('genBase').value || '').trim();
+    const groups = [...document.querySelectorAll('#genGroups input:checked')].map(i => i.value);
+    const cats = [...document.querySelectorAll('#genCats input:checked')].map(i => i.value);
+    if (!groups.length || !cats.length) { alert('เลือกรุ่นและประเภทอย่างน้อยอย่างละ 1'); return; }
+    // ลบแถวว่างก่อนเติม
+    body.querySelectorAll('tr').forEach(tr => { if (!tr.querySelector('[name=row_name]').value.trim()) tr.remove(); });
+    for (const g of groups) for (const c of cats) {
+      const name = ['ประเภท' + base + c, g].filter(Boolean).join(' ');
+      if (!addRow(name, g, c)) return;
+    }
+  });
+  document.getElementById('bulkForm').addEventListener('submit', (e) => {
+    if (!body.querySelector('tr')) { e.preventDefault(); alert('ยังไม่มีอีเวนต์ในตาราง'); }
+  });
+  addRow();
+})();
+</script>
+{% endblock %}

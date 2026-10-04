@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}ตรวจสอบก่อนนำเข้า · Petanque Shooting{% endblock %}
+{% block content %}
+<style>
+  .bulk-page{display:grid;gap:18px}
+  .bulk-page h1{margin:0 0 4px}
+  .bulk-shared{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .bulk-shared label{display:flex;flex-direction:column;font-weight:700;font-size:.92rem;gap:6px}
+  .bulk-page input,.bulk-page select{padding:8px 10px;border:1px solid #cbd5e1;border-radius:10px;font:inherit;background:#fff}
+  .pv-table{width:100%;border-collapse:collapse}
+  .pv-table th{background:#f8fafc;text-align:left;font-size:.82rem;padding:8px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+  .pv-table td{padding:6px 8px;border-bottom:1px solid #eef2f7;vertical-align:top}
+  .pv-table td input[type=text],.pv-table td select{width:100%}
+  .pv-table td input[type=number]{width:80px}
+  .pv-table tr.off td{opacity:.45}
+  .pv-names{font-size:.82rem;color:#475569;max-width:420px}
+  .pv-names summary{cursor:pointer;color:#1d4ed8;font-weight:700}
+  .pv-names ol{margin:6px 0 0;padding-left:20px;max-height:220px;overflow:auto}
+  .bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px}
+  .draw-now{display:flex;gap:8px;align-items:center;font-weight:800;padding:10px 14px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+  @media (max-width:760px){.pv-table thead{display:none}.pv-table tr{display:grid;grid-template-columns:auto 1fr;gap:6px;padding:10px 0;border-bottom:1px solid #e2e8f0}.pv-table td{border:0;padding:0}.pv-table td.wide{grid-column:1/-1}}
+</style>
+
+<form method="post" action="{{ url_for('bulk_import_events_confirm') }}" class="bulk-page">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <textarea name="events_json" hidden>{{ events_json }}</textarea>
+
+  <section class="card">
+    <h1>ตรวจสอบก่อนนำเข้า</h1>
+    <p class="muted" style="margin:0;">ไฟล์ <strong>{{ source_name }}</strong> · พบ {{ events|length }} ประเภท · รายชื่อรวม {{ total_entries }} รายการ · เลือกประเภทที่ต้องการ แก้ชื่อ/รุ่น/จำนวนสนามได้ในตาราง</p>
+  </section>
+
+  <section class="card">
+    <h3 style="font-size:1rem;margin:0 0 8px;">ตั้งค่าร่วม</h3>
+    {% set hide_default_lanes = true %}
+    {% include '_bulk_shared_settings.html' %}
+  </section>
+
+  <section class="card">
+    <div class="table-wrap">
+      <table class="pv-table">
+        <thead><tr>
+          <th><input type="checkbox" id="checkAll" checked aria-label="เลือกทั้งหมด"></th>
+          <th>ชื่องาน</th><th>รุ่น</th><th>ประเภท</th><th>รายชื่อ</th><th>สนาม</th>
+        </tr></thead>
+        <tbody>
+        {% for item in events %}
+          {% set i = loop.index0 %}
+          <tr>
+            <td><input type="checkbox" name="include" value="{{ i }}" class="js-include" checked aria-label="เลือก {{ item.title }}"></td>
+            <td class="wide"><input type="text" name="name_{{ i }}" value="{{ item.name }}"></td>
+            <td><input type="text" name="group_{{ i }}" value="{{ item.event_group }}"></td>
+            <td><select name="category_{{ i }}">{% for c in categories %}<option value="{{ c }}" {% if c == item.category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></td>
+            <td class="wide pv-names">
+              <details><summary>{{ item.entries|length }} รายการ</summary>
+                <ol>{% for e in item.entries %}<li>{{ e.name }} <span class="muted">· {{ e.affiliation }}</span></li>{% endfor %}</ol>
+              </details>
+            </td>
+            <td><input type="number" min="1" name="lanes_{{ i }}" value="{{ item.lanes }}" title="จำนวนสนาม"><div class="muted" style="font-size:.75rem;">≈ {{ ((item.entries|length) / item.lanes)|round(0,'ceil')|int }} คน/สนาม</div></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="font-size:.85rem;margin:.6rem 0 0;">ชื่อในรายชื่อ = ชื่อหน่วยงานตามไฟล์ (แก้เป็นชื่อนักกีฬาได้ภายหลังที่หน้า “นักกีฬา”) · สังกัด = จังหวัด</p>
+    <div class="bar">
+      <a class="btn secondary" href="{{ url_for('bulk_create_events') }}">ย้อนกลับ</a>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <label class="draw-now"><input type="checkbox" name="draw_now" value="yes" checked> จับสลากลำดับ/สนามทันทีหลังสร้าง</label>
+        <button class="btn" type="submit" id="submitBtn">สร้าง <span id="selCount">{{ events|length }}</span> อีเวนต์</button>
+      </div>
+    </div>
+  </section>
+</form>
+
+<script>
+(function(){
+  const boxes = [...document.querySelectorAll('.js-include')];
+  const all = document.getElementById('checkAll');
+  function sync(){
+    let n = 0;
+    boxes.forEach(b => { b.closest('tr').classList.toggle('off', !b.checked); if (b.checked) n++; });
+    document.getElementById('selCount').textContent = n;
+    all.checked = n === boxes.length;
+    all.indeterminate = n > 0 && n < boxes.length;
+    document.getElementById('submitBtn').disabled = n === 0;
+  }
+  boxes.forEach(b => b.addEventListener('change', sync));
+  all.addEventListener('change', () => { boxes.forEach(b => b.checked = all.checked); sync(); });
+  sync();
+})();
+</script>
+{% endblock %}

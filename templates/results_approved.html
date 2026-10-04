@@ -156,9 +156,10 @@
       <h2>{{ event_title }}</h2>
     </div>
     <table class="ra-table clean">
-      <thead><tr><th>NO.</th><th>{{ country_label }}</th><th>FAMILY NAME</th><th>GIVEN NAME</th></tr></thead>
+      {# ไม่มีชื่อที่แยกนามสกุลได้ในอีเวนต์นี้ ก็ไม่ต้องมีคอลัมน์ว่าง #}
+      <thead><tr><th>NO.</th><th>{{ country_label }}</th>{% if use_split_names %}<th>FAMILY NAME</th><th>GIVEN NAME</th>{% else %}<th>NAME</th>{% endif %}</tr></thead>
       <tbody>
-      {% for r in name_rows %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td><td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td></tr>{% endfor %}
+      {% for r in name_rows %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ r.name }}</td>{% endif %}</tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>
@@ -313,9 +314,9 @@
       <h3>{{ date_line }}</h3>
     </div>
     <table class="ra-table ra-medal-table clean">
-      <thead><tr><th>MEDAL</th><th>{{ country_label }}</th><th>FAMILY NAME</th><th>GIVEN NAME</th></tr></thead>
+      <thead><tr><th>MEDAL</th><th>{{ country_label }}</th>{% if use_split_names %}<th>FAMILY NAME</th><th>GIVEN NAME</th>{% else %}<th>NAME</th>{% endif %}</tr></thead>
       <tbody>
-      {% for r in medal_rows %}<tr><td><b>{{ r.medal }}</b></td><td>{{ r.country }}</td><td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td></tr>{% endfor %}
+      {% for r in medal_rows %}<tr><td><b>{{ r.medal }}</b></td><td>{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ (r.athlete.name or '')|upper }}</td>{% endif %}</tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>

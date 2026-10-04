@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+{% block title %}ศูนย์จับสลาก · Petanque Shooting{% endblock %}
+{% block content %}
+<style>
+  .draw-page{display:grid;gap:18px}
+  .draw-page h1{margin:0 0 4px}
+  .draw-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0}
+  .draw-tools input,.draw-tools select{padding:9px 10px;border:1px solid #cbd5e1;border-radius:10px;font:inherit;background:#fff}
+  .draw-tools input[type=search]{min-width:220px;flex:1}
+  .dt{width:100%;border-collapse:collapse;font-size:.93rem}
+  .dt th{background:#f8fafc;text-align:left;font-size:.8rem;padding:9px 8px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+  .dt td{padding:9px 8px;border-bottom:1px solid #eef2f7;vertical-align:middle}
+  .dt tr.is-focus td{background:#fffbeb}
+  .dt tr.is-locked td{color:#94a3b8}
+  .dt td.chk{width:38px}
+  .dt input[type=checkbox]{width:18px;height:18px}
+  .tag{display:inline-block;padding:3px 9px;border-radius:999px;font-size:.78rem;font-weight:800;white-space:nowrap}
+  .tag.ready{background:#dcfce7;color:#166534}
+  .tag.empty{background:#f1f5f9;color:#64748b}
+  .tag.locked{background:#fee2e2;color:#991b1b}
+  .draw-bar{position:sticky;bottom:12px;z-index:5;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:16px;background:#0f172a;color:#fff;box-shadow:0 12px 30px rgba(15,23,42,.25)}
+  .draw-bar .btn-draw{background:linear-gradient(135deg,var(--th-primary-light),var(--th-primary));color:#fff;border:0;border-radius:12px;padding:12px 20px;font-weight:900;font-size:1rem;cursor:pointer}
+  .draw-bar .btn-draw:disabled{opacity:.45;cursor:not-allowed}
+  .draw-bar label{display:flex;gap:8px;align-items:center;font-weight:700;font-size:.9rem}
+  .result-grid{display:grid;gap:16px}
+  .result-card{border:1px solid #e2e8f0;border-radius:16px;padding:14px 16px;background:#fff;break-inside:avoid}
+  .result-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px}
+  .result-head h3{margin:0;font-size:1.05rem}
+  .lanes{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+  .lane{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+  .lane h4{margin:0;padding:6px 10px;background:var(--th-soft);color:var(--th-primary-dark);font-size:.88rem}
+  .lane ol{margin:0;padding:6px 10px 8px 30px;font-size:.86rem}
+  .lane li{padding:2px 0}
+  .lane li small{color:#64748b}
+  @media print{
+    nav,.navbar,.flashes,.no-print,.draw-bar{display:none!important}
+    .result-card{border:0;padding:0;margin-bottom:14px;page-break-inside:avoid}
+  }
+  @media (max-width:760px){.dt .hide-sm{display:none}}
+</style>
+
+<div class="draw-page">
+  {% if results %}
+  <section class="card">
+    <div class="section-head no-print">
+      <div>
+        <h1 style="font-size:1.4rem;">{{ 'ผลการจับสลาก' if just_drawn else 'ลำดับและสนามปัจจุบัน' }}</h1>
+        <p class="muted" style="margin:0;">{{ results|length }} อีเวนต์ · พิมพ์หรือบันทึกเป็น PDF เพื่อประกาศได้</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary" type="button" onclick="window.print()">พิมพ์ผล</button>
+        <a class="btn secondary" href="{{ url_for('draw_center') }}">ปิดผล</a>
+      </div>
+    </div>
+    <div class="result-grid">
+      {% for r in results %}
+      <div class="result-card">
+        <div class="result-head">
+          <h3>{{ r.event.name }}</h3>
+          <span class="muted">{{ r.event.event_group }} · {{ r.event.category }} · {{ r.event.competition_date.strftime('%d/%m/%Y') }} · {{ r.event.lane_count }} สนาม
+            <a class="no-print" href="{{ url_for('event_overview', event_id=r.event.id, round=1) }}" style="margin-left:6px;">หน้ารวม →</a></span>
+        </div>
+        {% if r.lanes %}
+        <div class="lanes">
+          {% for lane in r.lanes %}
+          <div class="lane">
+            <h4>สนาม {{ lane.lane_no }}</h4>
+            <ol>{% for a in lane.athletes %}<li>{{ a.name }} <small>· {{ a.affiliation }}</small></li>{% endfor %}</ol>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted" style="margin:0;">ยังไม่มีรายชื่อ — <a href="{{ url_for('manage_athletes', event_id=r.event.id) }}">เพิ่มนักกีฬา</a></p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <form method="post" class="card no-print" id="drawForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="section-head">
+      <div>
+        <h1>ศูนย์จับสลาก</h1>
+        <p class="muted" style="margin:0;">เลือกหลายอีเวนต์แล้วกดจับสลากครั้งเดียว ระบบสุ่มลำดับยิงและกระจายสนามใหม่ให้ทุกอีเวนต์พร้อมกัน · อีเวนต์ที่เริ่มกรอกคะแนนแล้วจะถูกล็อกไว้</p>
+      </div>
+      <a class="btn secondary" href="{{ url_for('bulk_create_events') }}">+ สร้างหลายอีเวนต์</a>
+    </div>
+
+    <div class="draw-tools">
+      <input type="search" id="q" placeholder="ค้นหาชื่องาน / รุ่น / ประเภท">
+      <select id="dateFilter" aria-label="กรองวันแข่งขัน">
+        <option value="">ทุกวันแข่งขัน</option>
+        {% for d in dates %}<option value="{{ d.isoformat() }}">{{ d.strftime('%d/%m/%Y') }}</option>{% endfor %}
+      </select>
+      <button class="btn secondary" type="button" id="selReady">เลือกที่พร้อมจับ (ที่แสดง)</button>
+      <button class="btn secondary" type="button" id="selNone">ไม่เลือก</button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="dt">
+        <thead><tr>
+          <th class="chk"><input type="checkbox" id="checkAll" aria-label="เลือกทั้งหมดที่แสดง"></th>
+          <th>ชื่องาน</th><th class="hide-sm">รุ่น</th><th class="hide-sm">ประเภท</th><th class="hide-sm">วันแข่งขัน</th>
+          <th>รายชื่อ</th><th>สนาม</th><th>สถานะ</th>
+        </tr></thead>
+        <tbody>
+        {% for e in events %}
+          {% set n = counts.get(e.id, 0) %}
+          {% set locked = e.id in started %}
+          <tr class="js-row {% if e.id in focus_ids %}is-focus{% endif %} {% if locked %}is-locked{% endif %}"
+              data-date="{{ e.competition_date.isoformat() }}"
+              data-text="{{ (e.name ~ ' ' ~ e.event_group ~ ' ' ~ e.category)|lower }}"
+              data-ready="{{ '1' if (n and not locked) else '0' }}">
+            <td class="chk"><input type="checkbox" name="event_ids" value="{{ e.id }}" class="js-pick" data-locked="{{ '1' if locked else '0' }}"
+                {% if e.id in focus_ids and n and not locked and not just_drawn %}checked{% endif %} aria-label="เลือก {{ e.name }}"></td>
+            <td><strong>{{ e.name }}</strong></td>
+            <td class="hide-sm">{{ e.event_group }}</td>
+            <td class="hide-sm">{{ e.category }}</td>
+            <td class="hide-sm">{{ e.competition_date.strftime('%d/%m/%Y') }}</td>
+            <td>{{ n }}</td>
+            <td>{{ e.lane_count }}</td>
+            <td>
+              {% if locked %}<span class="tag locked">เริ่มตีแล้ว · ล็อก</span>
+              {% elif not n %}<span class="tag empty">ยังไม่มีรายชื่อ</span>
+              {% else %}<span class="tag ready">พร้อมจับ</span>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" class="muted" style="text-align:center;padding:18px;">ยังไม่มีอีเวนต์ — <a href="{{ url_for('bulk_create_events') }}">สร้างหลายอีเวนต์</a></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="height:14px"></div>
+    <div class="draw-bar">
+      <div>
+        <strong id="pickCount">0</strong> อีเวนต์ที่เลือก · <span id="pickAthletes">0</span> รายชื่อ
+        {% if current_user.role == 'superadmin' %}
+        <label style="margin-top:6px;"><input type="checkbox" name="force" value="yes" id="force"> บังคับจับใหม่แม้เริ่มตีแล้ว (ล้างสาย Knockout)</label>
+        {% endif %}
+      </div>
+      <button class="btn-draw" type="submit" id="drawBtn" disabled>🎲 จับสลากพร้อมกัน</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function(){
+  const rows = [...document.querySelectorAll('.js-row')];
+  const q = document.getElementById('q');
+  const df = document.getElementById('dateFilter');
+  const all = document.getElementById('checkAll');
+  const force = document.getElementById('force');
+  const counts = {{ counts|tojson }};
+  const visible = () => rows.filter(r => r.style.display !== 'none');
+  const box = r => r.querySelector('.js-pick');
+
+  function update(){
+    const picked = rows.filter(r => box(r).checked);
+    const athletes = picked.reduce((s, r) => s + (counts[box(r).value] || 0), 0);
+    document.getElementById('pickCount').textContent = picked.length;
+    document.getElementById('pickAthletes').textContent = athletes;
+    document.getElementById('drawBtn').disabled = picked.length === 0;
+    const vis = visible();
+    const visPicked = vis.filter(r => box(r).checked).length;
+    all.checked = vis.length > 0 && visPicked === vis.length;
+    all.indeterminate = visPicked > 0 && visPicked < vis.length;
+  }
+  function filter(){
+    const text = (q.value || '').trim().toLowerCase();
+    const d = df.value;
+    rows.forEach(r => {
+      const ok = (!text || r.dataset.text.includes(text)) && (!d || r.dataset.date === d);
+      r.style.display = ok ? '' : 'none';
+    });
+    update();
+  }
+  q.addEventListener('input', filter);
+  df.addEventListener('change', filter);
+  rows.forEach(r => box(r).addEventListener('change', update));
+  all.addEventListener('change', () => { visible().forEach(r => box(r).checked = all.checked); update(); });
+  document.getElementById('selReady').addEventListener('click', () => {
+    rows.forEach(r => box(r).checked = false);
+    visible().forEach(r => { if (r.dataset.ready === '1') box(r).checked = true; });
+    update();
+  });
+  document.getElementById('selNone').addEventListener('click', () => { rows.forEach(r => box(r).checked = false); update(); });
+  document.getElementById('drawForm').addEventListener('submit', (e) => {
+    const picked = rows.filter(r => box(r).checked);
+    const locked = picked.filter(r => box(r).dataset.locked === '1').length;
+    let msg = 'ยืนยันจับสลากพร้อมกัน ' + picked.length + ' อีเวนต์?\nลำดับยิงและสนามเดิมจะถูกแทนที่';
+    if (locked) msg += force && force.checked
+      ? '\n\n⚠ มี ' + locked + ' อีเวนต์ที่เริ่มตีแล้ว จะถูกจับใหม่และล้างสาย Knockout'
+      : '\n\n' + locked + ' อีเวนต์ที่เริ่มตีแล้วจะถูกข้าม';
+    if (!confirm(msg)) e.preventDefault();
+  });
+  filter();
+})();
+</script>
+{% endblock %}

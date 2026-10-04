@@ -2164,20 +2164,25 @@ function updateBracketGroup(roundKey, items){
 }
 
 let bracketRefreshing = false;
+let lastBracketEtag = null;
 
 async function refreshBracketData(){
   if (bracketRefreshing) return;
   bracketRefreshing = true;
 
   try {
-    const response = await fetch(`{{ url_for("bracket_data", event_id=event.id) }}?t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: {'X-Requested-With': 'XMLHttpRequest', 'Cache-Control': 'no-cache'}
+    const response = await fetch(`{{ url_for("bracket_data", event_id=event.id) }}`, {
+      cache: 'no-cache',
+      headers: {'X-Requested-With': 'XMLHttpRequest'}
     });
     if (!response.ok) {
       console.error('bracket_data error', response.status);
       return;
     }
+    // ข้อมูลไม่เปลี่ยน (304) ข้ามการวาดใหม่
+    const etag = response.headers.get('ETag');
+    if (etag && etag === lastBracketEtag) return;
+    lastBracketEtag = etag;
 
     const data = await response.json();
     if (data.R16) updateBracketGroup("R16", data.R16);
@@ -2198,7 +2203,7 @@ setInterval(() => {
     bindBracketScorecardClicks();
     refreshBracketData();
   }
-}, 1000);
+}, 2000);
 
 bindBracketScorecardClicks();
 setupShootingBracketControls();

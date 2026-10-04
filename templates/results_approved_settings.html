@@ -56,6 +56,13 @@
         {% endfor %}
       </div>
     </div>
+    <label>รูปแบบชื่อในเอกสาร
+      <select name="name_format">
+        <option value="single" {% if (setting.name_format or 'single') == 'single' %}selected{% endif %}>คอลัมน์ NAME เดียว (ชื่อเต็มตามที่ลงทะเบียน)</option>
+        <option value="first" {% if setting.name_format == 'first' %}selected{% endif %}>แยก FAMILY / GIVEN — คำแรกเป็นนามสกุล (แบบสากล)</option>
+        <option value="last" {% if setting.name_format == 'last' %}selected{% endif %}>แยก FAMILY / GIVEN — คำสุดท้ายเป็นนามสกุล (แบบไทย)</option>
+      </select>
+    </label>
     <label>แสดงหน้ากรรมการ
       <select name="show_official_pages">
         <option value="yes" {% if setting.show_official_pages %}selected{% endif %}>แสดง</option>

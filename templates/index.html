@@ -488,7 +488,11 @@
       </div>
 
       {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
-      <a class="btn" href="{{ url_for('create_event') }}">+ สร้างอีเวนต์</a>
+      <div class="action-group">
+        <a class="btn secondary" href="{{ url_for('draw_center') }}">🎲 ศูนย์จับสลาก</a>
+        <a class="btn secondary" href="{{ url_for('bulk_create_events') }}">+ สร้างหลายอีเวนต์</a>
+        <a class="btn" href="{{ url_for('create_event') }}">+ สร้างอีเวนต์</a>
+      </div>
       {% endif %}
     </div>
 

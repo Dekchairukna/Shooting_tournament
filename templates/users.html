@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
+  .weak-pw{margin-top:4px;font-size:.8rem;font-weight:700;color:#b42318;}
+  .reset-pw-form{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .reset-pw-form input{max-width:160px;}
   @media (max-width: 768px){
     .users-page{display:grid;gap:14px;}
   }
@@ -10,7 +13,7 @@
     <h1>สร้างผู้ใช้ใหม่</h1>
     <form method="post" class="form-grid">
       <label>ชื่อผู้ใช้<input name="username" required></label>
-      <label>รหัสผ่าน<input name="password" required></label>
+      <label>รหัสผ่าน (อย่างน้อย 8 ตัว)<input name="password" type="password" minlength="8" autocomplete="new-password" required></label>
       <label>สิทธิ์
         <select name="role">
           <option value="admin">admin</option>
@@ -25,8 +28,20 @@
     <h2>รายการผู้ใช้</h2>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>ID</th><th>Username</th><th>Role</th></tr></thead>
-        <tbody>{% for user in users %}<tr><td>{{ user.id }}</td><td>{{ user.username }}</td><td>{{ user.role }}</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>ตั้งรหัสผ่านใหม่</th></tr></thead>
+        <tbody>{% for user in users %}<tr>
+          <td>{{ user.id }}</td>
+          <td>{{ user.username }}{% if user.id in weak_users %}<div class="weak-pw">ยังใช้รหัสตั้งต้น – เข้าระบบไม่ได้จนกว่าจะตั้งใหม่</div>{% endif %}</td>
+          <td>{{ user.role }}</td>
+          <td>
+            <form method="post" class="reset-pw-form">
+              <input type="hidden" name="action" value="reset_password">
+              <input type="hidden" name="user_id" value="{{ user.id }}">
+              <input name="new_password" type="password" minlength="8" autocomplete="new-password" placeholder="รหัสใหม่" required>
+              <button class="btn" type="submit">ตั้งรหัส</button>
+            </form>
+          </td>
+        </tr>{% endfor %}</tbody>
       </table>
     </div>
   </section>

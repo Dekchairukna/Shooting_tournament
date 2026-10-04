@@ -1,0 +1,33 @@
+<div class="bulk-shared">
+  <label>วันแข่งขัน<input type="date" name="competition_date" value="{{ today }}" required></label>
+  <label>สถานที่<input name="location" placeholder="ไม่บังคับ"></label>
+  {% if not hide_default_lanes %}
+  <label>จำนวนสนามเริ่มต้นต่อแถว<input type="number" min="1" id="default_lane_count" name="default_lane_count" value="4"></label>
+  {% endif %}
+  <label>รอบถัดไปคือรอบอะไร
+    <select name="next_round_label" class="js-next-round">
+      {% for v in next_round_labels %}<option value="{{ v }}" {% if v == 'รอบ 8 คน' %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>เข้ารอบทันทีจากรอบแรก (คน)<input type="number" min="0" name="direct_qualifiers" class="js-direct" value="4"></label>
+  <label>มีรอบ 2 หรือไม่
+    <select name="has_round_two"><option value="yes" selected>มี</option><option value="no">ไม่มี</option></select>
+  </label>
+  <label>วิธีคัดเข้ารอบ 2
+    <select name="round_two_mode"><option value="cutoff" selected>ถึงลำดับ (Class) ที่ N</option><option value="next">ต่อจากผู้ผ่านตรงอีก N ลำดับ</option></select>
+  </label>
+  <label>N (รอบ 2)<input type="number" min="1" name="round_two_cutoff_rank" value="16"></label>
+  <label>จากรอบ 2 คัดเข้ารอบต่อ (คน)<input type="number" min="1" name="round_two_advancers" class="js-adv" value="4"></label>
+</div>
+<script>
+(function(){
+  document.querySelectorAll('.js-next-round').forEach(sel => sel.addEventListener('change', () => {
+    const box = sel.closest('.bulk-shared');
+    const v = sel.value || '';
+    let half = 4;
+    if (v.includes('16')) half = 8; else if (v.includes('4') || v.includes('รอง')) half = 2;
+    box.querySelector('.js-direct').value = half;
+    box.querySelector('.js-adv').value = half;
+  }));
+})();
+</script>

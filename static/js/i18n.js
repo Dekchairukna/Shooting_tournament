@@ -3,8 +3,45 @@
 
   const translations = {
     en: {
+      "แผงกดคะแนน": "Score keypad",
+      "สถานีนี้": "This station",
+      "รวมรอบ": "Round total",
+      "แตะตัวเลขเพื่อบันทึกทันที · ครบ 4 ระยะแล้วจะไปสถานีถัดไปเอง": "Tap a number to save instantly · moves to the next station after all 4 distances",
+      "ใบนี้กำลังถูกคีย์โดย": "This scorecard is being entered by",
+      "เพื่อกันคะแนนทับกัน หน้านี้จึงดูได้อย่างเดียว ถ้าเครื่องเดิมเลิกใช้แล้วให้กดรับช่วงคีย์ต่อ": "To avoid overwriting scores this page is read-only. If the other device is no longer in use, take over.",
+      "รับช่วงคีย์ต่อ": "Take over",
+      "← คิวสนาม": "← Court queue",
+      "คิวสนาม": "Court queue",
+      "โหมดจอแสดงผล": "Display mode",
+      "เครื่องมือ ▾": "Tools ▾",
+      "หน้ารวมทุกสนาม": "All courts overview",
+      "ตีจบแล้ว": "Finished",
+      "รอคิว": "Waiting",
+      "คนถัดไป": "Next",
+      "รับรองผลแล้ว": "Approved",
+      "คะแนน": "points",
+      "ดู / แก้ไข": "View / edit",
+      "คีย์ต่อ": "Continue",
+      "เริ่มคีย์": "Start scoring",
+      "หน้านี้อัปเดตเองทุก 15 วินาที": "This page refreshes every 15 seconds",
+      "ยังไม่มีนักกีฬาในสนามนี้": "No athletes on this court yet",
+      "ยังไม่มีรายชื่อรอบ 2 ในสนามนี้ (รายชื่อจะขึ้นหลังรอบ 1 จบครบทุกสนาม)": "No round 2 list for this court yet (it appears after round 1 finishes on every court)",
+      "บันทึกเป็น JPG": "Save as JPG",
+      "พร้อมบันทึก": "Ready",
+      "กำลังบันทึก…": "Saving…",
+      "บันทึกแล้ว": "Saved",
+      "Court ID ของอีเวนต์นี้": "Court IDs for this event",
+      "ยังใช้รหัสตั้งต้น – เข้าระบบไม่ได้จนกว่าจะตั้งใหม่": "Still on a default password – blocked until reset",
+      "ตั้งรหัสผ่านใหม่": "Set new password",
+      "ตั้งรหัส": "Set",
+      "รหัสใหม่": "New password",
+      "รหัสผ่าน (อย่างน้อย 8 ตัว)": "Password (min. 8 characters)",
+      "ผลรอบนี้ได้รับการรับรองแล้ว": "This round result has been approved",
+      "กรรมการยกคะแนน": "Scoring referee",
       'หน้าหลัก': 'Home',
       'สร้างอีเวนต์': 'Create event',
+      'ธีม': 'Theme', 'ธีมของระบบ': 'Site themes', 'สร้างธีมใหม่': 'New theme', 'แก้ไขธีม': 'Edit theme', 'เปิดใช้ทั้งระบบ': 'Use site-wide', 'กำลังใช้': 'Active',
+      'สร้างหลายอีเวนต์': 'Bulk create events', 'ศูนย์จับสลาก': 'Draw center', '🎲 ศูนย์จับสลาก': '🎲 Draw center', '+ สร้างหลายอีเวนต์': '+ Bulk create events', 'สร้างหลายอีเวนต์พร้อมกัน': 'Create multiple events', 'ผลการจับสลาก': 'Draw results', '🎲 จับสลากพร้อมกัน': '🎲 Draw all selected', 'ตรวจสอบก่อนนำเข้า': 'Review before import',
       'สร้างอีเวนต์ Shooting': 'Create Shooting Event',
       'แก้ไขอีเวนต์': 'Edit event',
       'ผู้ใช้': 'Users',
@@ -309,6 +346,22 @@
       'ไม่พบข้อมูลนักกีฬาในไฟล์ Excel': 'No athlete data was found in the Excel file.'
     },
     fr: {
+      "แผงกดคะแนน": "Pavé de score",
+      "สถานีนี้": "Cet atelier",
+      "รวมรอบ": "Total du tour",
+      "รับช่วงคีย์ต่อ": "Reprendre la saisie",
+      "← คิวสนาม": "← File du terrain",
+      "คิวสนาม": "File du terrain",
+      "โหมดจอแสดงผล": "Mode affichage",
+      "เครื่องมือ ▾": "Outils ▾",
+      "ตีจบแล้ว": "Terminé",
+      "รอคิว": "En attente",
+      "คนถัดไป": "Suivant",
+      "รับรองผลแล้ว": "Validé",
+      "คะแนน": "points",
+      "เริ่มคีย์": "Commencer",
+      "คีย์ต่อ": "Continuer",
+      "ดู / แก้ไข": "Voir / modifier",
       'หน้าหลัก': 'Accueil', 'สร้างอีเวนต์': 'Créer un événement', 'สร้างอีเวนต์ Shooting': 'Créer un événement de tir', 'แก้ไขอีเวนต์': 'Modifier l’événement', 'ผู้ใช้': 'Utilisateurs', 'ออกจากระบบ': 'Déconnexion', 'เข้าสู่ระบบ': 'Connexion', 'ชื่อผู้ใช้': 'Nom d’utilisateur', 'รหัสผ่าน': 'Mot de passe', 'สิทธิ์': 'Rôle', 'สร้างผู้ใช้ใหม่': 'Créer un utilisateur', 'รายการผู้ใช้': 'Liste des utilisateurs', 'บันทึก': 'Enregistrer', 'บันทึกการแก้ไข': 'Enregistrer les modifications',
       'แดชบอร์ด': 'Tableau de bord', 'ภาพรวมของรายการแข่งขันและนักกีฬาในระบบ': 'Vue d’ensemble des compétitions et des athlètes', 'อีเวนต์': 'Événements', 'รายการแข่งขัน': 'Compétitions', 'เลือกดูหน้ารวม สถิติ และจัดการนักกีฬาได้จากตารางนี้': 'Ouvrir l’aperçu, les statistiques et la gestion des athlètes depuis ce tableau', 'คะแนนสูงสุดในระบบ': 'Meilleur score du système', 'สถิติสังกัดที่ทำคะแนนดีที่สุด': 'Statistiques des clubs/affiliations les mieux notés', 'คะแนนสูงสุด': 'Meilleur score', 'คะแนนรวม': 'Score total', 'คะแนน': 'points',
       'ชื่องาน': 'Nom de l’événement', 'รุ่น': 'Groupe', 'รุ่นแข่งขัน': 'Groupe de compétition', 'ประเภท': 'Catégorie', 'วันแข่งขัน': 'Date de compétition', 'สนาม': 'Terrain', 'จำนวนสนาม': 'Nombre de terrains', 'จัดการ': 'Gérer', 'หน้ารวม': 'Aperçu', 'สถิติ': 'Statistiques', 'นักกีฬา': 'Athlètes', 'แก้ไข': 'Modifier', 'ลบ': 'Supprimer', 'ยังไม่มีอีเวนต์': 'Aucun événement', 'ยังไม่มีข้อมูล': 'Aucune donnée',
@@ -322,6 +375,46 @@
       'คะแนนสูงสุดของประเภทนี้': 'Meilleur score de cette catégorie', 'อันดับ': 'Classement', 'ครั้ง': 'fois', 'ตีเที่ยวพิเศษ 7 เมตรทุกสถานี': 'Départage spécial : 7 m à chaque atelier', 'เที่ยวพิเศษ': 'Départage', 'บันทึกเที่ยวพิเศษ': 'Enregistrer le départage', 'กดที่ชื่อในแต่ละ match box เพื่อเปิด scorecard ของรอบนั้น': 'Cliquez sur un nom dans chaque case pour ouvrir la fiche du tour', 'ยังไม่มีคู่ Quarter Final': 'Aucun quart de finale', 'ยังไม่มีคู่ Semi Final': 'Aucune demi-finale', 'ยังไม่มีคู่ Final': 'Aucune finale', 'ยืนยันลบ': 'Confirmer la suppression', 'ลบอีเวนต์นี้?': 'Supprimer cet événement ?'
     },
     zh: {
+      "แผงกดคะแนน": "录分键盘",
+      "สถานีนี้": "本站",
+      "รวมรอบ": "本轮合计",
+      "แตะตัวเลขเพื่อบันทึกทันที · ครบ 4 ระยะแล้วจะไปสถานีถัดไปเอง": "点击数字即时保存 · 4 个距离完成后自动进入下一站",
+      "ใบนี้กำลังถูกคีย์โดย": "此记分卡正在由以下用户录入：",
+      "เพื่อกันคะแนนทับกัน หน้านี้จึงดูได้อย่างเดียว ถ้าเครื่องเดิมเลิกใช้แล้วให้กดรับช่วงคีย์ต่อ": "为防止比分被覆盖，本页只读。如原设备已不再使用，请接管录入。",
+      "รับช่วงคีย์ต่อ": "接管录入",
+      "← คิวสนาม": "← 场地队列",
+      "คิวสนาม": "场地队列",
+      "โหมดจอแสดงผล": "大屏模式",
+      "เครื่องมือ ▾": "工具 ▾",
+      "หน้ารวมทุกสนาม": "所有场地总览",
+      "ตีจบแล้ว": "已完成",
+      "รอคิว": "等待中",
+      "คนถัดไป": "下一位",
+      "รับรองผลแล้ว": "已确认",
+      "คะแนน": "分",
+      "ดู / แก้ไข": "查看 / 编辑",
+      "คีย์ต่อ": "继续录入",
+      "เริ่มคีย์": "开始录入",
+      "หน้านี้อัปเดตเองทุก 15 วินาที": "本页每 15 秒自动刷新",
+      "ยังไม่มีนักกีฬาในสนามนี้": "该场地暂无运动员",
+      "ยังไม่มีรายชื่อรอบ 2 ในสนามนี้ (รายชื่อจะขึ้นหลังรอบ 1 จบครบทุกสนาม)": "该场地暂无第2轮名单（所有场地第1轮结束后显示）",
+      "บันทึกเป็น JPG": "保存为 JPG",
+      "พร้อมบันทึก": "就绪",
+      "กำลังบันทึก…": "保存中…",
+      "บันทึกแล้ว": "已保存",
+      "Court ID ของอีเวนต์นี้": "本赛事场地账号",
+      "ยังใช้รหัสตั้งต้น – เข้าระบบไม่ได้จนกว่าจะตั้งใหม่": "仍在使用默认密码 – 重设前无法登录",
+      "ตั้งรหัสผ่านใหม่": "设置新密码",
+      "ตั้งรหัส": "设置",
+      "รหัสใหม่": "新密码",
+      "รหัสผ่าน (อย่างน้อย 8 ตัว)": "密码（至少 8 位）",
+      "ผลรอบนี้ได้รับการรับรองแล้ว": "本轮成绩已确认",
+      "กรรมการยกคะแนน": "计分裁判",
+      "📊 ดูสถิติ 5/3": "📊 查看 5/3 统计",
+      "สถิติประกอบการจัดอันดับ 5/3": "排名参考统计 5/3",
+      "เรียงตาม TOTAL → จำนวน 5 → จำนวน 3 ใช้ดูเหตุผลการจัดลำดับ ไม่รวมคะแนนรอบพิเศษในตารางหลัก": "按 TOTAL → 5分次数 → 3分次数排序，用于查看排名依据，主表不含加赛分",
+      "ใบแดงครบ 2 ครั้ง: ยุติการยิงรอบนี้และคงคะแนนที่ทำได้ไว้": "红牌满 2 次：本轮停止射击并保留已得分",
+      "มือถือ/แท็บเล็ตแนวตั้งจะแสดงเฉพาะสถานีที่เลือก เพื่อให้ช่องใหญ่ขึ้นและกดง่ายขึ้น": "手机/平板竖屏只显示所选站点，格子更大更易点击",
       'หน้าหลัก': '首页', 'สร้างอีเวนต์': '创建赛事', 'สร้างอีเวนต์ Shooting': '创建射击赛事', 'แก้ไขอีเวนต์': '编辑赛事', 'ผู้ใช้': '用户', 'ออกจากระบบ': '退出登录', 'เข้าสู่ระบบ': '登录', 'ชื่อผู้ใช้': '用户名', 'รหัสผ่าน': '密码', 'สิทธิ์': '权限', 'สร้างผู้ใช้ใหม่': '创建新用户', 'รายการผู้ใช้': '用户列表', 'บันทึก': '保存', 'บันทึกการแก้ไข': '保存修改',
       'แดชบอร์ด': '仪表盘', 'ภาพรวมของรายการแข่งขันและนักกีฬาในระบบ': '系统中的赛事和运动员概览', 'อีเวนต์': '赛事', 'รายการแข่งขัน': '比赛列表', 'เลือกดูหน้ารวม สถิติ และจัดการนักกีฬาได้จากตารางนี้': '可从此表进入总览、统计和运动员管理', 'คะแนนสูงสุดในระบบ': '系统最高分', 'สถิติสังกัดที่ทำคะแนนดีที่สุด': '最佳单位/队伍统计', 'คะแนนสูงสุด': '最高分', 'คะแนนรวม': '总分', 'คะแนน': '分',
       'ชื่องาน': '赛事名称', 'รุ่น': '组别', 'รุ่นแข่งขัน': '比赛组别', 'ประเภท': '类别', 'วันแข่งขัน': '比赛日期', 'สนาม': '场地', 'จำนวนสนาม': '场地数量', 'จัดการ': '管理', 'หน้ารวม': '总览', 'สถิติ': '统计', 'นักกีฬา': '运动员', 'แก้ไข': '编辑', 'ลบ': '删除', 'ยังไม่มีอีเวนต์': '暂无赛事', 'ยังไม่มีข้อมูล': '暂无数据',
@@ -370,10 +463,12 @@
     const keys = Object.keys(dict)
       .filter(key => key.length >= 5 || /[\s()/?:|]/.test(key))
       .sort((a, b) => b.length - a.length);
+    // ภาษาไทยไม่มีช่องว่างคั่นคำ ถ้าแทนคำย่อยตรง ๆ ชื่อคนจะพัง (เช่น "นายเดชสิทธิ์" -> "นายเดชRole")
+    // จึงแทนเฉพาะวลีที่ขอบทั้งสองข้างไม่ติดตัวอักษรไทย
     for (const key of keys) {
-      if (result.includes(key)) {
-        result = result.split(key).join(dict[key]);
-      }
+      if (!result.includes(key)) continue;
+      const re = new RegExp('(^|[^\u0E00-\u0E7F])' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=$|[^\u0E00-\u0E7F])', 'g');
+      result = result.replace(re, (m, lead) => lead + dict[key]);
     }
     return result;
   }
@@ -396,6 +491,8 @@
         if (!parent) return NodeFilter.FILTER_REJECT;
         const tag = parent.tagName;
         if (['SCRIPT', 'STYLE', 'TEXTAREA'].includes(tag)) return NodeFilter.FILTER_REJECT;
+        // ข้อมูลจริง (ชื่อคน/สังกัด) ใส่ translate="no" เพื่อไม่ให้แปลเด็ดขาด
+        if (parent.closest('[translate="no"], .notranslate')) return NodeFilter.FILTER_REJECT;
         if (!node.nodeValue.trim()) return NodeFilter.FILTER_SKIP;
         return NodeFilter.FILTER_ACCEPT;
       }

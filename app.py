@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from io import BytesIO
 from datetime import date, datetime
 from functools import wraps
@@ -56,7 +57,39 @@ def ensure_sqlite_writable():
 ensure_sqlite_writable()
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+def _load_secret_key() -> str:
+    """ใช้ SECRET_KEY จาก environment ก่อน ถ้าไม่มีให้สร้างคีย์สุ่มเก็บไว้ใน instance/secret_key
+    (ทุก gunicorn worker ในเครื่องเดียวกันอ่านไฟล์เดียวกัน session จึงไม่หลุดระหว่าง worker)
+    ไม่ใช้ค่าตายตัวที่เดาได้อีกต่อไป เพราะคนที่รู้ค่าจะปลอม session เป็น superadmin ได้"""
+    key = os.environ.get("SECRET_KEY", "").strip()
+    if key and key != "dev-secret-change-me":
+        return key
+    import secrets
+    path = os.path.join(BASE_DIR, "instance", "secret_key")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path):
+            with open(path) as fh:
+                stored = fh.read().strip()
+            if stored:
+                return stored
+        new_key = secrets.token_hex(32)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(new_key)
+        return new_key
+    except FileExistsError:
+        with open(path) as fh:
+            return fh.read().strip()
+    except OSError:
+        print("[SECURITY] ไม่มี SECRET_KEY และเขียนไฟล์คีย์ไม่ได้ ใช้คีย์ชั่วคราว (ทุกคนต้อง login ใหม่เมื่อรีสตาร์ต)")
+        return secrets.token_hex(32)
+
+
+app.config["SECRET_KEY"] = _load_secret_key()
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "1" if os.environ.get("RAILWAY_ENVIRONMENT") else "0") == "1"
 
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
@@ -67,6 +100,96 @@ else:
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+# --- CSRF: กันเว็บอื่นแอบสั่งลบ/แก้คะแนนผ่านเบราว์เซอร์ของเจ้าหน้าที่ที่ login ค้างไว้
+from flask_wtf.csrf import CSRFProtect, CSRFError, generate_csrf
+# หน้า Scorecard เปิดค้างได้ทั้งวัน จึงผูก token กับ session แทนการหมดอายุทุก 1 ชั่วโมง
+app.config["WTF_CSRF_TIME_LIMIT"] = None
+app.config["WTF_CSRF_SSL_STRICT"] = False  # Railway อยู่หลัง proxy; token + SameSite cookie ยังป้องกันอยู่
+csrf = CSRFProtect(app)
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": generate_csrf}
+
+
+# หน้า Overview/Bracket ดึงข้อมูลซ้ำตลอดเวลา ถ้าข้อมูลไม่เปลี่ยนให้ตอบ 304 (ไม่มีเนื้อหา)
+# ลดข้อมูลที่ส่งจากราว 56 KB ต่อครั้งเหลือไม่กี่ร้อยไบต์ และเบราว์เซอร์ไม่ต้องวาดตารางใหม่
+POLLING_ENDPOINTS = {"overview_data", "overview_stats", "bracket_data"}
+
+
+# --- แคชร่วมระยะสั้นสำหรับหน้าที่คนดูพร้อมกันเยอะ ---
+# ผู้ชม 100 คนดูอีเวนต์เดียวกัน เดิมเซิร์ฟเวอร์คำนวณตารางใหม่ 100 รอบ ตอนนี้คำนวณครั้งเดียวแล้วส่งผลเดียวกันให้ทุกคน
+# ข้อมูลช้าได้ไม่เกิน SHARED_POLL_CACHE_SECONDS และจะล้างทันทีเมื่อมีการบันทึกคะแนนของอีเวนต์นั้น (ใน process เดียวกัน)
+import threading
+SHARED_POLL_CACHE_SECONDS = float(os.environ.get("SHARED_POLL_CACHE_SECONDS", "1.0"))
+_poll_cache: dict = {}
+_poll_cache_locks: dict = {}
+_poll_cache_guard = threading.Lock()
+
+
+def invalidate_poll_cache(event_id: int) -> None:
+    with _poll_cache_guard:
+        for key in [k for k in _poll_cache if k[1] == event_id]:
+            _poll_cache.pop(key, None)
+
+
+def shared_poll_cache(view):
+    @wraps(view)
+    def wrapper(event_id: int, *args, **kwargs):
+        if SHARED_POLL_CACHE_SECONDS <= 0:
+            return view(event_id, *args, **kwargs)
+        # บัญชีสนามเห็นเฉพาะสนามตัวเอง จึงแยกแคชตามสนาม ส่วนคนอื่นเห็นข้อมูลชุดเดียวกัน
+        scope = (current_user.court_event_id, current_user.court_no) if is_court_user() else None
+        key = (view.__name__, event_id, request.query_string.decode(), scope)
+        now = time.monotonic()
+        hit = _poll_cache.get(key)
+        if hit and now - hit[0] < SHARED_POLL_CACHE_SECONDS:
+            return app.response_class(hit[1], status=200, mimetype="application/json")
+        with _poll_cache_guard:
+            lock = _poll_cache_locks.setdefault(key, threading.Lock())
+        with lock:  # คำขอที่มาพร้อมกันรอผลจากการคำนวณครั้งเดียว ไม่แย่งกันคำนวณ
+            hit = _poll_cache.get(key)
+            if hit and time.monotonic() - hit[0] < SHARED_POLL_CACHE_SECONDS:
+                return app.response_class(hit[1], status=200, mimetype="application/json")
+            response = app.make_response(view(event_id, *args, **kwargs))
+            if response.status_code == 200 and response.mimetype == "application/json":
+                _poll_cache[key] = (time.monotonic(), response.get_data())
+            return response
+    return wrapper
+
+
+@app.after_request
+def conditional_polling_response(response):
+    if request.method not in ("GET", "HEAD", "OPTIONS") and response.status_code < 400 and _poll_cache:
+        # มีการบันทึก/แก้ไขใด ๆ: ล้างแคชทันที ให้คำขอถัดไปได้ข้อมูลล่าสุด
+        with _poll_cache_guard:
+            _poll_cache.clear()
+    if (request.endpoint in POLLING_ENDPOINTS and request.method == "GET"
+            and response.status_code == 200 and not response.direct_passthrough):
+        response.headers["Cache-Control"] = "private, no-cache"
+        response.add_etag()
+        response.make_conditional(request)
+        # บีบอัด JSON (56 KB → ราว 5 KB) ลดเน็ตของผู้ชมและค่า egress ของเซิร์ฟเวอร์
+        if (response.status_code == 200 and "gzip" in request.headers.get("Accept-Encoding", "")
+                and not response.headers.get("Content-Encoding")):
+            raw = response.get_data()
+            if len(raw) > 1024:
+                import gzip
+                response.set_data(gzip.compress(raw, compresslevel=5))
+                response.headers["Content-Encoding"] = "gzip"
+                response.headers["Vary"] = "Accept-Encoding"
+    return response
+
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(err):
+    message = "หน้าเว็บหมดอายุหรือเปิดค้างจากการ login ครั้งก่อน กรุณารีเฟรชหน้าแล้วลองใหม่"
+    if request.is_json or request.path.startswith("/api/"):
+        return jsonify({"ok": False, "message": message}), 400
+    flash(message, "warning")
+    return redirect(request.referrer or url_for("index"))
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -135,6 +258,11 @@ STATIONS = [1, 2, 3, 4, 5]
 DISTANCES = [6, 7, 8, 9]
 MAX_RED_CARDS = 2
 
+# คะแนนที่ถูกต้องตามกติกายิงเปตอง
+# สถานี 1-4: Carreau 5 / Réussi 3 / Touché 1 / Manqué 0
+# สถานี 5 (But): Carreau 5 / Touché 3 / Manqué 0
+ALLOWED_SCORES_BY_STATION = {1: {0, 1, 3, 5}, 2: {0, 1, 3, 5}, 3: {0, 1, 3, 5}, 4: {0, 1, 3, 5}, 5: {0, 3, 5}}
+
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -170,6 +298,8 @@ class Event(db.Model):
     direct_qualifiers = db.Column(db.Integer, nullable=False, default=0)
     has_round_two = db.Column(db.Boolean, default=False)
     round_two_cutoff_rank = db.Column(db.Integer, nullable=True)
+    # วิธีคัดเข้ารอบ 2: "cutoff" = ถึง Class ที่ N · "next" = ต่อจากผู้ผ่านตรงอีก N ลำดับ
+    round_two_mode = db.Column(db.String(20), nullable=False, default="cutoff")
     next_round_label = db.Column(db.String(50), nullable=False, default="รอบ 8 คน")
     round_two_advancers = db.Column(db.Integer, nullable=False, default=4)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -230,6 +360,62 @@ class ScoreSignature(db.Model):
     stopped_by_red = db.Column(db.Boolean, nullable=False, default=False)
 
 
+class ScorecardLock(db.Model):
+    """กันเจ้าหน้าที่สองเครื่องคีย์ Scorecard ใบเดียวกันพร้อมกันโดยไม่รู้ตัว
+    เจ้าของล็อกคือหน้าเว็บหนึ่งหน้า (page_token) ต่ออายุด้วย heartbeat ทุก 30 วินาที
+    ถ้าหน้าเดิมปิดไปหรือไม่ส่ง heartbeat เกิน SCORECARD_LOCK_TTL ล็อกหมดอายุเอง
+    คนอื่นกด "รับช่วงคีย์ต่อ" ได้เสมอ (ระบบบันทึกชื่อไว้) จึงไม่มีทางติดล็อกค้าง"""
+    __tablename__ = "scorecard_lock"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    athlete_id = db.Column(db.Integer, db.ForeignKey("athlete.id"), nullable=False)
+    round_no = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    username = db.Column(db.String(80), nullable=False, default="")
+    page_token = db.Column(db.String(64), nullable=False, default="")
+    heartbeat_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("athlete_id", "round_no", name="uq_scorecard_lock_athlete_round"),)
+
+
+SCORECARD_LOCK_TTL_SECONDS = 90
+
+
+def acquire_scorecard_lock(athlete_id: int, round_no: int, page_token: str, take_over: bool = False):
+    """คืนค่า (ได้ล็อกหรือไม่, ชื่อผู้ถือล็อกปัจจุบัน)"""
+    from datetime import timedelta
+    from sqlalchemy.exc import IntegrityError
+    page_token = (page_token or "")[:64]
+    now = datetime.utcnow()
+    who = court_public_id(current_user) if is_court_user() else current_user.username
+    lock = ScorecardLock.query.filter_by(athlete_id=athlete_id, round_no=round_no).first()
+    if lock:
+        fresh = lock.heartbeat_at and (now - lock.heartbeat_at) < timedelta(seconds=SCORECARD_LOCK_TTL_SECONDS)
+        mine = bool(page_token) and lock.page_token == page_token
+        if fresh and not mine and not take_over:
+            return False, lock.username
+        lock.user_id = current_user.id
+        lock.username = who
+        lock.page_token = page_token
+        lock.heartbeat_at = now
+        db.session.commit()
+        return True, who
+    try:
+        db.session.add(ScorecardLock(athlete_id=athlete_id, round_no=round_no, user_id=current_user.id,
+                                     username=who, page_token=page_token, heartbeat_at=now))
+        db.session.commit()
+        return True, who
+    except IntegrityError:
+        # อีกเครื่องสร้างล็อกพร้อมกันพอดี: อ่านใหม่แล้วตัดสินตามปกติ
+        db.session.rollback()
+        return acquire_scorecard_lock(athlete_id, round_no, page_token, take_over)
+
+
+def release_scorecard_lock(athlete_id: int, round_no: int, page_token: str) -> None:
+    lock = ScorecardLock.query.filter_by(athlete_id=athlete_id, round_no=round_no).first()
+    if lock and page_token and lock.page_token == page_token:
+        db.session.delete(lock)
+        db.session.commit()
+
+
 class ScoreEditLog(db.Model):
     """ประวัติการแก้คะแนนหลังจากผลถูกลงลายเซ็นยืนยันแล้ว"""
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -284,6 +470,8 @@ class ResultsApprovedSetting(db.Model):
     umpires_text = db.Column(db.Text, nullable=True)
     approved_text = db.Column(db.String(255), nullable=False, default="……………………………APPROVED")
     show_official_pages = db.Column(db.Boolean, nullable=False, default=True)
+    # single = คอลัมน์ NAME เดียว (ค่าเริ่มต้น), first = คำแรกเป็นนามสกุล, last = คำสุดท้ายเป็นนามสกุล
+    name_format = db.Column(db.String(10), nullable=False, default="single")
     cover_main_logo_path = db.Column(db.String(255), nullable=True)
     cover_bottom_logo_1_path = db.Column(db.String(255), nullable=True)
     cover_bottom_logo_2_path = db.Column(db.String(255), nullable=True)
@@ -294,6 +482,50 @@ class ResultsApprovedSetting(db.Model):
     header_logo_4_path = db.Column(db.String(255), nullable=True)
     side_logo_path = db.Column(db.String(255), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SiteTheme(db.Model):
+    """ธีมหน้าตาของทั้งระบบ (ใช้งานได้ครั้งละ 1 ธีม)"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    short_name = db.Column(db.String(60), nullable=False, default="")
+    eyebrow = db.Column(db.String(160), nullable=False, default="")
+    title = db.Column(db.String(160), nullable=False, default="Petanque Shooting")
+    subtitle = db.Column(db.String(255), nullable=False, default="")
+    export_kicker = db.Column(db.String(160), nullable=False, default="Official Shooting Results")
+    export_title = db.Column(db.String(255), nullable=False, default="")
+    export_subtitle = db.Column(db.String(255), nullable=False, default="")
+    footer_tagline = db.Column(db.String(255), nullable=False, default="")
+    footer_event = db.Column(db.String(255), nullable=False, default="")
+    show_hero = db.Column(db.Boolean, nullable=False, default=True)
+    color_primary = db.Column(db.String(7), nullable=False, default="#ef4b12")
+    color_primary_dark = db.Column(db.String(7), nullable=False, default="#c9360b")
+    color_soft = db.Column(db.String(7), nullable=False, default="#fff1e8")
+    color_cream = db.Column(db.String(7), nullable=False, default="#fffaf4")
+    color_accent = db.Column(db.String(7), nullable=False, default="#37b8b1")
+    color_ink = db.Column(db.String(7), nullable=False, default="#172033")
+    color_line = db.Column(db.String(7), nullable=False, default="#f3d2bf")
+    # ภาพตั้งต้นจากโฟลเดอร์ static (ธีมที่มากับระบบ) ถ้าอัปโหลดภาพใหม่จะใช้ภาพในฐานข้อมูลแทน
+    poster_static = db.Column(db.String(255), nullable=True)
+    logo_static = db.Column(db.String(255), nullable=True)
+    partners_static = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=False)
+    is_builtin = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    assets = db.relationship("SiteThemeAsset", backref="theme", cascade="all, delete-orphan", lazy=True)
+
+
+class SiteThemeAsset(db.Model):
+    """ภาพของธีมเก็บในฐานข้อมูล เพื่อไม่หายเมื่อ Railway deploy ใหม่"""
+    id = db.Column(db.Integer, primary_key=True)
+    theme_id = db.Column(db.Integer, db.ForeignKey("site_theme.id"), nullable=False)
+    kind = db.Column(db.String(20), nullable=False)  # poster / logo / partners
+    mimetype = db.Column(db.String(40), nullable=False)
+    data = db.deferred(db.Column(db.LargeBinary, nullable=False))  # โหลดเฉพาะตอนส่งภาพ
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("theme_id", "kind", name="uq_theme_asset_kind"),)
 
 
 @login_manager.user_loader
@@ -453,9 +685,11 @@ def ensure_schema() -> None:
                 "header_logo_3_path": "VARCHAR(255)",
                 "header_logo_4_path": "VARCHAR(255)",
                 "side_logo_path": "VARCHAR(255)",
+                "name_format": "VARCHAR(10)",
             }
             for col, col_type in ra_logo_columns.items():
                 conn.exec_driver_sql(f'ALTER TABLE "results_approved_setting" ADD COLUMN IF NOT EXISTS {col} {col_type}')
+            conn.exec_driver_sql("UPDATE \"results_approved_setting\" SET name_format = 'single' WHERE name_format IS NULL")
 
             # ScoreEntry: เพิ่ม checkbox ตีแล้วสำหรับทุกช่องคะแนน
             conn.exec_driver_sql('ALTER TABLE "score_entry" ADD COLUMN IF NOT EXISTS is_scored BOOLEAN DEFAULT false')
@@ -463,6 +697,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('ALTER TABLE "score_signature" ADD COLUMN IF NOT EXISTS stopped_by_red BOOLEAN DEFAULT false')
             conn.exec_driver_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS court_no INTEGER')
             conn.exec_driver_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS court_event_id INTEGER')
+            conn.exec_driver_sql("ALTER TABLE \"event\" ADD COLUMN IF NOT EXISTS round_two_mode VARCHAR(20) DEFAULT 'cutoff'")
+            conn.exec_driver_sql("UPDATE \"event\" SET round_two_mode = 'cutoff' WHERE round_two_mode IS NULL")
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled BOOLEAN DEFAULT false')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_at TIMESTAMP')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_by INTEGER')
@@ -505,6 +741,9 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN category VARCHAR(20) DEFAULT 'men'")
         if "next_round_label" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN next_round_label VARCHAR(50)")
+        if "round_two_mode" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN round_two_mode VARCHAR(20) DEFAULT 'cutoff'")
+            conn.exec_driver_sql("UPDATE event SET round_two_mode = 'cutoff' WHERE round_two_mode IS NULL")
 
         user_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)").fetchall()}
         if "court_no" not in user_columns:
@@ -538,10 +777,12 @@ def ensure_schema() -> None:
             "header_logo_3_path": "VARCHAR(255)",
             "header_logo_4_path": "VARCHAR(255)",
             "side_logo_path": "VARCHAR(255)",
+            "name_format": "VARCHAR(10) DEFAULT 'single'",
         }
         for col, col_type in ra_logo_columns.items():
             if col not in ra_columns:
                 conn.exec_driver_sql(f"ALTER TABLE results_approved_setting ADD COLUMN {col} {col_type}")
+        conn.exec_driver_sql("UPDATE results_approved_setting SET name_format = 'single' WHERE name_format IS NULL")
 
 
 def event_theme(category: str | None) -> str:
@@ -556,19 +797,43 @@ def event_theme(category: str | None) -> str:
     return "theme-men"
 
 
+# รหัสผ่านที่เคยฝังในโค้ดเวอร์ชันก่อน ใครอ่านโค้ดก็รู้ จึงห้ามใช้เข้าระบบอีก
+KNOWN_DEFAULT_PASSWORDS = {"yagami1225", "admin1234", "viewer1234"}
+MIN_PASSWORD_LENGTH = 8
+
+
+def password_problem(password: str) -> str | None:
+    if len(password or "") < MIN_PASSWORD_LENGTH:
+        return f"รหัสผ่านต้องยาวอย่างน้อย {MIN_PASSWORD_LENGTH} ตัวอักษร"
+    if password in KNOWN_DEFAULT_PASSWORDS:
+        return "ห้ามใช้รหัสผ่านตั้งต้นของระบบเดิม"
+    return None
+
+
 def seed_defaults() -> None:
-    if not User.query.filter_by(username="superadmin").first():
-        u = User(username="superadmin", role="superadmin")
-        u.set_password("yagami1225")
+    """สร้าง superadmin เฉพาะตอนฐานข้อมูลยังไม่มี superadmin เลย
+    รหัสมาจาก SUPERADMIN_PASSWORD ถ้าไม่ตั้งจะสุ่มและพิมพ์ลง log ครั้งเดียว
+    ไม่สร้างบัญชี admin/viewer รหัสตายตัวอีกแล้ว"""
+    import secrets
+    reset_pw = os.environ.get("RESET_SUPERADMIN_PASSWORD", "").strip()
+    if not User.query.filter_by(role="superadmin").first():
+        password = os.environ.get("SUPERADMIN_PASSWORD", "").strip() or secrets.token_urlsafe(12)
+        u = User.query.filter_by(username="superadmin").first() or User(username="superadmin", role="superadmin")
+        u.role = "superadmin"
+        u.set_password(password)
         db.session.add(u)
-    if not User.query.filter_by(username="admin").first():
-        u = User(username="admin", role="admin")
-        u.set_password("admin1234")
-        db.session.add(u)
-    if not User.query.filter_by(username="viewer").first():
-        u = User(username="viewer", role="user")
-        u.set_password("viewer1234")
-        db.session.add(u)
+        if not os.environ.get("SUPERADMIN_PASSWORD"):
+            print(f"[SECURITY] สร้างบัญชี superadmin ใหม่ รหัสผ่านชั่วคราว: {password}  (เข้าระบบแล้วเปลี่ยนที่หน้าผู้ใช้)")
+    elif reset_pw:
+        # ทางออกฉุกเฉินเมื่อลืมรหัส superadmin: ตั้ง env นี้ รีสตาร์ต 1 ครั้ง แล้วลบ env ทิ้ง
+        problem = password_problem(reset_pw)
+        u = User.query.filter_by(username="superadmin", role="superadmin").first()
+        if u and not problem:
+            u.set_password(reset_pw)
+            print("[SECURITY] ตั้งรหัส superadmin ใหม่จาก RESET_SUPERADMIN_PASSWORD แล้ว ให้ลบ env นี้ออกทันที")
+        elif problem:
+            print(f"[SECURITY] ไม่ได้ตั้งรหัส superadmin: {problem}")
+    ensure_default_themes()
     db.session.commit()
 
 
@@ -979,11 +1244,30 @@ def round2_cutoff_rank(event: Event) -> int:
     ตัวอย่าง: ตั้งค่า 16 = ทุกคนที่ Class <= 16 และไม่ได้ผ่านตรง
     มีสิทธิ์ตีรอบ 2 ทั้งหมด หากมีหลายคน Class 16 ก็ได้สิทธิ์ทุกคน.
 
-    ใช้คอลัมน์ round_two_cutoff_rank เดิม จึงไม่ต้อง migrate ฐานข้อมูล.
+    มี 2 แบบ (event.round_two_mode):
+    - "cutoff": ถึง Class ที่ N เช่น N=16 → Class 5–16 เมื่อผ่านตรง 4 คน
+    - "next":   ต่อจากผู้ผ่านตรงอีก N ลำดับ เช่น ผ่านตรง 4, N=16 → Class 5–20
+    ทั้งสองแบบ ถ้ามีหลายคน Class เท่ากันตรงเส้นตัด ได้สิทธิ์ทุกคน
     """
     if not event.has_round_two:
         return 0
-    return max(int(event.round_two_cutoff_rank or 0), 0)
+    n = max(int(event.round_two_cutoff_rank or 0), 0)
+    if n and round_two_mode(event) == "next":
+        return direct_quota(event) + n
+    return n
+
+
+ROUND_TWO_MODES = {"cutoff": "ถึงลำดับ (Class) ที่ N", "next": "ต่อจากผู้ผ่านตรงอีก N ลำดับ"}
+
+
+def round_two_mode(event) -> str:
+    mode = getattr(event, "round_two_mode", None) or "cutoff"
+    return mode if mode in ROUND_TWO_MODES else "cutoff"
+
+
+def parse_round_two_mode(form) -> str:
+    mode = (form.get("round_two_mode") or "cutoff").strip()
+    return mode if mode in ROUND_TWO_MODES else "cutoff"
 
 
 def round1_round2_candidate_ids(
@@ -2352,7 +2636,7 @@ def sync_event_court_users(event: Event) -> tuple[int, int]:
 @app.route("/")
 def index():
     if is_court_user():
-        return redirect(url_for("event_overview", event_id=current_user.court_event_id, round=1))
+        return redirect(url_for("court_queue", event_id=current_user.court_event_id, round=1))
     stats = dashboard_stats()
     events = Event.query.order_by(Event.competition_date.desc(), Event.id.desc()).all()
     return render_template("index.html", events=events, stats=stats)
@@ -2370,6 +2654,9 @@ def create_event_court_user(event_id: int):
     password = request.form.get("password", "").strip()
     if court_no < 1 or court_no > event.lane_count or not password:
         flash(f"กรุณาระบุเลขสนาม 1-{event.lane_count} และรหัสผ่าน", "warning")
+        return redirect(url_for("manage_athletes", event_id=event.id))
+    if password_problem(password):
+        flash(password_problem(password), "warning")
         return redirect(url_for("manage_athletes", event_id=event.id))
 
     # Court IDs are normally pre-created from lane_count. Sync here as a safety net
@@ -2420,11 +2707,15 @@ def login():
                 return render_template("login.html")
         else:
             user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password) and password in KNOWN_DEFAULT_PASSWORDS:
+            flash("บัญชีนี้ยังใช้รหัสผ่านตั้งต้นที่เปิดเผยในโค้ด จึงถูกระงับ ให้ superadmin ตั้งรหัสใหม่ที่หน้าผู้ใช้", "danger")
+            return render_template("login.html")
         if user and user.check_password(password):
+            session.clear()
             login_user(user)
             flash("เข้าสู่ระบบสำเร็จ", "success")
             if user.role == "court" and user.court_event_id:
-                return redirect(url_for("event_overview", event_id=user.court_event_id, round=1))
+                return redirect(url_for("court_queue", event_id=user.court_event_id, round=1))
             return redirect(url_for("index"))
         flash("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", "danger")
     return render_template("login.html")
@@ -2442,10 +2733,29 @@ def logout():
 @login_required
 @role_required("superadmin")
 def manage_users():
+    if request.method == "POST" and request.form.get("action") == "reset_password":
+        target = User.query.get(request.form.get("user_id", type=int) or 0)
+        new_password = request.form.get("new_password", "")
+        problem = password_problem(new_password)
+        if not target or target.role == "court":
+            flash("ไม่พบผู้ใช้ (บัญชีสนามให้เปลี่ยนรหัสจากหน้าอีเวนต์)", "danger")
+        elif problem:
+            flash(problem, "danger")
+        else:
+            target.set_password(new_password)
+            db.session.commit()
+            flash(f"ตั้งรหัสผ่านใหม่ให้ {target.username} แล้ว", "success")
+        return redirect(url_for("manage_users"))
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
         role = request.form.get("role", "user")
+        if role not in {"user", "admin", "superadmin"}:
+            flash("สิทธิ์ไม่ถูกต้อง", "danger")
+            return redirect(url_for("manage_users"))
+        if password_problem(password):
+            flash(password_problem(password), "danger")
+            return redirect(url_for("manage_users"))
         if role == "court":
             flash("บัญชีสนามให้สร้างจากหน้านักกีฬาของอีเวนต์", "warning")
             return redirect(url_for("manage_users"))
@@ -2458,7 +2768,8 @@ def manage_users():
         else:
             flash("สร้างผู้ใช้ไม่สำเร็จ กรุณาตรวจสอบข้อมูล", "danger")
     users = User.query.filter(User.role != "court").order_by(User.id).all()
-    return render_template("users.html", users=users)
+    weak_users = {u.id for u in users if any(u.check_password(p) for p in KNOWN_DEFAULT_PASSWORDS)}
+    return render_template("users.html", users=users, weak_users=weak_users)
 
 
 @app.route("/events/new", methods=["GET", "POST"])
@@ -2476,6 +2787,7 @@ def create_event():
             direct_qualifiers=int(request.form["direct_qualifiers"]),
             has_round_two=request.form.get("has_round_two") == "yes",
             round_two_cutoff_rank=int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None,
+            round_two_mode=parse_round_two_mode(request.form),
             next_round_label=request.form["next_round_label"],
             round_two_advancers=int(request.form.get("round_two_advancers") or 4),
             created_by=current_user.id,
@@ -2504,6 +2816,7 @@ def edit_event(event_id: int):
         event.direct_qualifiers = int(request.form["direct_qualifiers"])
         event.has_round_two = request.form.get("has_round_two") == "yes"
         event.round_two_cutoff_rank = int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None
+        event.round_two_mode = parse_round_two_mode(request.form)
         event.next_round_label = request.form["next_round_label"]
         event.round_two_advancers = int(request.form.get("round_two_advancers") or 4)
         recalculate_event_orders(event)
@@ -2672,18 +2985,467 @@ def athletes_import_template():
 @login_required
 @role_required("admin", "superadmin")
 def randomize_athletes(event_id: int):
-    import random
-
     event = Event.query.get_or_404(event_id)
-    athletes = Athlete.query.filter_by(event_id=event.id).all()
-    random.shuffle(athletes)
-    for idx, athlete in enumerate(athletes, start=1):
-        athlete.start_order = idx
-        athlete.lane_no = ((idx - 1) % event.lane_count) + 1
-        athlete.lane_order = ((idx - 1) // event.lane_count) + 1
+    draw_event_lots(event)
     db.session.commit()
+    invalidate_poll_cache(event.id)
     flash("สุ่มลำดับใหม่แล้ว", "success")
     return redirect(url_for("manage_athletes", event_id=event.id))
+
+
+# ---------------------------------------------------------------------------
+# จับสลากหลายอีเวนต์พร้อมกัน + สร้างหลายอีเวนต์ในครั้งเดียว
+# ---------------------------------------------------------------------------
+import random as _random
+
+_DRAW_RNG = _random.SystemRandom()  # สุ่มจากระบบปฏิบัติการ เดาลำดับล่วงหน้าไม่ได้
+
+EVENT_GROUP_PRESETS = ["ทั่วไป", "อาวุโส", "เยาวชน", "รุ่นอายุ 12 ปี", "รุ่นอายุ 14 ปี", "รุ่นอายุ 16 ปี", "รุ่นอายุ 18 ปี"]
+EVENT_CATEGORIES = ["ชาย", "หญิง", "ผสม"]
+NEXT_ROUND_LABELS = ["รอบ 16 คน", "รอบ 8 คน", "รอบ 4 คน", "รอบรองชนะเลิศ"]
+MAX_BULK_EVENTS = 60
+
+
+def draw_event_lots(event: Event, rng=None) -> int:
+    """จับสลากลำดับยิงและสนามใหม่ทั้งอีเวนต์ คืนจำนวนนักกีฬาที่จับ"""
+    rng = rng or _DRAW_RNG
+    athletes = Athlete.query.filter_by(event_id=event.id).all()
+    rng.shuffle(athletes)
+    lanes = max(1, int(event.lane_count or 1))
+    for idx, athlete in enumerate(athletes, start=1):
+        athlete.start_order = idx
+        athlete.lane_no = ((idx - 1) % lanes) + 1
+        athlete.lane_order = ((idx - 1) // lanes) + 1
+    return len(athletes)
+
+
+def event_ids_with_scores(event_ids: list[int]) -> set[int]:
+    """อีเวนต์ที่มีการกรอกคะแนนแล้วอย่างน้อย 1 ช่อง (ไม่ควรจับสลากซ้ำ)"""
+    if not event_ids:
+        return set()
+    rows = (
+        db.session.query(Athlete.event_id)
+        .join(ScoreEntry, ScoreEntry.athlete_id == Athlete.id)
+        .filter(Athlete.event_id.in_(event_ids), ScoreEntry.is_scored.is_(True))
+        .distinct()
+        .all()
+    )
+    return {int(r[0]) for r in rows}
+
+
+def _form_int(value, default: int, minimum: int = 0) -> int:
+    try:
+        return max(minimum, int(str(value).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+def quota_for_next_round(label: str) -> int:
+    label = label or ""
+    if "16" in label:
+        return 8
+    if "4" in label or "รอง" in label:
+        return 2
+    return 4
+
+
+def new_event_from_settings(name: str, event_group: str, category: str, lane_count: int, shared: dict) -> Event:
+    next_label = shared.get("next_round_label") or "รอบ 8 คน"
+    return Event(
+        name=name.strip()[:255],
+        event_group=(event_group or "ทั่วไป").strip()[:50],
+        category=category if category in EVENT_CATEGORIES else "ชาย",
+        competition_date=shared["competition_date"],
+        location=(shared.get("location") or "").strip()[:255],
+        lane_count=max(1, int(lane_count or 1)),
+        direct_qualifiers=shared.get("direct_qualifiers", quota_for_next_round(next_label)),
+        has_round_two=bool(shared.get("has_round_two", True)),
+        round_two_cutoff_rank=shared.get("round_two_cutoff_rank"),
+        round_two_mode=shared.get("round_two_mode", "cutoff"),
+        next_round_label=next_label,
+        round_two_advancers=shared.get("round_two_advancers", quota_for_next_round(next_label)),
+        created_by=current_user.id if current_user.is_authenticated else None,
+    )
+
+
+def parse_shared_event_settings(form) -> dict:
+    """ค่าที่ใช้ร่วมกันทุกอีเวนต์ในการสร้างแบบหลายรายการ"""
+    raw_date = (form.get("competition_date") or "").strip()
+    try:
+        competition_date = date.fromisoformat(raw_date)
+    except ValueError as exc:
+        raise ValueError("กรุณาระบุวันแข่งขัน") from exc
+    next_label = form.get("next_round_label") or "รอบ 8 คน"
+    if next_label not in NEXT_ROUND_LABELS:
+        next_label = "รอบ 8 คน"
+    quota = quota_for_next_round(next_label)
+    has_round_two = form.get("has_round_two", "yes") == "yes"
+    cutoff = form.get("round_two_cutoff_rank")
+    return {
+        "competition_date": competition_date,
+        "location": form.get("location", ""),
+        "next_round_label": next_label,
+        "direct_qualifiers": _form_int(form.get("direct_qualifiers"), quota),
+        "has_round_two": has_round_two,
+        "round_two_cutoff_rank": _form_int(cutoff, 16, 1) if cutoff else None,
+        "round_two_mode": parse_round_two_mode(form),
+        "round_two_advancers": _form_int(form.get("round_two_advancers"), quota, 1),
+    }
+
+
+def lanes_for_entries(entry_count: int, per_lane: int, fallback: int) -> int:
+    if entry_count <= 0 or per_lane <= 0:
+        return max(1, fallback)
+    return max(1, -(-entry_count // per_lane))  # ปัดขึ้น
+
+
+def _cell_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        if value != value:  # NaN
+            return ""
+        if value.is_integer():
+            value = int(value)
+    return str(value).strip()
+
+
+def _read_workbook_rows(file_storage) -> list[list[list[str]]]:
+    """อ่านทุกชีตของไฟล์ .xlsx/.xls เป็นตารางข้อความ"""
+    filename = (file_storage.filename or "").lower()
+    data = file_storage.read()
+    sheets: list[list[list[str]]] = []
+    if filename.endswith(".xls"):
+        try:
+            import xlrd  # type: ignore
+        except ImportError as exc:
+            raise ValueError("เซิร์ฟเวอร์ยังไม่ได้ติดตั้ง xlrd สำหรับอ่านไฟล์ .xls กรุณาบันทึกไฟล์เป็น .xlsx") from exc
+        book = xlrd.open_workbook(file_contents=data)
+        for sheet in book.sheets():
+            sheets.append([[_cell_text(sheet.cell_value(r, c)) for c in range(sheet.ncols)] for r in range(sheet.nrows)])
+    else:
+        book = load_workbook(BytesIO(data), data_only=True, read_only=True)
+        for sheet in book.worksheets:
+            sheets.append([[_cell_text(v) for v in row] for row in sheet.iter_rows(values_only=True)])
+    return sheets
+
+
+def _guess_category(title: str) -> str:
+    if "ผสม" in title:
+        return "ผสม"
+    if "หญิง" in title:
+        return "หญิง"
+    return "ชาย"
+
+
+def _guess_event_group(title: str) -> str:
+    import re
+    match = re.search(r"รุ่น\s*อายุ\s*(\d+)\s*ปี", title)
+    if match:
+        return f"รุ่นอายุ {match.group(1)} ปี"
+    match = re.search(r"รุ่น\s*([^\s]+)", title)
+    if match:
+        return f"รุ่น{match.group(1)}"[:50]
+    return "ทั่วไป"
+
+
+def parse_entry_list_workbook(file_storage, keyword: str = "") -> list[dict]:
+    """อ่านไฟล์รายชื่อแบบหลายประเภทในไฟล์เดียว
+
+    รองรับรูปแบบใบสมัครที่มีหัวข้อแต่ละประเภท เช่น "ประเภทชู้ตติ้งชาย รุ่นอายุ 12 ปี"
+    ตามด้วยหัวตาราง (ที่ | ชื่อ... | อำเภอ | จังหวัด) และรายชื่อด้านล่าง
+    """
+    import re
+    keyword = (keyword or "").strip()
+    events: list[dict] = []
+    seen_titles: set[str] = set()
+    for rows in _read_workbook_rows(file_storage):
+        current = None
+        cols = None
+        for row in rows:
+            first = row[0] if row else ""
+            filled = [c for c in row if c]
+            # หัวข้อประเภท: มีคำว่า "ประเภท" อยู่ในช่องแรกและไม่มีข้อมูลช่องอื่นเป็นตาราง
+            if first.startswith("ประเภท") and len(filled) <= 2 and not first.replace("ประเภท", "").strip() == "":
+                title = " ".join(first.split())
+                title = re.sub(r"\s*/.*$", "", title).strip()  # ตัด "/ 54 ทีม" ท้ายหัวข้อ
+                current = None
+                cols = None
+                if keyword and keyword not in title:
+                    continue
+                if title in seen_titles:
+                    continue
+                seen_titles.add(title)
+                current = {
+                    "title": title,
+                    "event_group": _guess_event_group(title),
+                    "category": _guess_category(title),
+                    "entries": [],
+                }
+                events.append(current)
+                continue
+            if current is None:
+                continue
+            if not filled:
+                # แถวว่างหลังรายชื่อ = จบรายการของหัวข้อนี้
+                if current["entries"]:
+                    current = None
+                continue
+            if cols is None:
+                lowered = [c.replace(" ", "") for c in row]
+                name_idx = next((i for i, c in enumerate(lowered) if c.startswith("ชื่อ")), None)
+                if name_idx is not None:
+                    district_idx = next((i for i, c in enumerate(lowered) if c in {"อำเภอ", "เขต"}), None)
+                    province_idx = next((i for i, c in enumerate(lowered) if c == "จังหวัด"), None)
+                    aff_idx = next((i for i, c in enumerate(lowered) if c == "สังกัด"), None)
+                    no_idx = next((i for i, c in enumerate(lowered) if c in {"ที่", "ลำดับ", "ลำดับที่"}), None)
+                    cols = {"name": name_idx, "district": district_idx, "province": province_idx,
+                            "affiliation": aff_idx, "no": no_idx}
+                    last_no = 0
+                continue
+
+            def cell(key):
+                idx = cols.get(key)
+                return row[idx].strip() if idx is not None and idx < len(row) else ""
+
+            name = cell("name")
+            if not name:
+                continue
+            seq = cell("no")
+            if seq.isdigit():
+                # เลขลำดับเริ่มใหม่โดยไม่มีหัวข้อ = ข้อมูลค้างจากตารางอื่น หยุดอ่านหัวข้อนี้
+                if int(seq) <= last_no:
+                    current = None
+                    continue
+                last_no = int(seq)
+            affiliation = cell("affiliation") or cell("province") or cell("district") or name
+            current["entries"].append({"name": name[:255], "affiliation": affiliation[:255]})
+    return [e for e in events if e["entries"]]
+
+
+@app.route("/events/bulk-new", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def bulk_create_events():
+    """สร้างหลายอีเวนต์พร้อมกันจากตารางที่กรอก"""
+    if request.method == "POST":
+        try:
+            shared = parse_shared_event_settings(request.form)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("bulk_create_events"))
+        names = request.form.getlist("row_name")
+        groups = request.form.getlist("row_group")
+        categories = request.form.getlist("row_category")
+        lanes = request.form.getlist("row_lanes")
+        default_lanes = _form_int(request.form.get("default_lane_count"), 4, 1)
+        rows = []
+        for idx, name in enumerate(names):
+            name = (name or "").strip()
+            if not name:
+                continue
+            rows.append((
+                name,
+                groups[idx] if idx < len(groups) else "ทั่วไป",
+                categories[idx] if idx < len(categories) else "ชาย",
+                _form_int(lanes[idx] if idx < len(lanes) else "", default_lanes, 1),
+            ))
+        if not rows:
+            flash("กรุณาเพิ่มอย่างน้อย 1 อีเวนต์", "warning")
+            return redirect(url_for("bulk_create_events"))
+        if len(rows) > MAX_BULK_EVENTS:
+            flash(f"สร้างได้ครั้งละไม่เกิน {MAX_BULK_EVENTS} อีเวนต์", "warning")
+            return redirect(url_for("bulk_create_events"))
+        created = []
+        for name, group, category, lane_count in rows:
+            event = new_event_from_settings(name, group, category, lane_count, shared)
+            db.session.add(event)
+            db.session.flush()
+            sync_event_court_users(event)
+            created.append(event)
+        db.session.commit()
+        flash(f"สร้างอีเวนต์สำเร็จ {len(created)} รายการ", "success")
+        return redirect(url_for("draw_center", ids=",".join(str(e.id) for e in created)))
+    return render_template(
+        "events_bulk_form.html",
+        group_presets=EVENT_GROUP_PRESETS,
+        categories=EVENT_CATEGORIES,
+        next_round_labels=NEXT_ROUND_LABELS,
+        today=date.today().isoformat(),
+    )
+
+
+@app.route("/events/bulk-import", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def bulk_import_events():
+    """อัปโหลดไฟล์รายชื่อหลายประเภท → แสดงตัวอย่างให้เลือกก่อนสร้าง"""
+    file = request.files.get("entry_file")
+    if not file or not file.filename:
+        flash("กรุณาเลือกไฟล์ Excel", "danger")
+        return redirect(url_for("bulk_create_events"))
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        flash("รองรับไฟล์ .xlsx และ .xls", "danger")
+        return redirect(url_for("bulk_create_events"))
+    keyword = request.form.get("keyword", "").strip()
+    try:
+        events = parse_entry_list_workbook(file, keyword)
+    except Exception as exc:  # ไฟล์เสีย/รูปแบบไม่รองรับ
+        flash(f"อ่านไฟล์ไม่สำเร็จ: {exc}", "danger")
+        return redirect(url_for("bulk_create_events"))
+    if not events:
+        flash("ไม่พบหัวข้อประเภทที่มีรายชื่อในไฟล์" + (f" (คำค้น: {keyword})" if keyword else ""), "warning")
+        return redirect(url_for("bulk_create_events"))
+    per_lane = _form_int(request.form.get("per_lane"), 6, 0)
+    default_lanes = _form_int(request.form.get("default_lane_count"), 4, 1)
+    prefix = request.form.get("name_prefix", "").strip()
+    for item in events:
+        item["lanes"] = lanes_for_entries(len(item["entries"]), per_lane, default_lanes)
+        item["name"] = f"{prefix} {item['title']}".strip() if prefix else item["title"]
+    return render_template(
+        "events_bulk_import_preview.html",
+        events=events,
+        events_json=json.dumps(events, ensure_ascii=False),
+        source_name=file.filename,
+        total_entries=sum(len(e["entries"]) for e in events),
+        categories=EVENT_CATEGORIES,
+        next_round_labels=NEXT_ROUND_LABELS,
+        today=date.today().isoformat(),
+        per_lane=per_lane,
+    )
+
+
+@app.route("/events/bulk-import/confirm", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def bulk_import_events_confirm():
+    try:
+        shared = parse_shared_event_settings(request.form)
+        payload = json.loads(request.form.get("events_json") or "[]")
+    except (ValueError, json.JSONDecodeError) as exc:
+        flash(str(exc) or "ข้อมูลไม่ถูกต้อง", "danger")
+        return redirect(url_for("bulk_create_events"))
+    selected = {int(i) for i in request.form.getlist("include") if str(i).isdigit()}
+    chosen = [(i, item) for i, item in enumerate(payload) if i in selected]
+    if not chosen:
+        flash("ยังไม่ได้เลือกประเภทที่จะสร้าง", "warning")
+        return redirect(url_for("bulk_create_events"))
+    if len(chosen) > MAX_BULK_EVENTS:
+        flash(f"สร้างได้ครั้งละไม่เกิน {MAX_BULK_EVENTS} อีเวนต์", "warning")
+        return redirect(url_for("bulk_create_events"))
+    draw_now = request.form.get("draw_now") == "yes"
+    created = []
+    total_athletes = 0
+    for i, item in chosen:
+        name = (request.form.get(f"name_{i}") or item.get("name") or item.get("title") or "").strip()
+        if not name:
+            continue
+        group = request.form.get(f"group_{i}") or item.get("event_group") or "ทั่วไป"
+        category = request.form.get(f"category_{i}") or item.get("category") or "ชาย"
+        lanes = _form_int(request.form.get(f"lanes_{i}"), int(item.get("lanes") or 1), 1)
+        event = new_event_from_settings(name, group, category, lanes, shared)
+        db.session.add(event)
+        db.session.flush()
+        sync_event_court_users(event)
+        for order, entry in enumerate(item.get("entries") or [], start=1):
+            entry_name = str(entry.get("name") or "").strip()[:255]
+            if not entry_name:
+                continue
+            db.session.add(Athlete(
+                event_id=event.id,
+                bib_no=str(order),
+                name=entry_name,
+                affiliation=(str(entry.get("affiliation") or "").strip() or entry_name)[:255],
+                start_order=order,
+                lane_no=((order - 1) % event.lane_count) + 1,
+                lane_order=((order - 1) // event.lane_count) + 1,
+                status="waiting",
+            ))
+            total_athletes += 1
+        db.session.flush()
+        if draw_now:
+            draw_event_lots(event)
+        created.append(event)
+    db.session.commit()
+    msg = f"สร้างอีเวนต์ {len(created)} รายการ · นำเข้ารายชื่อ {total_athletes} รายการ"
+    if draw_now:
+        msg += " · จับสลากเรียบร้อย"
+    flash(msg, "success")
+    return redirect(url_for("draw_center", ids=",".join(str(e.id) for e in created), drawn="1" if draw_now else None))
+
+
+def _parse_id_list(raw: str | None) -> list[int]:
+    return [int(x) for x in (raw or "").split(",") if x.strip().isdigit()]
+
+
+def build_draw_lane_table(event: Event) -> list[dict]:
+    athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.lane_no, Athlete.lane_order, Athlete.start_order).all()
+    lanes: dict[int, list[Athlete]] = {}
+    for athlete in athletes:
+        lanes.setdefault(int(athlete.lane_no or 1), []).append(athlete)
+    return [{"lane_no": lane_no, "athletes": lanes[lane_no]} for lane_no in sorted(lanes)]
+
+
+@app.route("/events/draw", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def draw_center():
+    """ศูนย์ควบคุมการจับสลาก: เลือกหลายอีเวนต์แล้วสั่งจับพร้อมกันในครั้งเดียว"""
+    if request.method == "POST":
+        ids = sorted({int(i) for i in request.form.getlist("event_ids") if str(i).isdigit()})
+        if not ids:
+            flash("กรุณาเลือกอีเวนต์ที่จะจับสลาก", "warning")
+            return redirect(url_for("draw_center"))
+        force = request.form.get("force") == "yes" and current_user.role == "superadmin"
+        events = Event.query.filter(Event.id.in_(ids)).all()
+        started = event_ids_with_scores([e.id for e in events])
+        drawn, skipped = [], []
+        for event in events:
+            if event.id in started and not force:
+                skipped.append(event)
+                continue
+            draw_event_lots(event)
+            if event.id in started:
+                reset_event_bracket_no_commit(event)
+            drawn.append(event)
+        db.session.commit()  # ทุกอีเวนต์ถูกจับและบันทึกพร้อมกันใน transaction เดียว
+        for event in drawn:
+            invalidate_poll_cache(event.id)
+        drawn_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        if drawn:
+            flash(f"จับสลากพร้อมกัน {len(drawn)} อีเวนต์ เวลา {drawn_at}", "success")
+        if skipped:
+            flash("ข้ามอีเวนต์ที่เริ่มกรอกคะแนนแล้ว: " + ", ".join(e.name for e in skipped), "warning")
+        return redirect(url_for("draw_center", ids=",".join(str(e.id) for e in drawn) or None, drawn="1" if drawn else None))
+
+    focus_ids = _parse_id_list(request.args.get("ids"))
+    all_events = Event.query.order_by(Event.competition_date.desc(), Event.id.desc()).all()
+    counts = dict(
+        db.session.query(Athlete.event_id, func.count(Athlete.id)).group_by(Athlete.event_id).all()
+    )
+    started = event_ids_with_scores([e.id for e in all_events])
+    dates = sorted({e.competition_date for e in all_events}, reverse=True)
+    results = []
+    if focus_ids:
+        by_id = {e.id: e for e in all_events}
+        results = [
+            {"event": by_id[i], "lanes": build_draw_lane_table(by_id[i])}
+            for i in focus_ids if i in by_id
+        ]
+    return render_template(
+        "draw_center.html",
+        events=all_events,
+        counts=counts,
+        started=started,
+        dates=dates,
+        focus_ids=set(focus_ids),
+        results=results,
+        just_drawn=request.args.get("drawn") == "1",
+    )
+
+
+def reset_event_bracket_no_commit(event: Event) -> None:
+    BracketMatch.query.filter_by(event_id=event.id).delete()
 
 
 
@@ -2772,7 +3534,7 @@ def event_overview(event_id: int):
     event = Event.query.get_or_404(event_id)
     if is_court_user() and not court_can_access_event(event):
         abort(403)
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
     if round_no == 2 and event.has_round_two:
         sync_round_two_candidates(event)
     if round_no == 2 and event.has_round_two:
@@ -2815,12 +3577,74 @@ def event_overview(event_id: int):
     )
 
 
+def court_queue_rows(event: Event, round_no: int, court_no: int) -> list[dict]:
+    """นักกีฬาของสนามหนึ่งในรอบที่เลือก เรียงตามลำดับยิงในสนาม"""
+    if round_no == 2 and event.has_round_two:
+        sync_round_two_candidates(event)
+        source = [r for r in build_round_two_overview_rows(event) if not r.get("is_round2_direct_placeholder")]
+    else:
+        source = build_round_ranking(event, 1)
+        round_no = 1
+    rows = []
+    for row in source:
+        lane = row.get("display_lane_no", row["athlete"].lane_no)
+        if lane != court_no:
+            continue
+        athlete = row["athlete"]
+        order = row.get("display_lane_order", athlete.lane_order)
+        rows.append({
+            "athlete": athlete,
+            "order": order if isinstance(order, int) else 999,
+            "status": athlete_round_status(athlete, round_no),
+            "approved": athlete_round_is_approved(athlete, round_no),
+            "total": row.get("total", 0),
+        })
+    rows.sort(key=lambda r: (r["order"], r["athlete"].start_order or 0, r["athlete"].id))
+    next_row = next((r for r in rows if r["status"] == "active"), None) or next((r for r in rows if r["status"] == "waiting"), None)
+    for r in rows:
+        r["is_next"] = r is next_row
+    return rows
+
+
+@app.route("/events/<int:event_id>/court")
+@login_required
+@role_required("admin", "superadmin", "court")
+def court_queue(event_id: int):
+    """หน้าคิวของเจ้าหน้าที่สนาม: เห็นเฉพาะนักกีฬาในสนามตัวเอง ตามลำดับยิง พร้อมปุ่มเปิด Scorecard"""
+    event = Event.query.get_or_404(event_id)
+    if is_court_user() and not court_can_access_event(event):
+        abort(403)
+    round_no = request.args.get("round", 1, type=int) or 1
+    if round_no not in (1, 2) or (round_no == 2 and not event.has_round_two):
+        round_no = 1
+    lane_count = max(event.lane_count or 1, 1)
+    if is_court_user():
+        court_no = current_user.court_no
+    else:
+        court_no = request.args.get("court", 1, type=int) or 1
+        court_no = min(max(court_no, 1), lane_count)
+    rows = court_queue_rows(event, round_no, court_no)
+    done = sum(1 for r in rows if r["status"] == "finished")
+    return render_template(
+        "court_queue.html",
+        event=event,
+        round_no=round_no,
+        court_no=court_no,
+        lane_count=lane_count,
+        rows=rows,
+        done=done,
+        theme=event_theme(event.category),
+        work_page=True,
+    )
+
+
 @app.route("/events/<int:event_id>/overview-data")
+@shared_poll_cache
 def overview_data(event_id: int):
     event = Event.query.get_or_404(event_id)
     if is_court_user() and not court_can_access_event(event):
         return jsonify({"error": "forbidden"}), 403
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
     if round_no == 2 and event.has_round_two:
         sync_round_two_candidates(event)
     if round_no == 2 and event.has_round_two:
@@ -2905,12 +3729,13 @@ def overview_data(event_id: int):
 
 
 @app.route("/events/<int:event_id>/overview-stats")
+@shared_poll_cache
 def overview_stats(event_id: int):
     """สถิติ 5/3 สำหรับเปิดดูประกอบการจัดลำดับ โดยไม่ทำให้ตาราง Overview หลักรก"""
     event = Event.query.get_or_404(event_id)
     if is_court_user() and not court_can_access_event(event):
         return jsonify({"error": "forbidden"}), 403
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
 
     if round_no == 2 and event.has_round_two:
         rows = [r for r in build_round_two_overview_rows(event) if not r.get("is_round2_direct_placeholder")]
@@ -2947,15 +3772,36 @@ def overview_stats(event_id: int):
 @role_required("admin", "superadmin", "court")
 def autosave_scorecard(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
-    payload = request.get_json() or {}
-    round_no = int(payload.get("round_no", 1))
+    payload = request.get_json(silent=True) or {}
+    try:
+        round_no = int(payload.get("round_no", 1))
+        station_no = int(payload.get("station_no", 1))
+        distance_m = int(payload.get("distance_m", 6))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "ข้อมูลรอบ/สถานี/ระยะไม่ถูกต้อง"}), 400
+    if round_no not in ALL_SCORECARD_ROUNDS or station_no not in STATIONS or distance_m not in DISTANCES:
+        return jsonify({"ok": False, "message": "ข้อมูลรอบ/สถานี/ระยะไม่ถูกต้อง"}), 400
     if not court_can_access_athlete(athlete, round_no):
         return jsonify({"ok": False, "message": f"บัญชีนี้คีย์ได้เฉพาะสนาม {current_user.court_no}"}), 403
-    station_no = int(payload.get("station_no", 1))
-    distance_m = int(payload.get("distance_m", 6))
+    got_lock, lock_holder = acquire_scorecard_lock(athlete.id, round_no, str(payload.get("page_token", "")))
+    if not got_lock:
+        return jsonify({
+            "ok": False,
+            "locked_by": lock_holder,
+            "message": f"ใบนี้กำลังถูกคีย์โดย {lock_holder} กด “รับช่วงคีย์ต่อ” ถ้าต้องการคีย์แทน",
+        }), 423
     score_value = str(payload.get("score", "")).strip()
     red = bool(payload.get("red", False))
     played = bool(payload.get("played", False))
+    if score_value != "":
+        try:
+            parsed_score = int(score_value)
+        except ValueError:
+            return jsonify({"ok": False, "message": "คะแนนต้องเป็นตัวเลข"}), 400
+        allowed = ALLOWED_SCORES_BY_STATION[station_no]
+        if parsed_score not in allowed:
+            allowed_text = " / ".join(str(v) for v in sorted(allowed, reverse=True))
+            return jsonify({"ok": False, "message": f"สถานี {station_no} ให้คะแนนได้เฉพาะ {allowed_text}"}), 400
     ensure_round_entries(athlete.id, round_no)
     signature = ensure_signature(athlete.id, round_no)
     if not signature.started_at:
@@ -2964,7 +3810,7 @@ def autosave_scorecard(athlete_id: int):
         athlete.status = "active"
     entry = ScoreEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no, station_no=station_no, distance_m=distance_m).first()
     old_state = (entry.score, bool(entry.is_red_card), bool(entry.is_scored)) if entry else (0, False, False)
-    requested_value = max(0, min(5, 0 if score_value == "" else int(score_value)))
+    requested_value = 0 if score_value == "" else int(score_value)
     requested_state = (0 if red else requested_value, red, bool(played or red))
     is_change = old_state != requested_state
     already_signed = bool(signature.finished_at)
@@ -3059,6 +3905,34 @@ def autosave_scorecard(athlete_id: int):
     })
 
 
+@app.route("/api/scorecard/<int:athlete_id>/lock", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin", "court")
+def scorecard_lock_api(athlete_id: int):
+    athlete = Athlete.query.get_or_404(athlete_id)
+    payload = request.get_json(silent=True) or request.form
+    try:
+        round_no = int(payload.get("round_no", 1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "รอบไม่ถูกต้อง"}), 400
+    if not court_can_access_athlete(athlete, round_no):
+        return jsonify({"ok": False, "message": "ไม่มีสิทธิ์สนามนี้"}), 403
+    page_token = str(payload.get("page_token", ""))
+    if str(payload.get("action", "")) == "release":
+        release_scorecard_lock(athlete.id, round_no, page_token)
+        return jsonify({"ok": True, "released": True})
+    if str(payload.get("action", "")) == "check":
+        # เปิดหน้าดูเฉย ๆ ไม่ยึดล็อก: บอกแค่ว่ามีเครื่องอื่นกำลังคีย์อยู่หรือไม่
+        from datetime import timedelta
+        lock = ScorecardLock.query.filter_by(athlete_id=athlete.id, round_no=round_no).first()
+        busy = bool(lock and lock.page_token != page_token and lock.heartbeat_at
+                    and datetime.utcnow() - lock.heartbeat_at < timedelta(seconds=SCORECARD_LOCK_TTL_SECONDS))
+        return jsonify({"ok": not busy, "locked_by": lock.username if busy else None})
+    take_over = str(payload.get("take_over", "")).lower() in {"1", "true", "yes"}
+    got_lock, holder = acquire_scorecard_lock(athlete.id, round_no, page_token, take_over=take_over)
+    return jsonify({"ok": got_lock, "locked_by": holder})
+
+
 @app.route("/athletes/<int:athlete_id>/approve-score", methods=["POST"])
 @login_required
 @role_required("superadmin")
@@ -3104,11 +3978,11 @@ def approve_score(athlete_id: int):
 def scorecard(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
     event = athlete.event
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
     if not court_can_access_athlete(athlete, round_no):
         flash(f"บัญชี {court_public_id(current_user)} ใช้งานได้เฉพาะอีเวนต์ที่ได้รับมอบหมายและสนาม {current_user.court_no}", "warning")
         if is_court_user():
-            return redirect(url_for("event_overview", event_id=current_user.court_event_id, round=1))
+            return redirect(url_for("court_queue", event_id=current_user.court_event_id, round=1))
         return redirect(url_for("event_overview", event_id=event.id, round=round_no))
     if round_no == 2 and not is_round_two_candidate(event, athlete):
         flash("นักกีฬาคนนี้ไม่มีสิทธิ์ตีรอบ 2", "warning")
@@ -3156,7 +4030,10 @@ def scorecard(athlete_id: int):
         # การข้ามลายเซ็นใช้เพื่อ “จบ/ส่งผล” เท่านั้น ไม่ถือว่า APPROVED
         # APPROVED อัตโนมัติเกิดเฉพาะเมื่อมีลายเซ็นจริงครบ 3 ฝ่าย
         # หรือ Superadmin กด Approve จากหน้า Overview ภายหลัง
-        bypass_ok = current_user.role == "superadmin" or (current_user.role == "admin" and bypass_code == "7929")
+        expected_bypass = os.environ.get("SIGNATURE_BYPASS_CODE", "7929")
+        bypass_ok = current_user.role == "superadmin" or (
+            current_user.role == "admin" and bool(expected_bypass) and bypass_code == expected_bypass
+        )
         signed_ok = all([
             bool(signature.recorder_signature),
             bool(signature.referee_signature),
@@ -3202,6 +4079,8 @@ def scorecard(athlete_id: int):
                 return redirect(url_for("bracket", event_id=event.id))
 
             flash("จบการตีเรียบร้อย", "success")
+            if is_court_user() and round_no in (1, 2):
+                return redirect(url_for("court_queue", event_id=event.id, round=round_no))
             return redirect(url_for("event_overview", event_id=event.id, round=round_no))
 
         flash("ต้องลงชื่ออย่างใดอย่างหนึ่ง (พิมพ์ชื่อหรือเขียน) ให้ครบทั้ง 3 ฝ่าย หรือใช้สิทธิ์ข้าม", "danger")
@@ -3301,11 +4180,11 @@ def scorecard(athlete_id: int):
 @role_required("admin", "superadmin", "court")
 def score_history(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
     if not court_can_access_athlete(athlete, round_no):
         flash("ไม่มีสิทธิ์ดูประวัติคะแนนของอีเวนต์หรือสนามอื่น", "warning")
         if is_court_user():
-            return redirect(url_for("event_overview", event_id=current_user.court_event_id, round=1))
+            return redirect(url_for("court_queue", event_id=current_user.court_event_id, round=1))
         return redirect(url_for("index"))
     logs = ScoreEditLog.query.filter_by(athlete_id=athlete.id, round_no=round_no).order_by(ScoreEditLog.edited_at.desc()).all()
     return render_template("score_history.html", athlete=athlete, event=athlete.event, round_no=round_no, logs=logs)
@@ -3361,7 +4240,7 @@ def scorecards_print_select(event_id: int):
 @role_required("admin", "superadmin")
 def scorecards_print_bulk(event_id: int):
     event = Event.query.get_or_404(event_id)
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
 
     ids_text = request.args.get("ids", "").strip()
     selected_ids = []
@@ -3394,7 +4273,7 @@ def scorecards_print_bulk(event_id: int):
 def scorecard_print(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
     event = athlete.event
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
 
     if round_no == 2 and event.has_round_two and not is_round_two_candidate(event, athlete):
         flash("นักกีฬาคนนี้ไม่มีสิทธิ์ตีรอบ 2", "warning")
@@ -3417,7 +4296,7 @@ def scorecard_print(athlete_id: int):
 @role_required("admin", "superadmin")
 def activate_scorecard(athlete_id: int):
     athlete = Athlete.query.get_or_404(athlete_id)
-    round_no = int(request.args.get("round", 1))
+    round_no = request.args.get("round", 1, type=int) or 1
     signature = ensure_signature(athlete.id, round_no)
     if not signature.finished_at:
         if not signature.started_at:
@@ -3561,6 +4440,7 @@ def bracket_excel(event_id: int):
     return send_file(stream, as_attachment=True, download_name=f"event_{event.id}_bracket.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @app.route("/events/<int:event_id>/bracket_data")
+@shared_poll_cache
 def bracket_data(event_id: int):
     event = Event.query.get_or_404(event_id)
     preload_event_score_data(event)
@@ -3786,13 +4666,17 @@ def _ra_docx_add_logo_row(doc, static_filenames: list[str], width_inches: float 
         return None
 
 
-def _ra_split_name(full_name: str) -> tuple[str, str]:
+def _ra_split_name(full_name: str, mode: str = "first") -> tuple[str, str]:
+    """แยกชื่อ-นามสกุลตามรูปแบบที่ตั้งไว้ในหน้าตั้งค่า Results
+    first = คำแรกเป็นนามสกุล (แบบสากลในเล่มผล เช่น NGUYEN | THI HIEN)
+    last  = คำสุดท้ายเป็นนามสกุล (แบบไทย เช่น สมชาย | ใจดี -> ใจดี | สมชาย)
+    อย่างอื่น = ไม่แยก"""
     parts = [p for p in _ra_text(full_name).strip().split() if p]
-    if len(parts) >= 2:
+    if len(parts) < 2 or mode not in {"first", "last"}:
+        return "", " ".join(parts).upper()
+    if mode == "first":
         return parts[0].upper(), " ".join(parts[1:]).upper()
-    if parts:
-        return "", parts[0].upper()
-    return "", ""
+    return parts[-1].upper(), " ".join(parts[:-1]).upper()
 
 
 def _ra_umpire_rows(setting) -> list[dict]:
@@ -3914,11 +4798,12 @@ def build_results_approved_context(event: Event) -> dict:
             seen_country.add(key)
             entry_countries.append({"no": len(entry_countries) + 1, "country": country})
 
+    name_format = (getattr(setting, "name_format", None) or "single").strip().lower()
     name_rows = []
     qf1_rows = []
     qf1_detail_rows = []
     for athlete in athletes:
-        family, given = _ra_split_name(athlete.name)
+        family, given = _ra_split_name(athlete.name, name_format)
         name_rows.append({
             "no": athlete.start_order,
             "country": (athlete.affiliation or "").upper(),
@@ -4020,7 +4905,7 @@ def build_results_approved_context(event: Event) -> dict:
     medal_rows_out = []
     for r in medal_rows:
         athlete = r["athlete"]
-        family, given = _ra_split_name(athlete.name)
+        family, given = _ra_split_name(athlete.name, name_format)
         medal_rows_out.append({
             "medal": r["medal"],
             "athlete": athlete,
@@ -4029,9 +4914,15 @@ def build_results_approved_context(event: Event) -> dict:
             "given_name": given,
         })
 
+    # ชื่อนักกีฬาในระบบเก็บเป็นช่องเดียว จะแยก FAMILY / GIVEN ได้ก็ต่อเมื่อชื่อมีมากกว่า 1 คำ
+    # ถ้าทั้งอีเวนต์ไม่มีชื่อที่แยกได้ (เช่น ลงทะเบียนเป็นชื่อประเทศ/ชื่อเดียว) ให้ใช้คอลัมน์ NAME เดียว
+    # จะได้ไม่มีคอลัมน์ว่างเปล่าในเอกสารรับรองผล
+    use_split_names = name_format in {"first", "last"} and any(r.get("family_name") for r in name_rows)
+
     return {
         "event": event,
         "setting": setting,
+        "use_split_names": use_split_names,
         "competition_title": _ra_setting_text(setting, "competition_title", event.name).upper(),
         "host_line": _ra_setting_text(setting, "host_line", event.location).upper(),
         "date_line": _ra_setting_text(setting, "date_line", _ra_date_text(event)).upper(),
@@ -4128,135 +5019,435 @@ def _ra_docx_add_table(doc, headers, rows, align_left_cols: set[int] | None = No
     return table
 
 
-def make_results_approved_docx(event: Event) -> BytesIO:
-    from docx import Document
-    from docx.shared import Inches, Pt
+def _ra_has_any_score(rows: list[dict], key: str = "points") -> bool:
+    return any(int(r.get(key) or 0) > 0 for r in rows)
+
+
+def _ra_setup_section(section, landscape: bool = False):
+    """A4 ตามตัวอย่างเล่มผล: แนวตั้งขอบ 2 ซม. / แนวนอนขอบแคบลงให้ตารางรายสถานีพอดีหน้า"""
     from docx.enum.section import WD_ORIENT
+    from docx.shared import Cm
+    section.orientation = WD_ORIENT.LANDSCAPE if landscape else WD_ORIENT.PORTRAIT
+    section.page_width, section.page_height = (Cm(29.7), Cm(21.0)) if landscape else (Cm(21.0), Cm(29.7))
+    section.top_margin = Cm(1.3)
+    section.bottom_margin = Cm(1.3)
+    section.left_margin = Cm(1.2 if landscape else 2.0)
+    section.right_margin = Cm(1.2 if landscape else 2.0)
+    section.header_distance = Cm(0.6)
+    section.footer_distance = Cm(0.6)
+
+
+def _ra_add_page_number_field(paragraph):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    run = paragraph.add_run()
+    for tag, attr in (("w:fldChar", {"w:fldCharType": "begin"}), ("w:instrText", None), ("w:fldChar", {"w:fldCharType": "end"})):
+        el = OxmlElement(tag)
+        if attr:
+            for k, v in attr.items():
+                el.set(qn(k), v)
+        else:
+            el.set(qn("xml:space"), "preserve")
+            el.text = "PAGE"
+        run._r.append(el)
+    return run
+
+
+def _ra_setup_header_footer(doc, ctx):
+    """หัวกระดาษ (โลโก้ + ชื่องาน) และเลขหน้า "n | Page" ทุกหน้า ยกเว้นหน้าปก"""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Pt, RGBColor
+    section = doc.sections[0]
+    section.different_first_page_header_footer = True
+    header = section.header
+    logos = ctx.get("logos", {})
+    paths = [_ra_static_abs_path(logos.get(k)) for k in ("header_1", "header_2", "header_3", "header_4")]
+    paths = [p for p in paths if p]
+    p = header.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for idx, path in enumerate(paths):
+        try:
+            p.add_run().add_picture(path, height=Inches(0.42))
+            if idx != len(paths) - 1:
+                p.add_run("    ")
+        except Exception:
+            pass
+    title = header.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = title.add_run(ctx["competition_title"])
+    run.bold = True
+    run.font.size = Pt(10)
+    footer_p = section.footer.paragraphs[0]
+    footer_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    _ra_add_page_number_field(footer_p)
+    tail = footer_p.add_run(" | Page")
+    tail.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+    for r in footer_p.runs:
+        r.font.size = Pt(8)
+
+
+def _ra_docx_page_title(doc, lines: list[tuple[str, int]], page_break_before: bool = False):
+    first = True
+    for idx, (text, size) in enumerate(lines):
+        if text:
+            p = _ra_docx_add_title(doc, text, size, spacing_after=2 if idx < len(lines) - 1 else 10)
+            if first and page_break_before:
+                # ขึ้นหน้าใหม่ที่หัวข้อ แทนการแทรกย่อหน้าตัวแบ่งหน้า (กันหน้าว่างเมื่อหน้าก่อนเต็มพอดี)
+                p.paragraph_format.page_break_before = True
+            first = False
+
+
+def _ra_docx_approved_block(doc, text: str):
+    """บรรทัดลงนามรับรองท้ายหน้า (ให้กรรมการเซ็นจริงบนกระดาษ ไม่ใส่ภาพลายเซ็นอัตโนมัติ)"""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.paragraph_format.space_before = Pt(36)
+    p.paragraph_format.keep_together = True
+    run = p.add_run(text or "……………………………APPROVED")
+    run.bold = True
+    run.font.size = Pt(11)
+    return p
+
+
+def _ra_docx_fix_widths(table, widths_cm, cell_margin_cm: float | None = None):
+    """กำหนดความกว้างคอลัมน์ให้ทั้ง Word และ LibreOffice (ต้องตั้งทั้ง tblGrid, tblLayout และทุกเซลล์)"""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Cm
+    tbl = table._tbl
+    tbl_pr = tbl.tblPr
+    layout = tbl_pr.find(qn("w:tblLayout"))
+    if layout is None:
+        layout = OxmlElement("w:tblLayout")
+        tbl_pr.append(layout)
+    layout.set(qn("w:type"), "fixed")
+    tbl_w = tbl_pr.find(qn("w:tblW"))
+    if tbl_w is None:
+        tbl_w = OxmlElement("w:tblW")
+        tbl_pr.append(tbl_w)
+    tbl_w.set(qn("w:type"), "dxa")
+    tbl_w.set(qn("w:w"), str(int(sum(widths_cm) * 567)))
+    if cell_margin_cm is not None:
+        mar = tbl_pr.find(qn("w:tblCellMar"))
+        if mar is None:
+            mar = OxmlElement("w:tblCellMar")
+            tbl_pr.append(mar)
+        for side in ("left", "right"):
+            el = mar.find(qn(f"w:{side}"))
+            if el is None:
+                el = OxmlElement(f"w:{side}")
+                mar.append(el)
+            el.set(qn("w:w"), str(int(cell_margin_cm * 567)))
+            el.set(qn("w:type"), "dxa")
+    grid = tbl.tblGrid
+    for i, gc in enumerate(grid.findall(qn("w:gridCol"))):
+        if i < len(widths_cm):
+            gc.set(qn("w:w"), str(int(widths_cm[i] * 567)))
+    for row in table.rows:
+        for i, cell in enumerate(row.cells):
+            if i < len(widths_cm):
+                cell.width = Cm(widths_cm[i])
+
+
+def _ra_docx_table(doc, headers, rows, widths_cm=None, left_cols=None, font_size=10, header_fill="D9D9D9", row_height_cm=0.62):
+    """ตารางอ่านง่าย: ตัวอักษรไม่เล็กเกินไป หัวตารางพิมพ์ซ้ำเมื่อขึ้นหน้าใหม่ และแถวไม่ถูกตัดครึ่ง"""
+    from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Cm
+    left_cols = left_cols or set()
+    table = doc.add_table(rows=1, cols=len(headers))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.style = "Table Grid"
+    table.autofit = widths_cm is None
+
+    def mark_row(row, is_header=False):
+        tr_pr = row._tr.get_or_add_trPr()
+        cant = OxmlElement("w:cantSplit")
+        tr_pr.append(cant)
+        if is_header:
+            tbl_header = OxmlElement("w:tblHeader")
+            tr_pr.append(tbl_header)
+        row.height = Cm(row_height_cm)
+        row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+
+    hdr = table.rows[0]
+    mark_row(hdr, is_header=True)
+    for i, h in enumerate(headers):
+        _ra_docx_set_cell_text(hdr.cells[i], h, bold=True, size_pt=font_size)
+        _ra_docx_shade(hdr.cells[i], header_fill)
+        hdr.cells[i].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    for values in rows:
+        row = table.add_row()
+        mark_row(row)
+        for i, v in enumerate(values):
+            _ra_docx_set_cell_text(row.cells[i], v, align="left" if i in left_cols else "center", size_pt=font_size)
+            row.cells[i].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    if widths_cm:
+        _ra_docx_fix_widths(table, widths_cm)
+    return table
+
+
+def _ra_docx_station_detail_table(doc, ctx, detail_rows, round_label_cols):
+    """ตารางคะแนนละเอียดรายสถานี (แนวนอน): Atelier 1-5 x ระยะ 6/7/8/9 + Tot."""
+    from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Cm
+    lead = ["RANK", ctx["country_label"], "NAME"]
+    tail = [label for label, _ in round_label_cols]
+    ncols = len(lead) + len(STATIONS) * 5 + len(tail)
+    table = doc.add_table(rows=2, cols=ncols)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.style = "Table Grid"
+    table.autofit = False
+    _widths = [1.0, 2.6, 3.6] + [0.66] * (len(STATIONS) * 5) + [1.1] * len(tail)
+    _scale = min(1.0, 27.2 / sum(_widths))
+    _ra_docx_fix_widths(table, [w * _scale for w in _widths], cell_margin_cm=0.04)
+    top, sub = table.rows
+    for row in (top, sub):
+        tr_pr = row._tr.get_or_add_trPr()
+        tr_pr.append(OxmlElement("w:cantSplit"))
+        tr_pr.append(OxmlElement("w:tblHeader"))
+    for i, h in enumerate(lead):
+        cell = top.cells[i].merge(sub.cells[i])
+        _ra_docx_set_cell_text(cell, h, bold=True, size_pt=7)
+        _ra_docx_shade(cell)
+    col = len(lead)
+    for st in STATIONS:
+        merged = top.cells[col].merge(top.cells[col + 4])
+        _ra_docx_set_cell_text(merged, f"ATELIER {st}", bold=True, size_pt=7)
+        _ra_docx_shade(merged)
+        for j, d in enumerate([f"{m}m" for m in DISTANCES] + ["Tot."]):
+            _ra_docx_set_cell_text(sub.cells[col + j], d, bold=True, size_pt=7)
+            _ra_docx_shade(sub.cells[col + j], "EDEDED" if j < 4 else "D9D9D9")
+        col += 5
+    for i, h in enumerate(tail):
+        cell = top.cells[col + i].merge(sub.cells[col + i])
+        _ra_docx_set_cell_text(cell, h, bold=True, size_pt=7)
+        _ra_docx_shade(cell)
+    for r in detail_rows:
+        row = table.add_row()
+        row._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
+        values = [r.get("rank_display", ""), r["country"], r["name"], *r["distance_cells"], *[r.get(key, "") for _, key in round_label_cols]]
+        for i, v in enumerate(values):
+            is_station_total = len(lead) <= i < len(lead) + len(STATIONS) * 5 and (i - len(lead)) % 5 == 4
+            _ra_docx_set_cell_text(row.cells[i], v, bold=is_station_total or i >= ncols - len(tail), align="left" if i in (1, 2) else "center", size_pt=7)
+            row.cells[i].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            if is_station_total:
+                _ra_docx_shade(row.cells[i], "F2F2F2")
+    # A4 แนวนอน พื้นที่พิมพ์ ~27.3 ซม.
+    _ra_docx_fix_widths(table, [w * _scale for w in _widths], cell_margin_cm=0.04)
+    return table
+
+
+def _ra_docx_match_table(doc, ctx, match_rows, with_rank=True):
+    """หนึ่งตารางต่อหนึ่งแมตช์ แบบในเล่มผลตัวอย่าง: MATCH | LANE | RANK | COUNTRY | NAME | POINTS"""
+    from docx.shared import Pt
+    for r in match_rows:
+        headers = ["MATCH", "LANE"] + (["RANK"] if with_rank else []) + [ctx["country_label"], "NAME", "POINTS"]
+        rows = []
+        for side in ("a", "b"):
+            rows.append([r["match_no"], r["lane"]] + ([r[f"rank_{side}"]] if with_rank else []) + [r[f"country_{side}"], r[f"name_{side}"], r[f"points_{side}"]])
+        widths = [2.0, 1.6] + ([1.6] if with_rank else []) + [3.6, 5.0, 1.9]
+        table = _ra_docx_table(doc, headers, rows, widths_cm=widths, left_cols={len(headers) - 3, len(headers) - 2}, font_size=10)
+        # ช่อง MATCH/LANE รวมสองแถวเป็นช่องเดียว และทำตัวหนาฝั่งผู้ชนะ
+        for c in (0, 1):
+            merged = table.rows[1].cells[c].merge(table.rows[2].cells[c])
+            _ra_docx_set_cell_text(merged, rows[0][c], size_pt=10)
+        winner_side = "a" if r.get("winner_id") and r["athlete_a"] and r["athlete_a"].id == r["winner_id"] else ("b" if r.get("winner_id") else None)
+        if winner_side:
+            win_row = table.rows[1 if winner_side == "a" else 2]
+            for c in range(2, len(headers)):
+                for run in win_row.cells[c].paragraphs[0].runs:
+                    run.bold = True
+        spacer = doc.add_paragraph()
+        spacer.paragraph_format.space_after = Pt(6)
+
+
+def make_results_approved_docx(event: Event) -> BytesIO:
+    """เล่มผล Results Approved ของอีเวนต์ Shooting
+
+    ใส่เฉพาะส่วนที่มีข้อมูลจริงในระบบ: ส่วนไหนยังไม่แข่ง/ยังไม่มีผล จะไม่ถูกพิมพ์เป็นหน้าว่าง
+    """
+    from docx import Document
+    from docx.enum.text import WD_BREAK
+    from docx.shared import Pt, Inches
 
     ctx = build_results_approved_context(event)
+    setting = ctx["setting"]
     doc = Document()
-    section = doc.sections[0]
-    section.top_margin = Inches(0.45)
-    section.bottom_margin = Inches(0.45)
-    section.left_margin = Inches(0.45)
-    section.right_margin = Inches(0.45)
-
+    _ra_setup_section(doc.sections[0])
     style = doc.styles["Normal"]
     style.font.name = "Times New Roman"
     style.font.size = Pt(10)
-
+    style.paragraph_format.space_after = Pt(0)
+    _ra_setup_header_footer(doc, ctx)
     logos = ctx.get("logos", {})
+    event_title = ctx["event_title"]
+    date_line = ctx["date_line"]
+    approved = ctx["approved_text"]
+    pending_break = [False]
 
-    # Cover
-    _ra_docx_add_center_image(doc, logos.get("cover_main"), width_inches=1.35)
-    _ra_docx_add_title(doc, "SEA GAMES", 20)
-    _ra_docx_add_title(doc, "THAILAND", 20)
-    _ra_docx_add_title(doc, ctx["date_line"], 12)
-    _ra_docx_add_title(doc, ctx["host_line"], 12)
-    doc.add_paragraph()
+    def new_page(landscape=False):
+        """ขึ้นหน้าใหม่: ถ้าแนวกระดาษเปลี่ยนใช้ section break, ถ้าไม่เปลี่ยนให้หัวข้อถัดไปขึ้นหน้าใหม่เอง"""
+        from docx.enum.section import WD_ORIENT, WD_SECTION
+        current_landscape = doc.sections[-1].orientation == WD_ORIENT.LANDSCAPE
+        if landscape != current_landscape:
+            new_section = doc.add_section(WD_SECTION.NEW_PAGE)
+            new_section.different_first_page_header_footer = False
+            _ra_setup_section(new_section, landscape)
+            pending_break[0] = False
+        else:
+            pending_break[0] = True
+
+    def page_title(lines):
+        _ra_docx_page_title(doc, lines, page_break_before=pending_break[0])
+        pending_break[0] = False
+
+    def _chunks(rows, per_page):
+        """แบ่งแถวเป็นหน้า ๆ ให้จำนวนแถวใกล้เคียงกัน ไม่ให้เหลือเศษไม่กี่แถวไปขึ้นหน้าใหม่โดด ๆ"""
+        if len(rows) <= per_page:
+            return [rows]
+        pages = -(-len(rows) // per_page)
+        size = -(-len(rows) // pages)
+        return [rows[i:i + size] for i in range(0, len(rows), size)]
+
+    def paged_table(title_lines, headers, rows, per_page=34, landscape=False, detail_cols=None, **kw):
+        """พิมพ์ตารางยาวแบบแบ่งหน้า: ทุกหน้ามีหัวข้อ หัวตาราง และบรรทัดรับรองครบ"""
+        parts = _chunks(rows, per_page)
+        for idx, part in enumerate(parts):
+            if idx:
+                new_page(landscape=landscape)
+            lines = list(title_lines)
+            if len(parts) > 1:
+                lines.append((f"(PAGE {idx + 1} OF {len(parts)})", 9))
+            page_title(lines)
+            if detail_cols is not None:
+                _ra_docx_station_detail_table(doc, ctx, part, detail_cols)
+            else:
+                _ra_docx_table(doc, headers, part, **kw)
+            _ra_docx_approved_block(doc, approved)
+
+    # ---------- ปก (ใช้ข้อความจากหน้าตั้งค่า ไม่ฝังคำว่า SEA GAMES ตายตัว) ----------
+    doc.add_paragraph().paragraph_format.space_after = Pt(40)
+    _ra_docx_add_center_image(doc, logos.get("cover_main"), width_inches=1.6)
+    _ra_docx_page_title(doc, [(ctx["competition_title"], 20), (date_line, 12), (ctx["host_line"], 12)])
+    doc.add_paragraph().paragraph_format.space_after = Pt(24)
     _ra_docx_add_title(doc, "PÉTANQUE", 26)
-    _ra_docx_add_logo_row(doc, [logos.get("cover_bottom_1"), logos.get("cover_bottom_2"), logos.get("cover_bottom_3")], width_inches=0.75)
-    doc.add_paragraph()
+    _ra_docx_add_title(doc, event_title, 14)
+    doc.add_paragraph().paragraph_format.space_after = Pt(12)
+    _ra_docx_add_logo_row(doc, [logos.get("cover_bottom_1"), logos.get("cover_bottom_2"), logos.get("cover_bottom_3")], width_inches=0.8)
+    doc.add_paragraph().paragraph_format.space_after = Pt(24)
     _ra_docx_add_title(doc, "RESULTS", 24)
-    _ra_docx_add_title(doc, "APPROVED", 10)
-    doc.add_page_break()
+    _ra_docx_add_title(doc, "APPROVED", 11)
 
-    # Officials
-    if getattr(ctx["setting"], "show_official_pages", True):
-        _ra_docx_add_logo_row(doc, [logos.get("header_1"), logos.get("header_2"), logos.get("header_3"), logos.get("header_4")], width_inches=0.62)
-        _ra_docx_add_title(doc, ctx["competition_title"], 14)
-        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "president_title", "PRESIDENT"), 14)
-        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "president_name", ""), 12)
-        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "technical_title", "TECHNICAL DELEGATE"), 14)
-        _ra_docx_add_title(doc, _ra_setting_text(ctx["setting"], "technical_name", ""), 12)
-        _ra_docx_add_title(doc, "UMPIRE", 18)
-        ump_rows = [[r["no"], r["name"], r["federation"]] for r in ctx["umpire_rows"]]
-        if ump_rows:
-            _ra_docx_add_table(doc, ["NO", "FAMILY NAME - GIVEN NAME", "FEDERATION"], ump_rows, align_left_cols={1}, font_size=9)
-        _ra_docx_add_approved(doc, ctx["approved_text"])
-        doc.add_page_break()
+    # ---------- เจ้าหน้าที่ (เฉพาะเมื่อกรอกข้อมูลไว้จริง) ----------
+    president = _ra_setting_text(setting, "president_name", "")
+    technical = _ra_setting_text(setting, "technical_name", "")
+    if getattr(setting, "show_official_pages", True) and (president or technical or ctx["umpire_rows"]):
+        new_page()
+        if president:
+            page_title([(_ra_setting_text(setting, "president_title", "").upper(), 12), (president.upper(), 12)])
+        if technical:
+            page_title([(_ra_setting_text(setting, "technical_title", "").upper(), 12), (technical.upper(), 12)])
+        if ctx["umpire_rows"]:
+            page_title([("UMPIRE", 16)])
+            _ra_docx_table(doc, ["NO", "FAMILY NAME - GIVEN NAME", "FEDERATION"],
+                           [[r["no"], r["name"], r["federation"]] for r in ctx["umpire_rows"]],
+                           widths_cm=[1.4, 9.0, 4.4], left_cols={1}, font_size=10)
+        _ra_docx_approved_block(doc, approved)
 
-    # Event cover
-    _ra_docx_add_title(doc, f"1. {ctx['event_title']}", 20)
-    _ra_docx_add_title(doc, ctx["date_line"], 12)
-    _ra_docx_add_table(doc, ["NO.", ctx["country_label"]], [[r["no"], r["country"]] for r in ctx["entry_countries"]], align_left_cols={1}, font_size=10)
-    _ra_docx_add_approved(doc, ctx["approved_text"])
-    doc.add_page_break()
+    if not ctx["athletes"]:
+        out = BytesIO(); doc.save(out); out.seek(0)
+        return out
 
-    # Name list
-    _ra_docx_add_title(doc, "NAME LISTS", 20)
-    _ra_docx_add_title(doc, ctx["event_title"], 14)
-    name_rows = [[r["no"], r["country"], r["family_name"], r["given_name"]] for r in ctx["name_rows"]]
-    _ra_docx_add_table(doc, ["NO.", ctx["country_label"], "FAMILY NAME", "GIVEN NAME"], name_rows, align_left_cols={1,2,3}, font_size=9)
-    _ra_docx_add_approved(doc, ctx["approved_text"])
-    doc.add_page_break()
+    # ---------- ประเทศที่ส่งเข้าแข่ง ----------
+    new_page()
+    paged_table([(event_title, 16), (date_line, 11)], ["NO.", ctx["country_label"]],
+                [[r["no"], r["country"]] for r in ctx["entry_countries"]],
+                per_page=32, widths_cm=[2.0, 8.0], font_size=11)
 
-    # QF1 summary
-    _ra_docx_add_title(doc, ctx["event_title"], 16)
-    _ra_docx_add_title(doc, "QUALIFICATION ROUND 1", 16)
-    qf1_rows = [[r["no"], r["country"], r["lane"], r["points"], r["rank"]] for r in ctx["qf1_rows"]]
-    _ra_docx_add_table(doc, ["NO.", ctx["country_label"], "LANE", "POINTS", "RANK\n(QF1)"], qf1_rows, align_left_cols={1}, font_size=9)
-    _ra_docx_add_approved(doc, ctx["approved_text"])
-    doc.add_page_break()
+    # ---------- รายชื่อ (ชื่อเต็มตามที่ลงทะเบียน ไม่ตัดแยกนามสกุลเอง เพราะชื่อไทย/ต่างชาติเรียงไม่เหมือนกัน) ----------
+    new_page()
+    if ctx["use_split_names"]:
+        paged_table([("NAME LISTS", 16), (event_title, 11)], ["NO.", ctx["country_label"], "FAMILY NAME", "GIVEN NAME"],
+                    [[r["no"], r["country"], r["family_name"], r["given_name"]] for r in ctx["name_rows"]],
+                    per_page=34, widths_cm=[1.4, 4.2, 5.2, 5.2], left_cols={1, 2, 3}, font_size=10)
+    else:
+        paged_table([("NAME LISTS", 16), (event_title, 11)], ["NO.", ctx["country_label"], "NAME"],
+                    [[r["no"], r["country"], r["name"]] for r in ctx["name_rows"]],
+                    per_page=34, widths_cm=[1.6, 5.0, 9.0], left_cols={1, 2}, font_size=10)
 
-    # QF1 detail landscape
-    section = doc.add_section()
-    section.orientation = WD_ORIENT.LANDSCAPE
-    section.page_width, section.page_height = section.page_height, section.page_width
-    section.top_margin = Inches(0.3)
-    section.bottom_margin = Inches(0.3)
-    section.left_margin = Inches(0.25)
-    section.right_margin = Inches(0.25)
-    _ra_docx_add_title(doc, f"{ctx['event_title']} - Qualification Shooting", 16)
-    headers = ["Rank", ctx["country_label"], "Name"]
-    for s in STATIONS:
-        headers.extend([f"A{s} 6M", "7M", "8M", "9M", "Tot."])
-    headers += ["Total", "Rank"]
-    rows = []
-    for r in ctx["qf1_detail_rows"]:
-        rows.append([r["rank"], r["country"], r["name"], *r["distance_cells"], r["total"], r["rank"]])
-    _ra_docx_add_table(doc, headers, rows, align_left_cols={1,2}, font_size=6)
-    _ra_docx_add_approved(doc, ctx["approved_text"])
-    doc.add_page_break()
+    # ---------- รอบคัดเลือก 1 (เฉพาะเมื่อมีคะแนนแล้ว) ----------
+    if _ra_has_any_score(ctx["qf1_rows"]):
+        new_page()
+        paged_table([(event_title, 13), ("QUALIFICATION ROUND 1", 13), (date_line, 10)],
+                    ["NO.", ctx["country_label"], "NAME", "LANE", "POINTS", "RANK\n(QF1)"],
+                    [[r["no"], r["country"], r["name"], r["lane"], r["points"], r["rank"]] for r in ctx["qf1_rows"]],
+                    per_page=34, widths_cm=[1.3, 3.6, 6.0, 1.4, 1.8, 1.9], left_cols={1, 2}, font_size=10)
 
-    if ctx["qf2_rows"]:
-        section = doc.add_section()
-        section.orientation = WD_ORIENT.PORTRAIT
-        section.page_width, section.page_height = section.page_height, section.page_width
-        section.top_margin = Inches(0.45)
-        section.bottom_margin = Inches(0.45)
-        section.left_margin = Inches(0.45)
-        section.right_margin = Inches(0.45)
-        _ra_docx_add_title(doc, ctx["event_title"], 16)
-        _ra_docx_add_title(doc, "QUALIFICATION ROUND 2", 16)
-        qf2_rows = [[r["qf1_rank"], r["country"], r["lane"], r["r1"], r["r2"], r["total"], r["qf2_rank"]] for r in ctx["qf2_rows"]]
-        _ra_docx_add_table(doc, ["RANK\n(QF1)", ctx["country_label"], "LANE", "R1", "R2", "TOTAL", "RANK\n(QF2)"], qf2_rows, align_left_cols={1}, font_size=9)
-        _ra_docx_add_approved(doc, ctx["approved_text"])
-        doc.add_page_break()
+        detail = sorted(ctx["qf1_detail_rows"], key=lambda r: (int(r["rank"]) if str(r["rank"]).isdigit() else 9999))
+        for r in detail:
+            r["rank_display"] = r["rank"]
+        new_page(landscape=True)
+        paged_table([(f"{event_title} · QUALIFICATION SHOOTING ROUND 1", 12)], None, detail,
+                    per_page=36, landscape=True, detail_cols=[("TOTAL", "total")])
 
-    section = doc.add_section()
-    section.orientation = WD_ORIENT.PORTRAIT
-    section.page_width, section.page_height = section.page_height, section.page_width
-    section.top_margin = Inches(0.45)
-    section.bottom_margin = Inches(0.45)
-    section.left_margin = Inches(0.45)
-    section.right_margin = Inches(0.45)
-    _ra_docx_add_title(doc, "SEMIFINAL ROUND / FINAL ROUND", 18)
-    ko_rows = []
-    for r in ctx["semifinal_rows"] + ctx["final_rows"]:
-        ko_rows.append([r["round_label"], r["match_no"], r["lane"], r["rank_a"], r["country_a"], r["points_a"]])
-        ko_rows.append(["", "", "", r["rank_b"], r["country_b"], r["points_b"]])
-    if ko_rows:
-        _ra_docx_add_table(doc, ["ROUND", "MATCH", "LANE", "RANK", ctx["country_label"], "POINTS"], ko_rows, align_left_cols={4}, font_size=9)
-    _ra_docx_add_approved(doc, ctx["approved_text"])
-    doc.add_page_break()
+    # ---------- รอบคัดเลือก 2 ----------
+    if ctx["qf2_rows"] and _ra_has_any_score(ctx["qf2_rows"], "r2"):
+        new_page()
+        paged_table([(event_title, 13), ("QUALIFICATION ROUND 2", 13), (date_line, 10)],
+                    ["RANK\n(QF1)", ctx["country_label"], "NAME", "LANE", "R1", "R2", "TOTAL", "RANK\n(QF2)"],
+                    [[r["qf1_rank"], r["country"], r["name"], r["lane"], r["r1"], r["r2"], r["total"], r["qf2_rank"]] for r in ctx["qf2_rows"]],
+                    per_page=34, widths_cm=[1.7, 3.0, 4.4, 1.4, 1.1, 1.1, 1.7, 1.7], left_cols={1, 2}, font_size=10)
 
-    _ra_docx_add_title(doc, "RANKING RESULT", 20)
-    _ra_docx_add_title(doc, ctx["event_title"], 16)
-    medal_rows = [[r["medal"], r["country"], r["family_name"], r["given_name"]] for r in ctx["medal_rows"]]
-    _ra_docx_add_table(doc, ["MEDAL", ctx["country_label"], "FAMILY NAME", "GIVEN NAME"], medal_rows, align_left_cols={1,2,3}, font_size=10)
-    _ra_docx_add_approved(doc, ctx["approved_text"])
+        for r in ctx["qf2_detail_rows"]:
+            r["rank_display"] = r["qf2_rank"]
+        detail2 = sorted(ctx["qf2_detail_rows"], key=lambda r: (int(r["qf2_rank"]) if str(r["qf2_rank"]).isdigit() else 9999))
+        new_page(landscape=True)
+        paged_table([(f"{event_title} · QUALIFICATION SHOOTING ROUND 2", 12)], None, detail2,
+                    per_page=36, landscape=True, detail_cols=[("R1", "r1"), ("R2", "r2"), ("TOTAL", "total")])
+
+    # ---------- รอบน็อกเอาต์: เฉพาะแมตช์ที่มีผู้เล่นครบทั้งสองฝั่ง ----------
+    # เฉพาะแมตช์ที่แข่งแล้วจริง: มีผู้เล่นครบสองฝั่ง และมีผู้ชนะหรือมีคะแนนแล้ว (ไม่พิมพ์คู่ที่ยังไม่ได้ยิง)
+    def _played(r):
+        pts = [p for p in (r["points_a"], r["points_b"]) if isinstance(p, int)]
+        return bool(r.get("winner_id")) or any(p > 0 for p in pts)
+    ko_real = [r for r in ctx["bracket_rows"] if r["athlete_a"] and r["athlete_b"] and _played(r)]
+    round_titles = [("R16", "ROUND OF 16"), ("QF", "QUARTERFINAL ROUND"), ("SF", "SEMIFINAL ROUND"), ("F", "FINAL ROUND")]
+    ko_by_round = [(title, [r for r in ko_real if r["round_name"] == key]) for key, title in round_titles]
+    ko_by_round = [(t, rows) for t, rows in ko_by_round if rows]
+    if ko_by_round:
+        new_page()
+        page_title([(event_title, 13), (date_line, 10)])
+        for title, rows in ko_by_round:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_after = Pt(4)
+            p.paragraph_format.keep_with_next = True
+            run = p.add_run(title)
+            run.bold = True
+            run.font.size = Pt(12)
+            _ra_docx_match_table(doc, ctx, rows, with_rank=title != "FINAL ROUND")
+        _ra_docx_approved_block(doc, approved)
+
+    # ---------- ผลอันดับ/เหรียญ: เฉพาะเมื่อรอบชิงมีผู้ชนะแล้วจริง (ไม่เดาจากอันดับรอบคัดเลือก) ----------
+    final_done = any(r["round_name"] == "F" and r.get("winner_id") for r in ctx["bracket_rows"])
+    if final_done and ctx["medal_rows"]:
+        new_page()
+        page_title([("RANKING RESULT", 16), (event_title, 13), (date_line, 10)])
+        if ctx["use_split_names"]:
+            _ra_docx_table(doc, ["MEDAL", ctx["country_label"], "FAMILY NAME", "GIVEN NAME"],
+                           [[r["medal"], r["country"], r["family_name"], r["given_name"]] for r in ctx["medal_rows"]],
+                           widths_cm=[2.8, 4.0, 4.4, 4.4], left_cols={1, 2, 3}, font_size=11, row_height_cm=1.1)
+        else:
+            _ra_docx_table(doc, ["MEDAL", ctx["country_label"], "NAME"],
+                           [[r["medal"], r["country"], (r["athlete"].name or "").upper()] for r in ctx["medal_rows"]],
+                           widths_cm=[3.0, 4.6, 8.0], left_cols={1, 2}, font_size=11, row_height_cm=1.1)
+        _ra_docx_approved_block(doc, approved)
 
     out = BytesIO()
     doc.save(out)
@@ -4271,6 +5462,8 @@ def results_approved_settings(event_id: int):
     event = Event.query.get_or_404(event_id)
     setting = get_results_approved_setting(event, create=True)
     if request.method == "POST":
+        name_format = request.form.get("name_format", "single").strip().lower()
+        setting.name_format = name_format if name_format in {"single", "first", "last"} else "single"
         setting.competition_title = request.form.get("competition_title", "").strip() or event.name
         setting.host_line = request.form.get("host_line", "").strip()
         setting.date_line = request.form.get("date_line", "").strip() or _ra_date_text(event)
@@ -4350,9 +5543,11 @@ def event_stats(event_id: int):
 # -----------------------------------------------------------------------------
 @app.after_request
 def live_report_public_headers(response):
-    response.headers.setdefault("Access-Control-Allow-Origin", "*")
-    response.headers.setdefault("Access-Control-Allow-Headers", "Content-Type, Authorization")
-    response.headers.setdefault("Access-Control-Allow-Methods", "GET, OPTIONS")
+    # เปิด CORS เฉพาะ API สาธารณะ (อ่านอย่างเดียว) ไม่เปิดให้ทุกหน้า
+    if request.path.startswith("/api/public/"):
+        response.headers.setdefault("Access-Control-Allow-Origin", "*")
+        response.headers.setdefault("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.setdefault("Access-Control-Allow-Methods", "GET, OPTIONS")
     # ให้ Report Board ฝังหน้า overview/bracket ผ่าน iframe ได้
     response.headers.pop("X-Frame-Options", None)
     response.headers.setdefault("Content-Security-Policy", "frame-ancestors *")
@@ -4374,10 +5569,13 @@ def _lr_shooting_event_payload(event):
     }
 
 
-def _lr_athlete_payload(event, athlete, rank=None):
-    r1 = summarize_round(athlete.id, 1).get("total", 0)
-    r2 = summarize_round(athlete.id, 2).get("total", 0)
+def _lr_athlete_payload(event, athlete, rank=None, official_ranks=None):
+    s1 = summarize_round(athlete.id, 1)
+    s2 = summarize_round(athlete.id, 2)
+    r1 = s1.get("total", 0)
+    r2 = s2.get("total", 0)
     total = r1 + r2
+    official_ranks = official_ranks or {}
     return {
         "rank": rank,
         "id": athlete.id,
@@ -4392,6 +5590,12 @@ def _lr_athlete_payload(event, athlete, rank=None):
         "round1_total": r1,
         "round2_total": r2,
         "total": total,
+        # เกณฑ์ตัดสินเดียวกับหน้า Overview (ranking_key): คะแนนรวม > จำนวนลูก 5 > จำนวนลูก 3 > shoot-off
+        "count_5": s1.get("count_5", 0) + s2.get("count_5", 0),
+        "count_3": s1.get("count_3", 0) + s2.get("count_3", 0),
+        "tiebreak_total": s1.get("tiebreak_total", 0) + s2.get("tiebreak_total", 0),
+        "official_round1_rank": official_ranks.get(1, {}).get(athlete.id),
+        "official_round2_rank": official_ranks.get(2, {}).get(athlete.id),
     }
 
 
@@ -4406,8 +5610,13 @@ def api_public_shooting_report(event_id: int):
     event = Event.query.get_or_404(event_id)
     preload_event_score_data(event)
     athletes = sorted(event.athletes, key=lambda a: (a.lane_no, a.lane_order, a.start_order))
-    rows = [_lr_athlete_payload(event, a) for a in athletes]
-    ranking = sorted(rows, key=lambda r: (r["total"], r["round1_total"], -r["red_card_count"]), reverse=True)
+    official_ranks = compute_round_ranks(event)
+    rows = [_lr_athlete_payload(event, a, official_ranks=official_ranks) for a in athletes]
+    if not event.has_round_two:
+        # อีเวนต์รอบเดียว: ใช้อันดับทางการของรอบ 1 ตรงกับหน้า Overview ทุกประการ
+        ranking = sorted(rows, key=lambda r: (r["official_round1_rank"] is None, r["official_round1_rank"] or 0, r["start_order"] or 0))
+    else:
+        ranking = sorted(rows, key=lambda r: (r["total"], r["count_5"], r["count_3"], r["tiebreak_total"]), reverse=True)
     for idx, row in enumerate(ranking, start=1):
         row["rank"] = idx
     return jsonify({
@@ -4427,6 +5636,317 @@ def public_shooting_live(event_id: int):
     return redirect(url_for('event_overview', event_id=event.id, round=request.args.get('round', 1)))
 
 
+# ---------------------------------------------------------------------------
+# ธีมของทั้งระบบ
+# ---------------------------------------------------------------------------
+import re as _re
+
+THEME_COLOR_FIELDS = ["color_primary", "color_primary_dark", "color_soft", "color_cream",
+                      "color_accent", "color_ink", "color_line"]
+THEME_TEXT_FIELDS = {
+    "name": 120, "short_name": 60, "eyebrow": 160, "title": 160, "subtitle": 255,
+    "export_kicker": 160, "export_title": 255, "export_subtitle": 255,
+    "footer_tagline": 255, "footer_event": 255,
+}
+THEME_IMAGE_KINDS = {"poster": "ภาพพื้นหลังแบนเนอร์", "logo": "โลโก้งาน", "partners": "แถบโลโก้ผู้สนับสนุน"}
+THEME_IMAGE_MAX_BYTES = 6 * 1024 * 1024
+_HEX_RE = _re.compile(r"^#[0-9a-fA-F]{6}$")
+
+KKU_THEME_DEFAULTS = dict(
+    name="KKU 2026 World Championship", short_name="KKU 2026",
+    eyebrow="Khon Kaen University · Thailand", title="Petanque Shooting",
+    subtitle="52nd PÉTANQUE WORLD CHAMPIONSHIP 2026 · 48 Nations, One Spirit",
+    export_kicker="Official Shooting Results", export_title="52nd PÉTANQUE WORLD CHAMPIONSHIP 2026",
+    export_subtitle="Khon Kaen University, Thailand",
+    footer_tagline="SPORT  |  CULTURE  |  FRIENDSHIP  |  A BRIGHTER TOMORROW",
+    footer_event="KKU 2026 · Pétanque Unites the World",
+    show_hero=True,
+    color_primary="#ef4b12", color_primary_dark="#c9360b", color_soft="#fff1e8", color_cream="#fffaf4",
+    color_accent="#37b8b1", color_ink="#172033", color_line="#f3d2bf",
+    poster_static="kku2026_theme_poster.jpg", logo_static="kku2026_event_logo.jpg",
+    partners_static="kku2026_partner_logos.jpg",
+)
+PLAIN_THEME_DEFAULTS = dict(
+    name="มาตรฐาน (ทั่วไป)", short_name="Petanque",
+    eyebrow="Petanque Shooting System", title="Petanque Shooting",
+    subtitle="ระบบบันทึกคะแนนและจัดอันดับเปตอง Shooting",
+    export_kicker="Official Shooting Results", export_title="PETANQUE SHOOTING", export_subtitle="",
+    footer_tagline="", footer_event="Petanque Shooting", show_hero=True,
+    color_primary="#2563eb", color_primary_dark="#1e40af", color_soft="#eff4ff", color_cream="#f8fafc",
+    color_accent="#14b8a6", color_ink="#0f172a", color_line="#cbd5e1",
+)
+
+PHUPHAN_THEME_DEFAULTS = dict(
+    name="ภูพานเกมส์ · สกลนคร", short_name="ภูพานเกมส์",
+    eyebrow="เมืองสกลนคร · SMART & SPIRIT", title="ภูพานเกมส์",
+    subtitle="ศรัทธา สานฝัน มุ่งมั่นชัยชนะ · การแข่งขันเปตอง Shooting",
+    export_kicker="Official Shooting Results", export_title="ภูพานเกมส์ · การแข่งขันเปตอง Shooting",
+    export_subtitle="จังหวัดสกลนคร", footer_tagline="ศรัทธา  |  สานฝัน  |  มุ่งมั่นชัยชนะ",
+    footer_event="ภูพานเกมส์ · SMART & SPIRIT", show_hero=True,
+    color_primary="#aa241a", color_primary_dark="#642d2b", color_soft="#f7ebea", color_cream="#fcf7f7",
+    color_accent="#f2b400", color_ink="#211723", color_line="#e9c6c3",
+    poster_static="themes/phuphan_poster.jpg", logo_static="themes/phuphan_logo.jpg",
+)
+BUILTIN_THEMES = [KKU_THEME_DEFAULTS, PLAIN_THEME_DEFAULTS, PHUPHAN_THEME_DEFAULTS]
+
+
+def ensure_default_themes() -> None:
+    """เพิ่มธีมที่มากับระบบที่ยังไม่มี (ตามชื่อ) · ธีมแรกที่สร้างในฐานข้อมูลว่างจะถูกเปิดใช้"""
+    try:
+        existing = {t.name for t in SiteTheme.query.filter_by(is_builtin=True).all()}
+        empty = SiteTheme.query.count() == 0
+    except Exception:
+        db.session.rollback()
+        return
+    for idx, defaults in enumerate(BUILTIN_THEMES):
+        if defaults["name"] not in existing:
+            db.session.add(SiteTheme(is_active=empty and idx == 0, is_builtin=True, **defaults))
+    db.session.flush()
+
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int]:
+    value = value.lstrip("#")
+    return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+
+
+def _mix_hex(a: str, b: str, t: float) -> str:
+    ra, rb = _hex_to_rgb(a), _hex_to_rgb(b)
+    return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(ra, rb))
+
+
+def _theme_image_version(theme, kind: str) -> str | None:
+    for asset in theme.assets:
+        if asset.kind == kind:
+            return str(int((asset.updated_at or datetime.utcnow()).timestamp()))
+    return None
+
+
+def theme_image_url(theme, kind: str) -> str | None:
+    if theme is None:
+        return None
+    version = _theme_image_version(theme, kind) if getattr(theme, "id", None) else None
+    if version:
+        return url_for("theme_asset", theme_id=theme.id, kind=kind, v=version)
+    static_name = getattr(theme, f"{kind}_static", None)
+    if static_name and os.path.exists(os.path.join(BASE_DIR, "static", static_name)):
+        return url_for("static", filename=static_name)
+    return None
+
+
+def build_theme_view(theme) -> SimpleNamespace:
+    """ค่าที่ template ใช้ (สี, ภาพ, ข้อความ) จากธีมที่เปิดใช้งาน"""
+    colors = {f: getattr(theme, f, None) or KKU_THEME_DEFAULTS[f] for f in THEME_COLOR_FIELDS}
+    for f, v in colors.items():
+        if not _HEX_RE.match(v):
+            colors[f] = KKU_THEME_DEFAULTS[f]
+    primary, dark = colors["color_primary"], colors["color_primary_dark"]
+    css_vars = {
+        "--th-primary": primary,
+        "--th-primary-dark": dark,
+        "--th-primary-light": _mix_hex(primary, "#ffffff", 0.18),
+        "--th-soft": colors["color_soft"],
+        "--th-tint": _mix_hex(primary, "#ffffff", 0.78),
+        "--th-cream": colors["color_cream"],
+        "--th-accent": colors["color_accent"],
+        "--th-ink": colors["color_ink"],
+        "--th-line": colors["color_line"],
+        "--th-primary-rgb": ",".join(map(str, _hex_to_rgb(primary))),
+        "--th-dark-rgb": ",".join(map(str, _hex_to_rgb(_mix_hex(dark, "#000000", 0.45)))),
+        "--th-accent-rgb": ",".join(map(str, _hex_to_rgb(colors["color_accent"]))),
+        "--th-cream-rgb": ",".join(map(str, _hex_to_rgb(colors["color_cream"]))),
+        # ชื่อเดิมของธีม KKU ยังใช้ได้
+        "--kku-orange": primary, "--kku-orange-dark": dark, "--kku-orange-soft": colors["color_soft"],
+        "--kku-cream": colors["color_cream"], "--kku-teal": colors["color_accent"],
+        "--kku-ink": colors["color_ink"], "--kku-line": colors["color_line"],
+    }
+    text = {f: (getattr(theme, f, None) or "") for f in THEME_TEXT_FIELDS}
+    slug = _re.sub(r"[^A-Za-z0-9]+", "", text["short_name"] or "") or "Results"
+    return SimpleNamespace(
+        id=getattr(theme, "id", None),
+        css_vars="".join(f"{k}:{v};" for k, v in css_vars.items()),
+        poster_url=theme_image_url(theme, "poster"),
+        logo_url=theme_image_url(theme, "logo"),
+        partners_url=theme_image_url(theme, "partners"),
+        show_hero=bool(getattr(theme, "show_hero", True)),
+        download_suffix=slug,
+        **text,
+    )
+
+
+def active_site_theme():
+    cached = getattr(request, "_site_theme_view", None) if has_request_context() else None
+    if cached is not None:
+        return cached
+    theme = None
+    try:
+        theme = SiteTheme.query.filter_by(is_active=True).order_by(SiteTheme.id).first()
+        if theme is None and not SiteTheme.query.count():
+            ensure_default_themes()
+            db.session.commit()
+            theme = SiteTheme.query.filter_by(is_active=True).first()
+    except Exception:
+        db.session.rollback()
+        theme = None
+    view = build_theme_view(theme or SimpleNamespace(id=None, assets=[], **KKU_THEME_DEFAULTS))
+    if has_request_context():
+        request._site_theme_view = view
+    return view
+
+
+@app.context_processor
+def inject_site_theme():
+    return {"site_theme": active_site_theme()}
+
+
+def _sniff_image_mimetype(data: bytes) -> str | None:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _apply_theme_form(theme: SiteTheme, form, files) -> list[str]:
+    """อัปเดตธีมจากฟอร์ม คืนรายการปัญหา (ถ้ามี) โดยไม่บันทึกส่วนที่ผิด"""
+    problems = []
+    for field, limit in THEME_TEXT_FIELDS.items():
+        if field in form:
+            setattr(theme, field, (form.get(field) or "").strip()[:limit])
+    if not theme.name:
+        theme.name = "ธีมใหม่"
+    for field in THEME_COLOR_FIELDS:
+        value = (form.get(field) or "").strip()
+        if value:
+            if _HEX_RE.match(value):
+                setattr(theme, field, value.lower())
+            else:
+                problems.append(f"สี {field} ไม่ถูกต้อง")
+    theme.show_hero = form.get("show_hero") == "yes"
+    existing = {a.kind: a for a in theme.assets}
+    for kind, label in THEME_IMAGE_KINDS.items():
+        if form.get(f"remove_{kind}") == "yes":
+            if kind in existing:
+                db.session.delete(existing.pop(kind))
+            setattr(theme, f"{kind}_static", None)
+        upload = files.get(f"image_{kind}")
+        if not upload or not upload.filename:
+            continue
+        data = upload.read(THEME_IMAGE_MAX_BYTES + 1)
+        if len(data) > THEME_IMAGE_MAX_BYTES:
+            problems.append(f"{label}: ไฟล์ใหญ่เกิน 6 MB")
+            continue
+        mimetype = _sniff_image_mimetype(data)
+        if not mimetype:
+            problems.append(f"{label}: ต้องเป็นไฟล์ภาพ PNG, JPG, WEBP หรือ GIF")
+            continue
+        asset = existing.get(kind)
+        if asset is None:
+            asset = SiteThemeAsset(theme=theme, kind=kind, mimetype=mimetype, data=data)
+            db.session.add(asset)
+        else:
+            asset.mimetype, asset.data, asset.updated_at = mimetype, data, datetime.utcnow()
+    theme.updated_at = datetime.utcnow()
+    return problems
+
+
+@app.route("/theme-asset/<int:theme_id>/<kind>")
+def theme_asset(theme_id: int, kind: str):
+    if kind not in THEME_IMAGE_KINDS:
+        abort(404)
+    asset = SiteThemeAsset.query.filter_by(theme_id=theme_id, kind=kind).first_or_404()
+    response = app.response_class(asset.data, mimetype=asset.mimetype)
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.route("/admin/themes")
+@login_required
+@role_required("superadmin")
+def manage_themes():
+    themes = SiteTheme.query.order_by(SiteTheme.is_active.desc(), SiteTheme.id).all()
+    return render_template("themes.html", themes=[(t, build_theme_view(t)) for t in themes])
+
+
+@app.route("/admin/themes/new", methods=["GET", "POST"])
+@app.route("/admin/themes/<int:theme_id>/edit", methods=["GET", "POST"])
+@login_required
+@role_required("superadmin")
+def edit_theme(theme_id: int | None = None):
+    theme = SiteTheme.query.get_or_404(theme_id) if theme_id else None
+    if request.method == "POST":
+        is_new = theme is None
+        if is_new:
+            theme = SiteTheme(**{k: v for k, v in PLAIN_THEME_DEFAULTS.items()})
+            db.session.add(theme)
+        problems = _apply_theme_form(theme, request.form, request.files)
+        activate = request.form.get("activate") == "yes"
+        if activate:
+            SiteTheme.query.update({SiteTheme.is_active: False})
+            theme.is_active = True
+        db.session.commit()
+        for p in problems:
+            flash(p, "warning")
+        flash(("สร้าง" if is_new else "บันทึก") + f"ธีม “{theme.name}” แล้ว" + (" · เปิดใช้ทั้งระบบ" if activate else ""), "success")
+        return redirect(url_for("edit_theme", theme_id=theme.id))
+    view = build_theme_view(theme or SimpleNamespace(id=None, assets=[], **PLAIN_THEME_DEFAULTS))
+    source = theme or SimpleNamespace(**PLAIN_THEME_DEFAULTS)
+    return render_template("theme_form.html", theme=theme, source=source, view=view,
+                           image_kinds=THEME_IMAGE_KINDS, color_fields=THEME_COLOR_FIELDS)
+
+
+@app.route("/admin/themes/<int:theme_id>/activate", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def activate_theme(theme_id: int):
+    theme = SiteTheme.query.get_or_404(theme_id)
+    SiteTheme.query.update({SiteTheme.is_active: False})
+    theme.is_active = True
+    db.session.commit()
+    flash(f"เปลี่ยนธีมทั้งระบบเป็น “{theme.name}” แล้ว", "success")
+    return redirect(url_for("manage_themes"))
+
+
+@app.route("/admin/themes/<int:theme_id>/duplicate", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def duplicate_theme(theme_id: int):
+    src = SiteTheme.query.get_or_404(theme_id)
+    copy = SiteTheme(is_active=False, is_builtin=False)
+    for col in SiteTheme.__table__.columns.keys():
+        if col not in {"id", "is_active", "is_builtin", "created_at", "updated_at"}:
+            setattr(copy, col, getattr(src, col))
+    copy.name = (f"{src.name} (สำเนา)")[:120]
+    db.session.add(copy)
+    db.session.flush()
+    for a in src.assets:
+        db.session.add(SiteThemeAsset(theme_id=copy.id, kind=a.kind, mimetype=a.mimetype, data=a.data))
+    db.session.commit()
+    flash(f"คัดลอกเป็น “{copy.name}” แล้ว", "success")
+    return redirect(url_for("edit_theme", theme_id=copy.id))
+
+
+@app.route("/admin/themes/<int:theme_id>/delete", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def delete_theme(theme_id: int):
+    theme = SiteTheme.query.get_or_404(theme_id)
+    if theme.is_active:
+        flash("ลบธีมที่กำลังใช้งานไม่ได้ ให้เปิดใช้ธีมอื่นก่อน", "warning")
+    elif theme.is_builtin:
+        flash("ธีมที่มากับระบบลบไม่ได้ (แก้ไขหรือคัดลอกได้)", "warning")
+    else:
+        name = theme.name
+        db.session.delete(theme)
+        db.session.commit()
+        flash(f"ลบธีม “{name}” แล้ว", "info")
+    return redirect(url_for("manage_themes"))
+
+
 def init_database_for_deploy() -> None:
     """Create database tables when running under gunicorn/Railway.
 
@@ -4438,6 +5958,8 @@ def init_database_for_deploy() -> None:
         db.create_all()
         ensure_schema()
         seed_defaults()
+        # gunicorn --preload เปิด connection ใน master ก่อน fork; ต้องปิดทิ้งไม่ให้ worker ใช้ connection ร่วมกัน
+        db.engine.dispose()
 
 
 # ให้ Railway/gunicorn สร้างตารางและ user ตั้งต้นทันทีตอน import app
@@ -4447,6 +5969,6 @@ init_database_for_deploy()
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 8000)),
-        debug=True
+        port=int(os.environ.get("PORT", 8001)),
+        debug=os.environ.get("FLASK_DEBUG", "0") == "1"
     )
