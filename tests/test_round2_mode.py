@@ -97,3 +97,35 @@ class DatabaseUrlTests(unittest.TestCase):
         self.assertEqual(n("sqlite:////tmp/x.db"), "sqlite:////tmp/x.db")
         from sqlalchemy.engine import make_url
         self.assertEqual(make_url(n("postgresql://u:p@h/db")).get_dialect().driver, "psycopg2")
+
+
+class OverviewSortAndLogoTests(Round2ModeTests):
+    def test_sort_toggle_keeps_shooting_order(self):
+        e = self._event("cutoff", 16, athletes=6)
+        # ลำดับการตี: กลับด้านกับอันดับ (คนคะแนนน้อยสุดตีก่อน)
+        for a in e.athletes:
+            a.start_order = 7 - int(a.bib_no)
+        db.session.commit()
+        import json as _j
+        on = _j.loads(self.client.get(f"/events/{e.id}/overview-data?round=1").data)
+        self.assertEqual([x["name"] for x in sorted(on, key=lambda x: x["view_order"])][:2], ["A1", "A2"])
+        self.client.post(f"/events/{e.id}/overview-sort", data={"round": "1"})
+        db.session.refresh(e)
+        self.assertFalse(e.overview_sort_by_rank)
+        off = _j.loads(self.client.get(f"/events/{e.id}/overview-data?round=1").data)
+        self.assertEqual([x["name"] for x in sorted(off, key=lambda x: x["view_order"])], ["A6", "A5", "A4", "A3", "A2", "A1"])
+        self.assertFalse(any(x["cut_line_after"] for x in off))
+        self.assertEqual({x["name"]: x["display_rank"] for x in off}["A1"], 1)  # อันดับยังคำนวณ
+        html = self.client.get(f"/events/{e.id}/overview?round=1").get_data(as_text=True)
+        self.assertLess(html.index(">A6<"), html.index(">A1<"))
+        self.assertIn("เรียงตามอันดับ: ปิด", html)
+
+    def test_results_logo_uses_theme(self):
+        from app import ensure_default_themes, SiteTheme, _ra_logo_map
+        ensure_default_themes(); db.session.commit()
+        t = SiteTheme.query.filter_by(short_name="ภูพานเกมส์").one()
+        SiteTheme.query.update({SiteTheme.is_active: False}); t.is_active = True; db.session.commit()
+        logos = _ra_logo_map(None)
+        self.assertEqual(logos["cover_main"], "themes/phuphan_logo.jpg")
+        self.assertEqual(logos["side"], "themes/phuphan_logo.jpg")
+        self.assertEqual(logos["header_1"], "results_approved_assets/absc.png")

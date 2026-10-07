@@ -109,7 +109,16 @@ class BulkEventsDrawTests(unittest.TestCase):
         self.assertEqual(len(events[0]["entries"]), 13)
         self.assertEqual(events[1]["category"], "หญิง")
         self.assertEqual(events[1]["event_group"], "รุ่นอายุ 14 ปี")
-        self.assertEqual(events[1]["entries"][0], {"name": "เทศบาลหญิง 1", "affiliation": "อุดรธานี"})
+        self.assertEqual(events[1]["entries"][0], {"name": "เทศบาลหญิง 1", "affiliation": "เทศบาลหญิง 1"})
+
+    def test_parse_person_and_team_columns(self):
+        wb = Workbook(); ws = wb.active
+        ws.append(["ประเภทชู้ตติ้งชาย รุ่นอายุ 14 ปี"])
+        ws.append(["ที่", "ชื่อ-สกุล", "สังกัด", "จังหวัด"])
+        ws.append([1, "ด.ช.สมชาย ใจดี", "ทต.หนองบัวแดง", "ชัยภูมิ"])
+        out = BytesIO(); wb.save(out); out.seek(0); out.filename = "x.xlsx"
+        e = parse_entry_list_workbook(out, "")[0]
+        self.assertEqual(e["entries"][0], {"name": "ด.ช.สมชาย ใจดี", "affiliation": "ทต.หนองบัวแดง"})
 
     def test_import_preview_then_confirm_and_draw(self):
         r = self.client.post("/events/bulk-import", data={

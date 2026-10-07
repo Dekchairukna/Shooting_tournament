@@ -675,6 +675,29 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
   color:#8a5a00 !important;
   font-weight:900 !important;
 }
+
+/* ===== สวิตช์เปิด/ปิดการเรียงตามอันดับ ===== */
+.sort-toggle-form{margin:0;display:inline-flex}
+.sort-toggle{display:inline-flex;align-items:center;gap:8px}
+.sort-toggle .switch-dot{width:30px;height:18px;border-radius:999px;background:#cbd5e1;position:relative;flex:none;transition:background .15s}
+.sort-toggle .switch-dot::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.sort-toggle.is-on .switch-dot{background:#16a34a}
+.sort-toggle.is-on .switch-dot::after{left:14px}
+.sort-off-badge{display:inline-flex;align-items:center;margin-top:6px;padding:4px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #cbd5e1;color:#334155;font-size:.78rem;font-weight:900}
+
+/* ===== ปุ่มใหญ่ขึ้นสำหรับกดด้วยนิ้ว: เฉพาะจอสัมผัส (แท็บเล็ต/มือถือ) · คอมพิวเตอร์ใช้ขนาดเดิม ===== */
+#overviewTableBody tr[data-athlete-id]{cursor:pointer}
+@media (pointer:coarse){
+  .responsive-toolbar .btn{min-height:48px;padding-left:14px;padding-right:14px}
+  #overviewTableBody td.status-cell{width:170px;min-width:170px;max-width:190px}
+  #overviewTableBody td.status-cell .status-pill{
+    width:100%;max-width:none;min-height:48px;padding:6px 10px;
+    font-size:.9rem;border-radius:12px;cursor:pointer;
+  }
+  #overviewTableBody td.status-cell .status-action-wrap{flex-direction:column;align-items:stretch;gap:6px}
+  #overviewTableBody td.status-cell .shoot-off-action{min-height:40px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
+  #overviewTableBody tr[data-athlete-id] > td{padding-top:9px!important;padding-bottom:9px!important}
+}
 </style>
 
 <div class="overview-page">
@@ -683,6 +706,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
       <div class="title-box">
         <h1>{{ event.name }}</h1>
         <p class="muted">{{ event.event_group }} | {{ event.category }} | {{ event.next_round_label }} | รอบที่กำลังดู: {{ round_no }}</p>
+        {% if not sort_by_rank %}<div class="sort-off-badge" title="แถวไม่สลับตามคะแนน · คอลัมน์ Class ยังแสดงอันดับปัจจุบัน">ลำดับคงที่ตามลำดับการตี</div>{% endif %}
         {% if current_user.is_authenticated and current_user.role == 'court' %}
         <div style="margin-top:7px;display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-weight:950;">🔒 {{ court_public_id(current_user) }} · แสดงเฉพาะสนาม {{ current_user.court_no }}</div>
         {% endif %}
@@ -718,6 +742,13 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
           {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
           <a class="btn secondary" href="{{ url_for('results_approved_settings', event_id=event.id) }}">ตั้งค่า Results</a>
           <a class="btn secondary" href="{{ url_for('scorecards_print_select', event_id=event.id, round=round_no) }}">พิมพ์ Scorecard หลายคน</a>
+          <form method="post" action="{{ url_for('toggle_overview_sort', event_id=event.id) }}" class="sort-toggle-form">
+            <input type="hidden" name="round" value="{{ round_no }}">
+            <button type="submit" class="btn secondary sort-toggle {{ 'is-on' if sort_by_rank else 'is-off' }}" role="switch" aria-checked="{{ 'true' if sort_by_rank else 'false' }}"
+                    title="{{ 'กดเพื่อปิด: แถวจะอยู่ตามลำดับการตี ไม่สลับตามคะแนน' if sort_by_rank else 'กดเพื่อเปิด: แถวเรียงตามอันดับสด' }}">
+              <span class="switch-dot" aria-hidden="true"></span>เรียงตามอันดับ: {{ 'เปิด' if sort_by_rank else 'ปิด' }}
+            </button>
+          </form>
           {% endif %}
           <button class="btn secondary" onclick="captureTable('overviewTableWrap','overview-{{ event.id }}-r{{ round_no }}')">บันทึกเป็นรูปภาพ</button>
           {% if round_no == 1 and not (current_user.is_authenticated and current_user.role == 'court') %}

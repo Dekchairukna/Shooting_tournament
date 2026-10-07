@@ -47,6 +47,13 @@
         {% endfor %}
       </select>
     </label>
+    <label>หน้ารวม: เรียงแถวตามอันดับสด
+      <select name="overview_sort_by_rank">
+        <option value="yes" {% if not event or event.overview_sort_by_rank is none or event.overview_sort_by_rank %}selected{% endif %}>เปิด — แถวสลับตามคะแนน</option>
+        <option value="no" {% if event and event.overview_sort_by_rank == false %}selected{% endif %}>ปิด — คงลำดับการตี</option>
+      </select>
+      <small class="muted">ปิดเมื่อรายการไม่ต้องการให้แถวสลับไปมา · อันดับ (Class) ยังแสดงตามปกติ</small>
+    </label>
     <input type="hidden" name="location" value="{{ event.location if event else '' }}">
     <button class="btn" type="submit">{{ 'บันทึกการแก้ไข' if is_edit else 'สร้างอีเวนต์' }}</button>
   </form>

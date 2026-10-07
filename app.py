@@ -313,6 +313,8 @@ class Event(db.Model):
     round_two_cutoff_rank = db.Column(db.Integer, nullable=True)
     # วิธีคัดเข้ารอบ 2: "cutoff" = ถึง Class ที่ N · "next" = ต่อจากผู้ผ่านตรงอีก N ลำดับ
     round_two_mode = db.Column(db.String(20), nullable=False, default="cutoff")
+    # หน้ารวม: True = เรียงแถวตามอันดับสด · False = คงลำดับการตี (บางรายการไม่ให้แถวสลับไปมา)
+    overview_sort_by_rank = db.Column(db.Boolean, nullable=False, default=True)
     next_round_label = db.Column(db.String(50), nullable=False, default="รอบ 8 คน")
     round_two_advancers = db.Column(db.Integer, nullable=False, default=4)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -712,6 +714,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS court_event_id INTEGER')
             conn.exec_driver_sql("ALTER TABLE \"event\" ADD COLUMN IF NOT EXISTS round_two_mode VARCHAR(20) DEFAULT 'cutoff'")
             conn.exec_driver_sql("UPDATE \"event\" SET round_two_mode = 'cutoff' WHERE round_two_mode IS NULL")
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS overview_sort_by_rank BOOLEAN DEFAULT true')
+            conn.exec_driver_sql('UPDATE "event" SET overview_sort_by_rank = true WHERE overview_sort_by_rank IS NULL')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled BOOLEAN DEFAULT false')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_at TIMESTAMP')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_by INTEGER')
@@ -757,6 +761,9 @@ def ensure_schema() -> None:
         if "round_two_mode" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN round_two_mode VARCHAR(20) DEFAULT 'cutoff'")
             conn.exec_driver_sql("UPDATE event SET round_two_mode = 'cutoff' WHERE round_two_mode IS NULL")
+        if "overview_sort_by_rank" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_sort_by_rank BOOLEAN DEFAULT 1")
+            conn.exec_driver_sql("UPDATE event SET overview_sort_by_rank = 1 WHERE overview_sort_by_rank IS NULL")
 
         user_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)").fetchall()}
         if "court_no" not in user_columns:
@@ -2801,6 +2808,7 @@ def create_event():
             has_round_two=request.form.get("has_round_two") == "yes",
             round_two_cutoff_rank=int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None,
             round_two_mode=parse_round_two_mode(request.form),
+            overview_sort_by_rank=request.form.get("overview_sort_by_rank", "yes") == "yes",
             next_round_label=request.form["next_round_label"],
             round_two_advancers=int(request.form.get("round_two_advancers") or 4),
             created_by=current_user.id,
@@ -2830,6 +2838,7 @@ def edit_event(event_id: int):
         event.has_round_two = request.form.get("has_round_two") == "yes"
         event.round_two_cutoff_rank = int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None
         event.round_two_mode = parse_round_two_mode(request.form)
+        event.overview_sort_by_rank = request.form.get("overview_sort_by_rank", "yes") == "yes"
         event.next_round_label = request.form["next_round_label"]
         event.round_two_advancers = int(request.form.get("round_two_advancers") or 4)
         recalculate_event_orders(event)
@@ -3075,6 +3084,7 @@ def new_event_from_settings(name: str, event_group: str, category: str, lane_cou
         has_round_two=bool(shared.get("has_round_two", True)),
         round_two_cutoff_rank=shared.get("round_two_cutoff_rank"),
         round_two_mode=shared.get("round_two_mode", "cutoff"),
+        overview_sort_by_rank=shared.get("overview_sort_by_rank", True),
         next_round_label=next_label,
         round_two_advancers=shared.get("round_two_advancers", quota_for_next_round(next_label)),
         created_by=current_user.id if current_user.is_authenticated else None,
@@ -3102,6 +3112,7 @@ def parse_shared_event_settings(form) -> dict:
         "has_round_two": has_round_two,
         "round_two_cutoff_rank": _form_int(cutoff, 16, 1) if cutoff else None,
         "round_two_mode": parse_round_two_mode(form),
+        "overview_sort_by_rank": form.get("overview_sort_by_rank", "yes") == "yes",
         "round_two_advancers": _form_int(form.get("round_two_advancers"), quota, 1),
     }
 
@@ -3208,12 +3219,13 @@ def parse_entry_list_workbook(file_storage, keyword: str = "") -> list[dict]:
                 lowered = [c.replace(" ", "") for c in row]
                 name_idx = next((i for i, c in enumerate(lowered) if c.startswith("ชื่อ")), None)
                 if name_idx is not None:
-                    district_idx = next((i for i, c in enumerate(lowered) if c in {"อำเภอ", "เขต"}), None)
-                    province_idx = next((i for i, c in enumerate(lowered) if c == "จังหวัด"), None)
-                    aff_idx = next((i for i, c in enumerate(lowered) if c == "สังกัด"), None)
+                    team_words = ("สังกัด", "อปท", "ทีม", "หน่วยงาน", "โรงเรียน", "สโมสร", "ชมรม")
+                    team_idx = next((i for i, c in enumerate(lowered) if c and any(w in c for w in team_words)), None)
+                    person_idx = next((i for i, c in enumerate(lowered)
+                                       if c.startswith("ชื่อ") and i != team_idx and not any(w in c for w in team_words)), None)
                     no_idx = next((i for i, c in enumerate(lowered) if c in {"ที่", "ลำดับ", "ลำดับที่"}), None)
-                    cols = {"name": name_idx, "district": district_idx, "province": province_idx,
-                            "affiliation": aff_idx, "no": no_idx}
+                    # ชื่อนักกีฬา = คอลัมน์ชื่อคน (ถ้ามี) · สังกัด = ชื่อทีม/อปท. · ไม่ใช้อำเภอ/จังหวัดเป็นสังกัด
+                    cols = {"person": person_idx, "team": team_idx, "no": no_idx}
                     last_no = 0
                 continue
 
@@ -3221,7 +3233,8 @@ def parse_entry_list_workbook(file_storage, keyword: str = "") -> list[dict]:
                 idx = cols.get(key)
                 return row[idx].strip() if idx is not None and idx < len(row) else ""
 
-            name = cell("name")
+            person, team = cell("person"), cell("team")
+            name = person or team
             if not name:
                 continue
             seq = cell("no")
@@ -3231,7 +3244,7 @@ def parse_entry_list_workbook(file_storage, keyword: str = "") -> list[dict]:
                     current = None
                     continue
                 last_no = int(seq)
-            affiliation = cell("affiliation") or cell("province") or cell("district") or name
+            affiliation = team or person
             current["entries"].append({"name": name[:255], "affiliation": affiliation[:255]})
     return [e for e in events if e["entries"]]
 
@@ -3462,6 +3475,30 @@ def reset_event_bracket_no_commit(event: Event) -> None:
 
 
 
+def overview_sorts_by_rank(event) -> bool:
+    value = getattr(event, "overview_sort_by_rank", True)
+    return True if value is None else bool(value)
+
+
+def apply_overview_order_mode(event: Event, rows: list[dict]) -> list[dict]:
+    """ปิดการเรียงสด: แถวอยู่ตามลำดับการตี ไม่สลับตามคะแนน
+
+    อันดับ (Class), สีสถานะ และสิทธิ์เข้ารอบยังคำนวณเหมือนเดิม
+    แต่เส้นตัด (QUARTERFINALS / QUALIFIED) ถูกซ่อน เพราะแถวไม่ได้เรียงตามอันดับ
+    """
+    if overview_sorts_by_rank(event):
+        return rows
+    for row in rows:
+        row["cut_line_after"] = False
+        row["cut_line_label"] = ""
+        order = row.get("display_order")
+        if not isinstance(order, int):
+            order = row["athlete"].start_order or 0
+        row["view_order"] = order
+    rows.sort(key=lambda r: (r["view_order"], r["athlete"].id))
+    return rows
+
+
 def apply_overview_cut_lines(event: Event, rows: list[dict], round_no: int, round_complete: bool, groups: dict) -> None:
     """กำหนดเส้นแบ่งสิทธิ์บน Overview แบบสดตาม Class.
 
@@ -3576,6 +3613,7 @@ def event_overview(event_id: int):
         row["cut_line_after"] = False
 
     apply_overview_cut_lines(event, rows, round_no, round_complete, groups)
+    rows = apply_overview_order_mode(event, rows)
 
     combined_rows = []
     return render_template(
@@ -3586,8 +3624,22 @@ def event_overview(event_id: int):
         combined_rows=combined_rows,
         theme=event_theme(event.category),
         station_images=[f"station_{i}.png" for i in STATIONS],
-        
+        sort_by_rank=overview_sorts_by_rank(event),
     )
+
+
+@app.route("/events/<int:event_id>/overview-sort", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def toggle_overview_sort(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    event.overview_sort_by_rank = not overview_sorts_by_rank(event)
+    db.session.commit()
+    invalidate_poll_cache(event.id)
+    flash("เปิดการเรียงตามอันดับสดแล้ว" if event.overview_sort_by_rank
+          else "ปิดการเรียงสดแล้ว · แถวอยู่ตามลำดับการตี", "success")
+    round_no = request.form.get("round", 1, type=int) or 1
+    return redirect(url_for("event_overview", event_id=event.id, round=round_no))
 
 
 def court_queue_rows(event: Event, round_no: int, court_no: int) -> list[dict]:
@@ -3677,6 +3729,7 @@ def overview_data(event_id: int):
         row["shoot_off_group_ids"] = shootoff_group_ids(rows, row["athlete"].id, round_no) if row["shoot_off_required"] else [row["athlete"].id]
         row["cut_line_after"] = False
     apply_overview_cut_lines(event, rows, round_no, round_complete, groups)
+    rows = apply_overview_order_mode(event, rows)
     payload = []
     for row in rows:
         stations = {}
@@ -4606,17 +4659,57 @@ def _ra_logo_value(setting, attr: str, default: str) -> str:
     return value or default
 
 
+def active_theme_logo_static() -> str | None:
+    """โลโก้งานของธีมที่ใช้อยู่ เป็น path ใต้ static (ใช้ได้ทั้งหน้าเว็บและไฟล์ Word)
+
+    ธีมที่อัปโหลดโลโก้ไว้ในฐานข้อมูล จะถูกเขียนเป็นไฟล์ไว้ใน static/uploads/themes ตอนใช้ครั้งแรก
+    """
+    try:
+        theme = SiteTheme.query.filter_by(is_active=True).order_by(SiteTheme.id).first()
+    except Exception:
+        db.session.rollback()
+        return None
+    if theme is None:
+        return None
+    asset = SiteThemeAsset.query.filter_by(theme_id=theme.id, kind="logo").first()
+    if asset is not None:
+        ext = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}.get(asset.mimetype, "png")
+        stamp = int((asset.updated_at or datetime.utcnow()).timestamp())
+        rel = f"uploads/themes/theme_{theme.id}_logo_{stamp}.{ext}"
+        path = os.path.join(BASE_DIR, "static", *rel.split("/"))
+        if not os.path.exists(path):
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as fh:
+                    fh.write(asset.data)
+            except OSError:
+                return None
+        return rel
+    if theme.logo_static and os.path.exists(os.path.join(BASE_DIR, "static", theme.logo_static)):
+        return theme.logo_static
+    return None
+
+
+# ช่องที่เป็น "โลโก้งาน" ในเอกสาร Results Approved (ช่องอื่นเป็นโลโก้สหพันธ์ FIPJP/WPBF/ABSC)
+RESULTS_EVENT_LOGO_SLOTS = {"cover_main", "header_2", "side"}
+
+
 def _ra_logo_map(setting) -> dict:
+    theme_logo = active_theme_logo_static()
+    defaults = dict(RESULTS_APPROVED_LOGO_DEFAULTS)
+    if theme_logo:
+        for slot in RESULTS_EVENT_LOGO_SLOTS:
+            defaults[slot] = theme_logo
     return {
-        "cover_main": _ra_logo_value(setting, "cover_main_logo_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_main"]),
-        "cover_bottom_1": _ra_logo_value(setting, "cover_bottom_logo_1_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_bottom_1"]),
-        "cover_bottom_2": _ra_logo_value(setting, "cover_bottom_logo_2_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_bottom_2"]),
-        "cover_bottom_3": _ra_logo_value(setting, "cover_bottom_logo_3_path", RESULTS_APPROVED_LOGO_DEFAULTS["cover_bottom_3"]),
-        "header_1": _ra_logo_value(setting, "header_logo_1_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_1"]),
-        "header_2": _ra_logo_value(setting, "header_logo_2_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_2"]),
-        "header_3": _ra_logo_value(setting, "header_logo_3_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_3"]),
-        "header_4": _ra_logo_value(setting, "header_logo_4_path", RESULTS_APPROVED_LOGO_DEFAULTS["header_4"]),
-        "side": _ra_logo_value(setting, "side_logo_path", RESULTS_APPROVED_LOGO_DEFAULTS["side"]),
+        "cover_main": _ra_logo_value(setting, "cover_main_logo_path", defaults["cover_main"]),
+        "cover_bottom_1": _ra_logo_value(setting, "cover_bottom_logo_1_path", defaults["cover_bottom_1"]),
+        "cover_bottom_2": _ra_logo_value(setting, "cover_bottom_logo_2_path", defaults["cover_bottom_2"]),
+        "cover_bottom_3": _ra_logo_value(setting, "cover_bottom_logo_3_path", defaults["cover_bottom_3"]),
+        "header_1": _ra_logo_value(setting, "header_logo_1_path", defaults["header_1"]),
+        "header_2": _ra_logo_value(setting, "header_logo_2_path", defaults["header_2"]),
+        "header_3": _ra_logo_value(setting, "header_logo_3_path", defaults["header_3"]),
+        "header_4": _ra_logo_value(setting, "header_logo_4_path", defaults["header_4"]),
+        "side": _ra_logo_value(setting, "side_logo_path", defaults["side"]),
     }
 
 
