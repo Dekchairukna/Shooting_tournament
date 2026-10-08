@@ -497,7 +497,8 @@
         {% for st in [1,2,3,4,5] %}
           {% for dm in [6,7,8,9] %}
             {% set entry = score_map.get((rn, st, dm)) %}
-            {% if entry and ((entry.is_scored if entry.is_scored is defined else false) or (entry.score is not none and entry.score != '')) %}
+            {# นับว่าเริ่มตีแล้วเฉพาะช่องที่คีย์จริง (ติ๊กตีแล้ว / มีคะแนน / ใบแดง) · ช่องว่างหลังล้างการคีย์มีค่า 0 แต่ไม่นับ #}
+            {% if entry and (entry.is_scored or (entry.score not in [none, '', 0]) or entry.is_red_card) %}
               {% set ns_started.value = true %}
             {% endif %}
           {% endfor %}
@@ -509,10 +510,10 @@
         <td class="round-label-col">{{ round_labels[rn-1] }}</td>
 
         {% for st in [1,2,3,4,5] %}
-        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 6)].score if has_started and score_map[(rn, st, 6)] is defined else '' }}</span></td>
-        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 7)].score if has_started and score_map[(rn, st, 7)] is defined else '' }}</span></td>
-        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 8)].score if has_started and score_map[(rn, st, 8)] is defined else '' }}</span></td>
-        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{{ score_map[(rn, st, 9)].score if has_started and score_map[(rn, st, 9)] is defined else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{% set c = score_map.get((rn, st, 6)) %}{{ c.score if has_started and c and (c.is_scored or c.score not in [none, '', 0] or c.is_red_card) else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{% set c = score_map.get((rn, st, 7)) %}{{ c.score if has_started and c and (c.is_scored or c.score not in [none, '', 0] or c.is_red_card) else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{% set c = score_map.get((rn, st, 8)) %}{{ c.score if has_started and c and (c.is_scored or c.score not in [none, '', 0] or c.is_red_card) else '' }}</span></td>
+        <td class="score-blue"><span class="score-blue" style="color: rgb(4, 0, 255);">{% set c = score_map.get((rn, st, 9)) %}{{ c.score if has_started and c and (c.is_scored or c.score not in [none, '', 0] or c.is_red_card) else '' }}</span></td>
         <td class="station-total-col score-red">
           <span class="score-red" style="color: rgb(255, 0, 0);">{{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}</span>
         </td>

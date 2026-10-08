@@ -89,6 +89,22 @@ class ResetTests(unittest.TestCase):
         self.client(self.admin).post(f"/events/{self.e.id}/reset-scores", data={"round": "1", "reason": "x", "confirm_text": "ล้าง"})
         self.assertEqual(self.scored(self.a[0]), 5)
 
+    def _print_cells(self, c, a):
+        html = c.get(f"/athletes/{a.id}/scorecard-print?round=1").get_data(as_text=True)
+        vals = re.findall(r'<span class="score-blue"[^>]*>([^<]*)</span>', html)
+        return [v.strip() for v in vals[:20]], html
+
+    def test_print_is_blank_after_reset(self):
+        c = self.client(self.admin)
+        before, _ = self._print_cells(c, self.a[1])
+        self.assertEqual(before[:5], ["5"] * 5)          # ยังไม่ล้าง: พิมพ์คะแนนที่คีย์ไว้
+        self.assertEqual(before[5:8], ["", "", ""])        # ช่องที่ยังไม่ตี: ว่าง (เดิมพิมพ์ 0)
+        c.post(f"/athletes/{self.a[1].id}/reset-round", data={"round": "1", "reason": "คีย์ผิด"})
+        after, html = self._print_cells(c, self.a[1])
+        self.assertEqual(after, [""] * 20)
+        rank_cells = re.findall(r'<td class="rank-col">([^<]*)</td>', html)
+        self.assertTrue(all(not x.strip() for x in rank_cells))
+
     def test_buttons_visible(self):
         html = self.client(self.boss).get(f"/athletes/{self.a[0].id}/scorecard?round=1").get_data(as_text=True)
         self.assertIn("ล้างการคีย์รอบ 1", html)
