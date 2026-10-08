@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'แก้ไขสายคิว' if chain else 'สร้างสายคิวใหม่' }} · Petanque Shooting{% endblock %}
+{% block content %}
+<style>
+  .cf{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:18px;align-items:start}
+  .cf h1{margin:0 0 4px}
+  .cf h2{font-size:1.05rem;margin:0 0 10px}
+  .cf label.f{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:.9rem}
+  .cf input[type=text],.cf input[type=number]{padding:9px 10px;border:1px solid #cbd5e1;border-radius:10px;font:inherit;background:#fff}
+  .grid2{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+  .ev-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .ev-tools input{flex:1;min-width:180px;padding:9px 10px;border:1px solid #cbd5e1;border-radius:10px;font:inherit}
+  .ev-list{display:grid;gap:8px;max-height:560px;overflow:auto;padding-right:4px}
+  .ev{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border:1px solid #e2e8f0;border-radius:14px;padding:9px 10px;background:#fff}
+  .ev.on{border-color:var(--th-primary);background:var(--th-soft)}
+  .ev.taken{opacity:.5}
+  .ev input[type=checkbox]{width:20px;height:20px}
+  .ev .nm{font-weight:800}
+  .ev .sub{font-size:.8rem;color:#64748b}
+  .ev .ord{display:flex;align-items:center;gap:4px}
+  .ev .ord button{width:32px;height:32px;border-radius:9px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-weight:900}
+  .ev .ord .pos{min-width:28px;text-align:center;font-weight:900;color:var(--th-primary-dark)}
+  .tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.72rem;font-weight:800;margin-left:6px}
+  .tag.started{background:#fee2e2;color:#991b1b}
+  .tag.other{background:#f1f5f9;color:#475569}
+  .sticky{position:sticky;top:84px}
+  .pv-sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .pill{display:inline-flex;padding:3px 10px;border-radius:999px;font-size:.8rem;font-weight:800;background:#f1f5f9;color:#334155}
+  .pill.good{background:#dcfce7;color:#166534}
+  .grid-q{display:grid;gap:3px;font-size:.72rem}
+  .grid-q .row{display:grid;grid-template-columns:44px repeat(var(--lanes),1fr);gap:3px}
+  .grid-q .h{font-weight:900;color:#64748b;text-align:center}
+  .grid-q .c{height:20px;border-radius:5px;background:#f1f5f9}
+  .grid-q .rn{font-weight:800;color:#475569;display:flex;align-items:center}
+  .legend{display:grid;gap:4px;margin-top:10px;font-size:.82rem}
+  .legend div{display:flex;gap:8px;align-items:center}
+  .legend i{width:12px;height:12px;border-radius:4px;flex:none}
+  .warn{border:1px solid #fecaca;background:#fff1f2;color:#9f1239;border-radius:12px;padding:10px 12px;font-weight:700;font-size:.88rem}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px}
+  @media(max-width:960px){.cf{grid-template-columns:1fr}.sticky{position:static}}
+</style>
+
+<form method="post" class="cf" id="chainForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div style="display:grid;gap:18px;min-width:0;">
+    <section class="card" style="margin:0;">
+      <div class="section-head">
+        <div>
+          <h1>{{ 'แก้ไขสายคิว' if chain else 'สร้างสายคิวใหม่' }}</h1>
+          <p class="muted" style="margin:0;">เลือกอีเวนต์ที่ใช้สนามชุดเดียวกัน แล้วเรียงลำดับรุ่นที่จะตีก่อน–หลัง · ลำดับยิงในแต่ละรุ่นมาจากการจับสลากของรุ่นนั้น</p>
+        </div>
+        <a class="btn secondary" href="{{ url_for('court_chains') }}">กลับ</a>
+      </div>
+      <div class="grid2">
+        <label class="f">ชื่อสาย<input type="text" name="name" value="{{ chain.name if chain else 'ชู้ตติ้ง รอบแรก' }}" maxlength="160" required></label>
+        <label class="f">จำนวนสนาม<input type="number" name="lane_count" id="lanes" min="1" value="{{ chain.lane_count if chain else 8 }}" required></label>
+      </div>
+    </section>
+
+    <section class="card" style="margin:0;">
+      <h2>อีเวนต์ในสาย <small class="muted" id="pickCount"></small></h2>
+      <div class="ev-tools">
+        <input type="search" id="q" placeholder="ค้นหาอีเวนต์">
+        <button class="btn secondary" type="button" id="byName">เรียงตามชื่อ (12→18, ชาย→หญิง)</button>
+      </div>
+      <div class="ev-list" id="evList">
+        {% for e in events %}
+        {% set in_other = e.chain_id and (not chain or e.chain_id != chain.id) %}
+        {% set mine = chain and e.chain_id == chain.id %}
+        <div class="ev {% if mine %}on{% endif %} {% if in_other %}taken{% endif %}" data-id="{{ e.id }}" data-count="{{ counts.get(e.id, 0) }}"
+             data-name="{{ e.name }}" data-text="{{ (e.name ~ ' ' ~ e.event_group ~ ' ' ~ e.category)|lower }}"
+             data-pos="{{ e.chain_position if mine and e.chain_position else '' }}" data-started="{{ '1' if e.id in started else '0' }}">
+          <input type="checkbox" name="event_ids" value="{{ e.id }}" {% if mine %}checked{% endif %} {% if in_other %}disabled{% endif %} aria-label="เลือก {{ e.name }}">
+          <div>
+            <div class="nm">{{ e.name }}{% if e.id in started %}<span class="tag started">เริ่มตีแล้ว</span>{% endif %}{% if in_other %}<span class="tag other">อยู่ในสาย {{ e.chain.name }}</span>{% endif %}</div>
+            <div class="sub">{{ e.event_group }} · {{ e.category }} · {{ e.competition_date.strftime('%d/%m/%Y') }} · {{ counts.get(e.id, 0) }} คน</div>
+          </div>
+          <div class="ord">
+            <input type="hidden" name="pos_{{ e.id }}" value="">
+            <button type="button" class="up" title="ขึ้น" aria-label="เลื่อนขึ้น">▲</button>
+            <span class="pos"></span>
+            <button type="button" class="down" title="ลง" aria-label="เลื่อนลง">▼</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <aside class="sticky">
+    <section class="card" style="margin:0;">
+      <h2>ตัวอย่างคิวสนาม</h2>
+      <div class="pv-sum" id="pvSum"></div>
+      <div class="grid-q" id="grid"></div>
+      <div class="legend" id="legend"></div>
+      <div class="warn" id="warnStarted" style="display:none;margin-top:12px;">
+        มีอีเวนต์ที่เริ่มกรอกคะแนนแล้ว การบันทึกจะย้ายสนามของนักกีฬา (คะแนนไม่หาย)
+        <label style="display:flex;gap:8px;align-items:center;margin-top:6px;"><input type="checkbox" name="confirm_started" value="yes"> ยืนยันจัดสนามใหม่</label>
+      </div>
+      <div class="bar">
+        <small class="muted">บันทึกแล้วระบบจัดสนามให้ทุกอีเวนต์ในสายทันที</small>
+        <button class="btn" type="submit">บันทึกสายคิว</button>
+      </div>
+    </section>
+  </aside>
+</form>
+
+<script>
+(function(){
+  const COLORS = ['#2563eb','#db2777','#16a34a','#ea580c','#7c3aed','#0891b2','#ca8a04','#dc2626','#4f46e5','#059669'];
+  const list = document.getElementById('evList');
+  const lanesEl = document.getElementById('lanes');
+  const items = () => [...list.querySelectorAll('.ev')];
+  const picked = () => items().filter(el => el.querySelector('input[type=checkbox]').checked);
+
+  // ลำดับเริ่มต้น: อีเวนต์ในสายตาม chain_position ขึ้นก่อน
+  const initial = items().filter(el => el.dataset.pos).sort((a, b) => a.dataset.pos - b.dataset.pos);
+  initial.reverse().forEach(el => list.prepend(el));
+
+  function sync(){
+    const sel = picked();
+    items().forEach(el => {
+      const on = el.querySelector('input[type=checkbox]').checked;
+      el.classList.toggle('on', on);
+      const idx = sel.indexOf(el);
+      el.querySelector('.pos').textContent = on ? idx + 1 : '';
+      el.querySelector('input[type=hidden]').value = on ? idx + 1 : '';
+    });
+    document.getElementById('pickCount').textContent = `· เลือก ${sel.length} อีเวนต์`;
+    document.getElementById('warnStarted').style.display = sel.some(el => el.dataset.started === '1') ? '' : 'none';
+    preview(sel);
+  }
+  function preview(sel){
+    const L = Math.max(1, parseInt(lanesEl.value || '8', 10));
+    const counts = sel.map(el => parseInt(el.dataset.count || '0', 10));
+    const total = counts.reduce((a, b) => a + b, 0);
+    const rounds = Math.ceil(total / L);
+    const separate = counts.reduce((a, n) => a + Math.ceil(n / L), 0);
+    const sum = document.getElementById('pvSum');
+    sum.innerHTML = total ? `<span class="pill">${total} คน</span><span class="pill good">${rounds} รอบคิว</span>` +
+      (separate > rounds ? `<span class="pill">แยกอีเวนต์ ${separate} รอบ · ประหยัด ${separate - rounds} รอบ</span>` : '') +
+      (rounds * L - total ? `<span class="pill">ว่างท้ายสาย ${rounds * L - total} ช่อง</span>` : '') : '<span class="pill">ยังไม่ได้เลือกอีเวนต์</span>';
+    // ตาราง: แถว = รอบคิว, คอลัมน์ = สนาม (แสดงสูงสุด 40 รอบ)
+    const owner = [];
+    sel.forEach((el, i) => { for (let k = 0; k < counts[i]; k++) owner.push(i); });
+    const grid = document.getElementById('grid');
+    grid.style.setProperty('--lanes', L);
+    let html = `<div class="row"><span></span>${Array.from({length: L}, (_, c) => `<span class="h">${c + 1}</span>`).join('')}</div>`;
+    for (let r = 0; r < Math.min(rounds, 40); r++) {
+      html += `<div class="row"><span class="rn">คิว ${r + 1}</span>`;
+      for (let c = 0; c < L; c++) {
+        const o = owner[r * L + c];
+        html += `<span class="c" style="${o === undefined ? '' : 'background:' + COLORS[o % COLORS.length]}" title="${o === undefined ? 'ว่าง' : sel[o].dataset.name}"></span>`;
+      }
+      html += '</div>';
+    }
+    if (rounds > 40) html += `<div class="muted" style="font-size:.78rem">… อีก ${rounds - 40} รอบ</div>`;
+    grid.innerHTML = html;
+    let off = 0;
+    document.getElementById('legend').innerHTML = sel.map((el, i) => {
+      const n = counts[i], s = off, e = off + n - 1; off += n;
+      const span = n ? `คิว ${Math.floor(s / L) + 1} สนาม ${s % L + 1} → คิว ${Math.floor(e / L) + 1} สนาม ${e % L + 1}` : 'ไม่มีรายชื่อ';
+      return `<div><i style="background:${COLORS[i % COLORS.length]}"></i><span><b>${i + 1}. ${el.dataset.name}</b> · ${n} คน · ${span}</span></div>`;
+    }).join('');
+  }
+  list.addEventListener('change', e => {
+    if (e.target.type !== 'checkbox') return;
+    const el = e.target.closest('.ev');
+    if (e.target.checked) {  // เลือกใหม่ไปต่อท้ายสาย
+      const sel = picked().filter(x => x !== el);
+      const last = sel[sel.length - 1];
+      if (last) last.after(el); else list.prepend(el);
+    }
+    sync();
+  });
+  list.addEventListener('click', e => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    const el = btn.closest('.ev');
+    if (!el.querySelector('input[type=checkbox]').checked) return;
+    const sel = picked(), i = sel.indexOf(el);
+    if (btn.classList.contains('up') && i > 0) sel[i - 1].before(el);
+    if (btn.classList.contains('down') && i < sel.length - 1) sel[i + 1].after(el);
+    sync();
+  });
+  document.getElementById('byName').addEventListener('click', () => {
+    const key = el => {
+      const t = el.dataset.name; const age = (t.match(/(\d+)\s*ปี/) || [0, 99])[1];
+      const g = /หญิง/.test(t) ? 1 : (/ผสม/.test(t) ? 2 : 0);
+      return [parseInt(age, 10), g, t];
+    };
+    const sel = picked().sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1] || x[2].localeCompare(y[2], 'th'); });
+    sel.reverse().forEach(el => list.prepend(el));
+    sync();
+  });
+  document.getElementById('q').addEventListener('input', e => {
+    const t = e.target.value.trim().toLowerCase();
+    items().forEach(el => el.style.display = !t || el.dataset.text.includes(t) || el.classList.contains('on') ? '' : 'none');
+  });
+  lanesEl.addEventListener('input', sync);
+  document.getElementById('chainForm').addEventListener('submit', e => {
+    if (picked().length < 2) { e.preventDefault(); alert('เลือกอย่างน้อย 2 อีเวนต์'); }
+  });
+  sync();
+})();
+</script>
+{% endblock %}

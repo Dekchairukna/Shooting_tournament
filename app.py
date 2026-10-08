@@ -315,12 +315,25 @@ class Event(db.Model):
     round_two_mode = db.Column(db.String(20), nullable=False, default="cutoff")
     # หน้ารวม: True = เรียงแถวตามอันดับสด · False = คงลำดับการตี (บางรายการไม่ให้แถวสลับไปมา)
     overview_sort_by_rank = db.Column(db.Boolean, nullable=False, default=True)
+    # ต่อคิวสนามข้ามรุ่น: อีเวนต์ในสายเดียวกันใช้สนามชุดเดียวกัน คิวต่อกันตาม chain_position
+    chain_id = db.Column(db.Integer, db.ForeignKey("court_chain.id"), nullable=True)
+    chain_position = db.Column(db.Integer, nullable=True)
     next_round_label = db.Column(db.String(50), nullable=False, default="รอบ 8 คน")
     round_two_advancers = db.Column(db.Integer, nullable=False, default=4)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
 
     athletes = db.relationship("Athlete", backref="event", cascade="all, delete-orphan", lazy=True)
+
+
+class CourtChain(db.Model):
+    """สายคิวสนาม: หลายอีเวนต์ตีต่อกันบนสนามชุดเดียว ไม่ให้สนามว่างระหว่างรุ่น"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    lane_count = db.Column(db.Integer, nullable=False, default=8)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    events = db.relationship("Event", backref="chain", lazy=True)
 
 
 class Athlete(db.Model):
@@ -716,6 +729,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("UPDATE \"event\" SET round_two_mode = 'cutoff' WHERE round_two_mode IS NULL")
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS overview_sort_by_rank BOOLEAN DEFAULT true')
             conn.exec_driver_sql('UPDATE "event" SET overview_sort_by_rank = true WHERE overview_sort_by_rank IS NULL')
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS chain_id INTEGER')
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS chain_position INTEGER')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled BOOLEAN DEFAULT false')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_at TIMESTAMP')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_by INTEGER')
@@ -764,6 +779,10 @@ def ensure_schema() -> None:
         if "overview_sort_by_rank" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_sort_by_rank BOOLEAN DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET overview_sort_by_rank = 1 WHERE overview_sort_by_rank IS NULL")
+        if "chain_id" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN chain_id INTEGER")
+        if "chain_position" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN chain_position INTEGER")
 
         user_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)").fetchall()}
         if "court_no" not in user_columns:
@@ -2491,6 +2510,89 @@ def recalculate_event_orders(event: Event) -> None:
         athlete.bib_no = str(idx)
         athlete.lane_no = ((idx - 1) % event.lane_count) + 1
         athlete.lane_order = ((idx - 1) // event.lane_count) + 1
+    refresh_event_chain(event)
+
+
+# ---------------------------------------------------------------------------
+# ต่อคิวสนามข้ามรุ่น (Court chain)
+# ---------------------------------------------------------------------------
+def chain_events_ordered(chain) -> list:
+    return sorted(Event.query.filter_by(chain_id=chain.id).all(),
+                  key=lambda e: (e.chain_position if e.chain_position is not None else 9999, e.id))
+
+
+def assign_event_lanes_standalone(event) -> None:
+    """จัดสนามของอีเวนต์เดียวตามลำดับยิงเดิม (ใช้ตอนถอดออกจากสาย)"""
+    lanes = max(1, int(event.lane_count or 1))
+    athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.start_order, Athlete.id).all()
+    for idx, athlete in enumerate(athletes, start=1):
+        athlete.lane_no = ((idx - 1) % lanes) + 1
+        athlete.lane_order = ((idx - 1) // lanes) + 1
+
+
+def apply_chain_lanes(chain) -> list[dict]:
+    """จัดสนามให้ทุกอีเวนต์ในสาย: คิวต่อกันตามลำดับรุ่น สนามที่ว่างท้ายรุ่นถูกเติมด้วยรุ่นถัดไป
+
+    lane_order = รอบคิวรวมของทั้งสาย (เช่น 12 หญิงคนแรกอยู่คิวที่ 6)
+    ลำดับยิงภายในรุ่น (start_order) ไม่เปลี่ยน · คืนสรุปช่วงคิวของแต่ละอีเวนต์
+    """
+    lanes = max(1, int(chain.lane_count or 1))
+    offset = 0
+    summary = []
+    db.session.flush()
+    for event in chain_events_ordered(chain):
+        if event.lane_count != lanes:
+            event.lane_count = lanes
+            sync_event_court_users(event)
+        athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.start_order, Athlete.id).all()
+        for idx, athlete in enumerate(athletes):
+            slot = offset + idx
+            athlete.lane_no = slot % lanes + 1
+            athlete.lane_order = slot // lanes + 1
+        summary.append(chain_span(event, offset, len(athletes), lanes))
+        offset += len(athletes)
+    return summary
+
+
+def chain_span(event, offset: int, count: int, lanes: int) -> dict:
+    if count <= 0:
+        return {"event": event, "count": 0, "start_round": None, "start_court": None, "end_round": None, "end_court": None}
+    last = offset + count - 1
+    return {
+        "event": event, "count": count,
+        "start_round": offset // lanes + 1, "start_court": offset % lanes + 1,
+        "end_round": last // lanes + 1, "end_court": last % lanes + 1,
+    }
+
+
+def chain_summary(chain) -> dict:
+    """สรุปช่วงคิวของแต่ละอีเวนต์จากข้อมูลปัจจุบัน (ไม่แก้ฐานข้อมูล)"""
+    lanes = max(1, int(chain.lane_count or 1))
+    events = chain_events_ordered(chain)
+    counts = dict(
+        db.session.query(Athlete.event_id, func.count(Athlete.id))
+        .filter(Athlete.event_id.in_([e.id for e in events] or [0])).group_by(Athlete.event_id).all()
+    )
+    offset, spans = 0, []
+    for e in events:
+        n = int(counts.get(e.id, 0))
+        spans.append(chain_span(e, offset, n, lanes))
+        offset += n
+    total = offset
+    chained_rounds = -(-total // lanes) if total else 0
+    separate_rounds = sum(-(-int(counts.get(e.id, 0)) // lanes) for e in events)
+    return {"spans": spans, "total": total, "rounds": chained_rounds, "separate_rounds": separate_rounds,
+            "empty_slots": chained_rounds * lanes - total}
+
+
+def refresh_event_chain(event) -> None:
+    """เรียกหลังจับสลาก/เพิ่ม/ลบนักกีฬา: ถ้าอีเวนต์อยู่ในสาย จัดสนามใหม่ทั้งสาย"""
+    chain_id = getattr(event, "chain_id", None)
+    if not chain_id:
+        return
+    chain = db.session.get(CourtChain, chain_id)
+    if chain is not None:
+        apply_chain_lanes(chain)
 
 
 def reset_event_bracket(event: Event) -> None:
@@ -2526,22 +2628,37 @@ def parse_athletes_excel(file_storage) -> list[tuple[str, str]]:
     return rows
 
 def dashboard_stats() -> dict:
+    """สถิติหน้าแรก: รวมคะแนนรอบ 1 ด้วย SQL ครั้งเดียว
+
+    เดิมคำนวณ Ranking เต็มของทุกอีเวนต์ทุกครั้งที่เปิดหน้าแรก (หลายร้อย query)
+    ทำให้หน้าแรกช้ามากบน Railway ที่ฐานข้อมูลอยู่คนละเครื่อง ผลลัพธ์เหมือนเดิม
+    """
     events_count = Event.query.count()
     athletes_count = Athlete.query.count()
-    round1_rows = []
-    for event in Event.query.all():
-        round1_rows.extend(build_round_ranking(event, 1))
-    top_score = max(round1_rows, key=lambda r: r["total"], default=None)
+    totals = (
+        db.session.query(
+            Athlete.id, Athlete.name, Athlete.affiliation,
+            func.coalesce(func.sum(ScoreEntry.score), 0).label("total"),
+        )
+        .outerjoin(ScoreEntry, (ScoreEntry.athlete_id == Athlete.id) & (ScoreEntry.round_no == 1))
+        .group_by(Athlete.id, Athlete.name, Athlete.affiliation)
+        .all()
+    )
+    rows = [
+        SimpleNamespace(athlete=SimpleNamespace(id=r[0], name=r[1], affiliation=r[2]), total=int(r[3] or 0))
+        for r in totals
+    ]
+    top_score = max(rows, key=lambda r: r.total, default=None)
     affiliation_best = {}
-    for row in round1_rows:
-        key = row["athlete"].affiliation
-        if key not in affiliation_best or row["total"] > affiliation_best[key]["total"]:
+    for row in rows:
+        key = row.athlete.affiliation
+        if key not in affiliation_best or row.total > affiliation_best[key].total:
             affiliation_best[key] = row
     return {
         "events_count": events_count,
         "athletes_count": athletes_count,
         "top_score": top_score,
-        "top_affiliations": sorted(affiliation_best.values(), key=lambda r: r["total"], reverse=True)[:8],
+        "top_affiliations": sorted(affiliation_best.values(), key=lambda r: r.total, reverse=True)[:8],
     }
 
 
@@ -2581,7 +2698,13 @@ def court_public_id(user: User | None = None) -> str:
 def court_can_access_event(event: Event) -> bool:
     if not is_court_user():
         return True
-    return int(current_user.court_event_id) == int(event.id)
+    if int(current_user.court_event_id) == int(event.id):
+        return True
+    # บัญชีสนามใช้ได้กับทุกอีเวนต์ในสายคิวเดียวกัน (กรรมการคนเดิมตีต่อรุ่นถัดไป)
+    if event.chain_id:
+        home = db.session.get(Event, int(current_user.court_event_id))
+        return bool(home and home.chain_id == event.chain_id)
+    return False
 
 
 def effective_lane_for_athlete(event: Event, athlete: Athlete, round_no: int) -> int | None:
@@ -2720,6 +2843,12 @@ def login():
                 u for u in User.query.filter_by(role="court", court_no=court_no).all()
                 if u.court_event_id and u.check_password(password)
             ]
+            if len(matches) > 1:
+                match_events = {u.id: db.session.get(Event, u.court_event_id) for u in matches}
+                chains = {getattr(match_events[u.id], "chain_id", None) for u in matches}
+                if len(chains) == 1 and None not in chains:
+                    # ตั้งรหัสเดียวกันไว้หลายอีเวนต์ในสายเดียวกัน: ใช้อีเวนต์แรกของสาย
+                    matches = [min(matches, key=lambda u: (match_events[u.id].chain_position or 0, match_events[u.id].id))]
             if len(matches) == 1:
                 user = matches[0]
             elif len(matches) > 1:
@@ -2834,6 +2963,8 @@ def edit_event(event_id: int):
         event.competition_date = date.fromisoformat(request.form["competition_date"])
         event.location = request.form.get("location", "").strip()
         event.lane_count = int(request.form["lane_count"])
+        if event.chain_id and event.chain:
+            event.lane_count = event.chain.lane_count  # อยู่ในสายคิว: ใช้จำนวนสนามของสาย
         event.direct_qualifiers = int(request.form["direct_qualifiers"])
         event.has_round_two = request.form.get("has_round_two") == "yes"
         event.round_two_cutoff_rank = int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None
@@ -2855,10 +2986,15 @@ def edit_event(event_id: int):
 @role_required("admin", "superadmin")
 def delete_event(event_id: int):
     event = Event.query.get_or_404(event_id)
+    chain_id = event.chain_id
     BracketMatch.query.filter_by(event_id=event.id).delete()
     User.query.filter_by(role="court", court_event_id=event.id).delete(synchronize_session=False)
     db.session.delete(event)
     db.session.commit()
+    chain = db.session.get(CourtChain, chain_id) if chain_id else None
+    if chain is not None:
+        apply_chain_lanes(chain)
+        db.session.commit()
     flash("ลบอีเวนต์แล้ว", "info")
     return redirect(url_for("index"))
 
@@ -2885,6 +3021,7 @@ def manage_athletes(event_id: int):
             status="waiting",
         )
         db.session.add(athlete)
+        refresh_event_chain(event)
         db.session.commit()
         flash("เพิ่มนักกีฬาสำเร็จ", "success")
         return redirect(url_for("manage_athletes", event_id=event.id))
@@ -2976,6 +3113,7 @@ def import_athletes_excel(event_id: int):
             )
             db.session.add(athlete)
             next_order += 1
+        refresh_event_chain(event)
         db.session.commit()
         flash(f"นำเข้านักกีฬาสำเร็จ {len(rows)} คน", "success")
     except Exception as exc:
@@ -3038,6 +3176,7 @@ def draw_event_lots(event: Event, rng=None) -> int:
         athlete.start_order = idx
         athlete.lane_no = ((idx - 1) % lanes) + 1
         athlete.lane_order = ((idx - 1) // lanes) + 1
+    refresh_event_chain(event)
     return len(athletes)
 
 
@@ -3474,6 +3613,94 @@ def reset_event_bracket_no_commit(event: Event) -> None:
     BracketMatch.query.filter_by(event_id=event.id).delete()
 
 
+@app.route("/chains")
+@login_required
+@role_required("admin", "superadmin")
+def court_chains():
+    chains = CourtChain.query.order_by(CourtChain.id.desc()).all()
+    return render_template("chains.html", chains=[(c, chain_summary(c)) for c in chains])
+
+
+def _chain_form_context(chain=None):
+    events = Event.query.order_by(Event.competition_date.desc(), Event.id).all()
+    counts = dict(db.session.query(Athlete.event_id, func.count(Athlete.id)).group_by(Athlete.event_id).all())
+    started = event_ids_with_scores([e.id for e in events])
+    return dict(chain=chain, events=events, counts=counts, started=started)
+
+
+@app.route("/chains/new", methods=["GET", "POST"])
+@app.route("/chains/<int:chain_id>/edit", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def edit_court_chain(chain_id: int | None = None):
+    chain = db.session.get(CourtChain, chain_id) if chain_id else None
+    if chain_id and chain is None:
+        abort(404)
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()[:160] or "สายคิวสนาม"
+        lanes = _form_int(request.form.get("lane_count"), 8, 1)
+        picked = []
+        for raw in request.form.getlist("event_ids"):
+            if not str(raw).isdigit():
+                continue
+            eid = int(raw)
+            pos = _form_int(request.form.get(f"pos_{eid}"), 999, 0)
+            picked.append((pos, eid))
+        picked.sort()
+        ids = [eid for _, eid in picked]
+        if len(ids) < 2:
+            flash("เลือกอย่างน้อย 2 อีเวนต์เพื่อต่อคิวกัน", "warning")
+            return redirect(request.url)
+        events = {e.id: e for e in Event.query.filter(Event.id.in_(ids)).all()}
+        taken = [e for e in events.values() if e.chain_id and (chain is None or e.chain_id != chain.id)]
+        if taken:
+            flash("อีเวนต์นี้อยู่ในสายอื่นแล้ว: " + ", ".join(e.name for e in taken), "warning")
+            return redirect(request.url)
+        old_ids = {e.id for e in Event.query.filter_by(chain_id=chain.id).all()} if chain else set()
+        started = event_ids_with_scores(list(set(ids) | old_ids))
+        if started and request.form.get("confirm_started") != "yes":
+            flash("มีอีเวนต์ที่เริ่มกรอกคะแนนแล้ว การจัดสนามใหม่จะย้ายสนามของนักกีฬา · ติ๊กยืนยันก่อนบันทึก", "warning")
+            return redirect(request.url)
+        if chain is None:
+            chain = CourtChain(name=name, lane_count=lanes)
+            db.session.add(chain)
+            db.session.flush()
+        chain.name, chain.lane_count = name, lanes
+        # ถอดอีเวนต์ที่ไม่ได้เลือกออกจากสาย แล้วจัดสนามแบบแยกตามเดิม
+        for eid in old_ids - set(ids):
+            ev = db.session.get(Event, eid)
+            ev.chain_id, ev.chain_position = None, None
+            assign_event_lanes_standalone(ev)
+            invalidate_poll_cache(ev.id)
+        for pos, eid in enumerate(ids, start=1):
+            events[eid].chain_id, events[eid].chain_position = chain.id, pos
+        apply_chain_lanes(chain)
+        for eid in ids:
+            invalidate_poll_cache(eid)
+        db.session.commit()
+        info = chain_summary(chain)
+        flash(f"บันทึกสาย “{chain.name}” แล้ว · {len(ids)} อีเวนต์ · {info['total']} คน · {info['rounds']} รอบคิว"
+              f" (แยกอีเวนต์จะใช้ {info['separate_rounds']} รอบ)", "success")
+        return redirect(url_for("court_chains"))
+    return render_template("chain_form.html", **_chain_form_context(chain))
+
+
+@app.route("/chains/<int:chain_id>/delete", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def delete_court_chain(chain_id: int):
+    chain = db.session.get(CourtChain, chain_id) or abort(404)
+    for ev in Event.query.filter_by(chain_id=chain.id).all():
+        ev.chain_id, ev.chain_position = None, None
+        assign_event_lanes_standalone(ev)
+        invalidate_poll_cache(ev.id)
+    name = chain.name
+    db.session.delete(chain)
+    db.session.commit()
+    flash(f"ยกเลิกสาย “{name}” แล้ว · แต่ละอีเวนต์กลับไปจัดสนามแยกเหมือนเดิม", "info")
+    return redirect(url_for("court_chains"))
+
+
 
 def overview_sorts_by_rank(event) -> bool:
     value = getattr(event, "overview_sort_by_rank", True)
@@ -3688,7 +3915,20 @@ def court_queue(event_id: int):
     else:
         court_no = request.args.get("court", 1, type=int) or 1
         court_no = min(max(court_no, 1), lane_count)
-    rows = court_queue_rows(event, round_no, court_no)
+    chain = event.chain if event.chain_id else None
+    if chain is not None and round_no == 1:
+        # สายคิว: รวมคิวของสนามนี้จากทุกรุ่นในสาย เรียงตามรอบคิวรวม
+        rows = []
+        for ev in chain_events_ordered(chain):
+            for r in court_queue_rows(ev, 1, court_no):
+                r["event"] = ev
+                rows.append(r)
+        rows.sort(key=lambda r: (r["order"], r["event"].chain_position or 0, r["athlete"].id))
+        next_row = next((r for r in rows if r["status"] == "active"), None) or next((r for r in rows if r["status"] == "waiting"), None)
+        for r in rows:
+            r["is_next"] = r is next_row
+    else:
+        rows = court_queue_rows(event, round_no, court_no)
     done = sum(1 for r in rows if r["status"] == "finished")
     return render_template(
         "court_queue.html",
@@ -3700,6 +3940,7 @@ def court_queue(event_id: int):
         done=done,
         theme=event_theme(event.category),
         work_page=True,
+        chain=chain if round_no == 1 else None,
     )
 
 

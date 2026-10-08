@@ -24,7 +24,7 @@
       </select>
     </label>
     <label>วันแข่งขัน<input type="date" name="competition_date" value="{{ event.competition_date.isoformat() if event else '' }}" required></label>
-    <label>จำนวนสนาม<input type="number" min="1" name="lane_count" value="{{ event.lane_count if event else 4 }}" required></label>
+    <label>จำนวนสนาม<input type="number" min="1" name="lane_count" value="{{ event.lane_count if event else 4 }}" required {% if event and event.chain_id %}readonly{% endif %}>{% if event and event.chain_id %}<small class="muted">อยู่ในสายคิว “{{ event.chain.name }}” · จำนวนสนามตั้งที่หน้า <a href="{{ url_for('edit_court_chain', chain_id=event.chain_id) }}">ต่อคิวสนาม</a></small>{% endif %}</label>
     <label>จากรอบแรกเข้ารอบถัดไปทันที กี่คน<input id="direct_qualifiers" type="number" min="0" name="direct_qualifiers" value="{{ event.direct_qualifiers if event else 4 }}" required><small class="muted">ระบบใช้ตามรอบถัดไปอัตโนมัติ: รอบ 8 = 4, รอบ 16 = 8</small></label>
     <label>มีรอบ 2 หรือไม่
       <select name="has_round_two">

@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}ต่อคิวสนามข้ามรุ่น · Petanque Shooting{% endblock %}
+{% block content %}
+<style>
+  .ch-page{display:grid;gap:18px}
+  .ch-page h1{margin:0 0 4px}
+  .ch-card{border:1px solid var(--th-line);border-radius:18px;background:#fff;padding:16px;box-shadow:0 8px 22px rgba(15,23,42,.05)}
+  .ch-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+  .ch-head h2{margin:0;font-size:1.15rem;color:var(--th-primary-dark)}
+  .ch-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:.8rem;font-weight:800;background:#f1f5f9;color:#334155}
+  .pill.good{background:#dcfce7;color:#166534}
+  .ch-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .ch-actions form{margin:0}
+  .timeline{display:flex;height:16px;border-radius:999px;overflow:hidden;margin:14px 0 10px;background:#f1f5f9}
+  .timeline span{display:block;height:100%}
+  .ch-table{width:100%;border-collapse:collapse;font-size:.92rem}
+  .ch-table th{background:#f8fafc;text-align:left;font-size:.8rem;padding:8px;border-bottom:1px solid #e2e8f0}
+  .ch-table td{padding:8px;border-bottom:1px solid #eef2f7}
+  .sw{display:inline-block;width:12px;height:12px;border-radius:4px;margin-right:6px;vertical-align:-1px}
+  .muted-sm{color:#64748b;font-size:.82rem}
+  .empty{border:2px dashed #cbd5e1;border-radius:18px;padding:28px;text-align:center;color:#64748b;background:#fff}
+</style>
+{% set colors = ['#2563eb','#db2777','#16a34a','#ea580c','#7c3aed','#0891b2','#ca8a04','#dc2626','#4f46e5','#059669'] %}
+<div class="ch-page">
+  <section class="card" style="margin:0;">
+    <div class="section-head">
+      <div>
+        <h1>ต่อคิวสนามข้ามรุ่น</h1>
+        <p class="muted" style="margin:0;">ให้หลายอีเวนต์ตีต่อกันบนสนามชุดเดียว เมื่อรุ่นหนึ่งเหลือคนไม่เต็มสนาม รุ่นถัดไปเข้าตีสนามที่ว่างได้ทันที · อันดับและสิทธิ์เข้ารอบยังแยกต่ออีเวนต์ · ใช้กับรอบ 1 · อีเวนต์ที่ไม่ได้เลือกยังจัดสนามแยกเหมือนเดิม</p>
+      </div>
+      <a class="btn" href="{{ url_for('edit_court_chain') }}">+ สร้างสายคิวใหม่</a>
+    </div>
+  </section>
+
+  {% for c, info in chains %}
+  <section class="ch-card">
+    <div class="ch-head">
+      <div>
+        <h2>{{ c.name }}</h2>
+        <div class="ch-meta">
+          <span class="pill">{{ c.lane_count }} สนาม</span>
+          <span class="pill">{{ info.spans|length }} อีเวนต์ · {{ info.total }} คน</span>
+          <span class="pill good">{{ info.rounds }} รอบคิว{% if info.separate_rounds > info.rounds %} · ประหยัด {{ info.separate_rounds - info.rounds }} รอบ (แยกอีเวนต์ {{ info.separate_rounds }} รอบ){% endif %}</span>
+          {% if info.empty_slots %}<span class="pill">สนามว่างท้ายสาย {{ info.empty_slots }} ช่อง</span>{% endif %}
+        </div>
+      </div>
+      <div class="ch-actions">
+        <a class="btn secondary" href="{{ url_for('edit_court_chain', chain_id=c.id) }}">แก้ไข / เรียงลำดับ</a>
+        <form method="post" action="{{ url_for('delete_court_chain', chain_id=c.id) }}" data-name="{{ c.name }}"
+              onsubmit="return confirm('ยกเลิกสาย “' + this.dataset.name + '”? แต่ละอีเวนต์จะกลับไปจัดสนามแยก');">
+          <button class="btn secondary" type="submit">ยกเลิกสาย</button>
+        </form>
+      </div>
+    </div>
+    {% if info.total %}
+    <div class="timeline" aria-hidden="true">
+      {% for sp in info.spans %}{% if sp.count %}<span style="width:{{ (sp.count / info.total * 100)|round(2) }}%;background:{{ colors[loop.index0 % colors|length] }}" title="{{ sp.event.name }}"></span>{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="ch-table">
+        <thead><tr><th>ลำดับ</th><th>อีเวนต์</th><th>คน</th><th>เริ่ม</th><th>จบ</th><th></th></tr></thead>
+        <tbody>
+        {% for sp in info.spans %}
+          <tr>
+            <td><span class="sw" style="background:{{ colors[loop.index0 % colors|length] }}"></span>{{ loop.index }}</td>
+            <td><strong>{{ sp.event.name }}</strong><div class="muted-sm">{{ sp.event.event_group }} · {{ sp.event.category }}</div></td>
+            <td>{{ sp.count }}</td>
+            <td>{% if sp.count %}คิว {{ sp.start_round }} · สนาม {{ sp.start_court }}{% else %}-{% endif %}</td>
+            <td>{% if sp.count %}คิว {{ sp.end_round }} · สนาม {{ sp.end_court }}{% else %}-{% endif %}</td>
+            <td><a href="{{ url_for('event_overview', event_id=sp.event.id, round=1) }}">หน้ารวม</a> · <a href="{{ url_for('court_queue', event_id=sp.event.id, round=1) }}">คิวสนาม</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% else %}
+  <div class="empty">ยังไม่มีสายคิว · <a href="{{ url_for('edit_court_chain') }}">สร้างสายคิวใหม่</a> เพื่อให้หลายรุ่นตีต่อกันบนสนามชุดเดียว</div>
+  {% endfor %}
+  <p class="muted-sm" style="margin:0;">บัญชีกรรมการสนาม (court01, court02 …): ตั้งรหัสที่อีเวนต์ใดก็ได้ในสาย กรรมการคนเดิมจะเห็นคิวของสนามตัวเองต่อกันทุกรุ่นในสาย</p>
+</div>
+{% endblock %}

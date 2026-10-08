@@ -58,7 +58,11 @@
     </form>
     <div class="card muted-box">
       <h3>การกระจายสนามอัตโนมัติ</h3>
+      {% if event.chain_id %}
+      <p>อีเวนต์นี้อยู่ในสายคิว <strong>{{ event.chain.name }}</strong> · สนามและ “ลำดับในสนาม” (= รอบคิวรวมของสาย) จัดต่อจากรุ่นก่อนหน้าให้อัตโนมัติ · <a href="{{ url_for('court_chains') }}">ดูสายคิว</a></p>
+      {% else %}
       <p>สนาม = วนตามจำนวนสนาม เช่น 1, 2, 3, 4 แล้วกลับไป 1</p>
+      {% endif %}
       <form method="post" action="{{ url_for('randomize_athletes', event_id=event.id) }}">
         <button class="btn secondary" type="submit">สุ่มลำดับทั้งหมด</button>
       </form>

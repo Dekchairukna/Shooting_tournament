@@ -85,7 +85,10 @@
         <h1>ศูนย์จับสลาก</h1>
         <p class="muted" style="margin:0;">เลือกหลายอีเวนต์แล้วกดจับสลากครั้งเดียว ระบบสุ่มลำดับยิงและกระจายสนามใหม่ให้ทุกอีเวนต์พร้อมกัน · อีเวนต์ที่เริ่มกรอกคะแนนแล้วจะถูกล็อกไว้</p>
       </div>
-      <a class="btn secondary" href="{{ url_for('bulk_create_events') }}">+ สร้างหลายอีเวนต์</a>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn secondary" href="{{ url_for('court_chains') }}">🔗 ต่อคิวสนามข้ามรุ่น</a>
+        <a class="btn secondary" href="{{ url_for('bulk_create_events') }}">+ สร้างหลายอีเวนต์</a>
+      </div>
     </div>
 
     <div class="draw-tools">
@@ -115,7 +118,7 @@
               data-ready="{{ '1' if (n and not locked) else '0' }}">
             <td class="chk"><input type="checkbox" name="event_ids" value="{{ e.id }}" class="js-pick" data-locked="{{ '1' if locked else '0' }}"
                 {% if e.id in focus_ids and n and not locked and not just_drawn %}checked{% endif %} aria-label="เลือก {{ e.name }}"></td>
-            <td><strong>{{ e.name }}</strong></td>
+            <td><strong>{{ e.name }}</strong>{% if e.chain_id %} <span class="tag empty" title="จับสลากแล้วระบบจัดสนามต่อคิวให้ทั้งสาย">🔗 {{ e.chain.name }}</span>{% endif %}</td>
             <td class="hide-sm">{{ e.event_group }}</td>
             <td class="hide-sm">{{ e.category }}</td>
             <td class="hide-sm">{{ e.competition_date.strftime('%d/%m/%Y') }}</td>
