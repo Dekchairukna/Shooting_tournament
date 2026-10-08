@@ -1350,6 +1350,20 @@
   </div>
 </div>
 
+{% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
+<details class="reset-zone" style="max-width:1200px;margin:18px auto 8px;border:1px solid #fecaca;border-radius:14px;background:#fff7f7;padding:10px 14px;">
+  <summary style="cursor:pointer;font-weight:800;color:#b91c1c;">ล้างการคีย์รอบนี้ (กรณีคีย์ก่อนเวลาหรือคีย์ผิด)</summary>
+  <form method="post" action="{{ url_for('reset_athlete_round_route', athlete_id=athlete.id) }}" style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;"
+        data-name="{{ athlete.name }}" onsubmit="return confirm('ล้างคะแนน ลายเซ็น และ Shoot-off รอบ {{ round_no }} ของ ' + this.dataset.name + ' ทั้งหมด? กลับเป็นสถานะรอตี');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="round" value="{{ round_no }}">
+    <input name="reason" required maxlength="300" placeholder="เหตุผล เช่น คีย์ก่อนนักกีฬาตีจริง" style="flex:1;min-width:240px;padding:9px;border:1px solid #fca5a5;border-radius:9px;">
+    <button type="submit" class="btn" style="background:#dc2626;border-color:#dc2626;color:#fff;">ล้างการคีย์รอบ {{ round_no }}</button>
+  </form>
+  <p style="margin:8px 0 0;font-size:.82rem;color:#7f1d1d;">ล้างคะแนนทุกช่อง ใบแดง ลายเซ็น/APPROVED และ Shoot-off ของรอบนี้ · ช่องที่เคยคีย์ถูกบันทึกในประวัติการแก้พร้อมเหตุผล</p>
+</details>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}

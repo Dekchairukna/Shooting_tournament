@@ -68,6 +68,26 @@
       </form>
     </div>
   </div>
+  {% if current_user.is_authenticated and current_user.role == 'superadmin' %}
+  <details class="card muted-box" style="margin-top:1rem;border-color:#fecaca;background:#fff7f7;">
+    <summary style="cursor:pointer;font-weight:800;color:#b91c1c;">ล้างการคีย์ทั้งอีเวนต์ (เช่น ทดลองคีย์ก่อนแข่งจริง)</summary>
+    <form method="post" action="{{ url_for('reset_event_scores', event_id=event.id) }}" class="form-grid" style="margin-top:10px;"
+          onsubmit="return confirm('ล้างการคีย์ของทุกคนในอีเวนต์นี้ตามที่เลือก? ย้อนกลับไม่ได้');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>รอบที่จะล้าง
+        <select name="round">
+          <option value="1">รอบ 1</option>
+          {% if event.has_round_two %}<option value="2">รอบ 2</option><option value="all">รอบ 1 และรอบ 2</option>{% endif %}
+        </select>
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" name="skip_approved" value="yes" checked style="width:auto;margin:0;"> ไม่ล้างคนที่ APPROVED แล้ว</label>
+      <label>เหตุผล<input name="reason" required maxlength="300" placeholder="เช่น ทดลองระบบก่อนแข่ง"></label>
+      <label>พิมพ์คำว่า <strong>ล้าง</strong> เพื่อยืนยัน<input name="confirm_text" required autocomplete="off"></label>
+      <p class="muted" style="grid-column:1/-1;margin:0;">ล้างคะแนน ใบแดง ลายเซ็น และ Shoot-off ทุกคนในรอบที่เลือก กลับเป็นสถานะรอตี · ล้างสาย Knockout ของอีเวนต์นี้ · รายชื่อ ลำดับยิง และสนามไม่เปลี่ยน · ช่องที่เคยคีย์ถูกบันทึกในประวัติการแก้</p>
+      <button class="btn" type="submit" style="background:#dc2626;border-color:#dc2626;color:#fff;">ล้างการคีย์ทั้งอีเวนต์</button>
+    </form>
+  </details>
+  {% endif %}
   <div class="card muted-box" style="margin-top:1rem;">
     <h3>นำเข้ารายชื่อนักกีฬาจาก Excel</h3>
     <p class="muted">ไฟล์ต้องเป็น .xlsx และต้องมี 2 คอลัมน์คือ <strong>ชื่อ</strong> และ <strong>สังกัด</strong></p>

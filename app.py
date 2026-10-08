@@ -4482,6 +4482,117 @@ def scorecard(athlete_id: int):
     )
 
 
+# ---------------------------------------------------------------------------
+# ล้างการคีย์ (กรณีคีย์ก่อนเวลาหรือคีย์ผิด)
+# ---------------------------------------------------------------------------
+def reset_athlete_round(athlete: Athlete, round_no: int, reason: str) -> int:
+    """ล้างคะแนน/ลายเซ็น/Shoot-off ของนักกีฬาหนึ่งรอบ ให้กลับเป็นสถานะ "รอตี"
+
+    ช่องคะแนนถูกตั้งเป็นว่าง (ไม่ได้ลบแถว) และทุกช่องที่เคยคีย์ถูกบันทึกใน ScoreEditLog
+    เพื่อให้ตรวจย้อนหลังได้ว่าใครล้างอะไรเมื่อไร · คืนจำนวนช่องที่ถูกล้าง
+    """
+    cleared = 0
+    note = f"ล้างการคีย์: {reason}"[:500]
+    for entry in ScoreEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).all():
+        if entry.is_scored or entry.score or entry.is_red_card:
+            db.session.add(ScoreEditLog(
+                athlete_id=athlete.id, round_no=round_no, station_no=entry.station_no, distance_m=entry.distance_m,
+                old_score=entry.score or 0, new_score=0,
+                old_red=bool(entry.is_red_card), new_red=False,
+                old_played=bool(entry.is_scored), new_played=False,
+                edited_by=current_user.id if current_user.is_authenticated else None,
+                editor_username=getattr(current_user, "username", None),
+                editor_court_no=getattr(current_user, "court_no", None),
+                reason=note,
+            ))
+            cleared += 1
+        entry.score, entry.is_red_card, entry.is_scored = 0, False, False
+    ScoreSignature.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete(synchronize_session=False)
+    TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete(synchronize_session=False)
+    ScorecardLock.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete(synchronize_session=False)
+    if round_no == 1:
+        athlete.status = "waiting"
+        athlete.red_card_count = 0
+    return cleared
+
+
+def _reset_reason(form) -> str:
+    return (form.get("reason") or "").strip()[:300]
+
+
+@app.route("/athletes/<int:athlete_id>/reset-round", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def reset_athlete_round_route(athlete_id: int):
+    athlete = Athlete.query.get_or_404(athlete_id)
+    event = athlete.event
+    round_no = request.form.get("round", 1, type=int) or 1
+    reason = _reset_reason(request.form)
+    if not reason:
+        flash("กรุณาระบุเหตุผลในการล้างการคีย์", "warning")
+        return redirect(url_for("scorecard", athlete_id=athlete.id, round=round_no))
+    cleared = reset_athlete_round(athlete, round_no, reason)
+    db.session.commit()
+    clear_request_cache()
+    if event.has_round_two:
+        sync_round_two_candidates(event)
+        db.session.commit()
+    invalidate_poll_cache(event.id)
+    has_ko = BracketMatch.query.filter(BracketMatch.event_id == event.id, BracketMatch.winner_id.isnot(None)).count()
+    flash(f"ล้างการคีย์รอบ {round_no} ของ {athlete.name} แล้ว ({cleared} ช่อง) · กลับเป็นสถานะรอตี", "success")
+    if has_ko:
+        flash("อีเวนต์นี้มีผล Knockout แล้ว · ตรวจสาย Knockout อีกครั้งหลังคีย์ใหม่", "warning")
+    return redirect(url_for("scorecard", athlete_id=athlete.id, round=round_no))
+
+
+@app.route("/events/<int:event_id>/reset-scores", methods=["POST"])
+@login_required
+@role_required("superadmin")
+def reset_event_scores(event_id: int):
+    """ล้างการคีย์ทั้งอีเวนต์ (เช่น ทดลองคีย์ก่อนแข่งจริง) · เฉพาะ superadmin และต้องพิมพ์ยืนยัน"""
+    event = Event.query.get_or_404(event_id)
+    back = redirect(url_for("manage_athletes", event_id=event.id))
+    if (request.form.get("confirm_text") or "").strip() != "ล้าง":
+        flash("พิมพ์คำว่า ล้าง ในช่องยืนยันก่อน", "warning")
+        return back
+    reason = _reset_reason(request.form)
+    if not reason:
+        flash("กรุณาระบุเหตุผลในการล้างการคีย์", "warning")
+        return back
+    scope = request.form.get("round", "all")
+    rounds = [1, 2] if scope == "all" else ([2] if scope == "2" else [1])
+    skip_approved = request.form.get("skip_approved") == "yes"
+    people, cells, skipped = 0, 0, 0
+    for athlete in Athlete.query.filter_by(event_id=event.id).all():
+        touched = False
+        for rn in rounds:
+            if skip_approved and athlete_round_is_approved(athlete, rn):
+                skipped += 1
+                continue
+            has_data = ScoreEntry.query.filter(
+                ScoreEntry.athlete_id == athlete.id, ScoreEntry.round_no == rn,
+                db.or_(ScoreEntry.is_scored.is_(True), ScoreEntry.score != 0, ScoreEntry.is_red_card.is_(True)),
+            ).count() or ScoreSignature.query.filter_by(athlete_id=athlete.id, round_no=rn).count()
+            if not has_data:
+                continue
+            cells += reset_athlete_round(athlete, rn, reason)
+            touched = True
+        people += 1 if touched else 0
+    reset_event_bracket_no_commit(event)
+    db.session.commit()
+    clear_request_cache()
+    if event.has_round_two:
+        sync_round_two_candidates(event)
+        db.session.commit()
+    invalidate_poll_cache(event.id)
+    label = {"all": "รอบ 1 และรอบ 2", "1": "รอบ 1", "2": "รอบ 2"}.get(scope, "รอบ 1 และรอบ 2")
+    msg = f"ล้างการคีย์{label} ของ {event.name} แล้ว · {people} คน {cells} ช่อง · ล้างสาย Knockout"
+    if skipped:
+        msg += f" · ข้ามรายการที่ APPROVED แล้ว {skipped} รายการ"
+    flash(msg, "success")
+    return back
+
+
 @app.route("/athletes/<int:athlete_id>/score-history")
 @login_required
 @role_required("admin", "superadmin", "court")
