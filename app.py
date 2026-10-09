@@ -411,8 +411,8 @@ class AthletePenalty(db.Model):
     """บทลงโทษไม่มาทำการแข่งขันตามเวลา (กรรมการเป็นผู้บันทึก ยกเลิกได้)
 
     level 1 = เกิน 5 นาที หัก 5 คะแนน
-    level 2 = เกินอีก 5 นาที (รวม 10 นาที) หักเพิ่มอีก 5 รวม 10 คะแนน
-    level 3 = หมดสิทธิ์ลงทำการแข่งขันรอบนั้น (จัดอันดับท้ายสุด ไม่มีสิทธิ์เข้ารอบ)
+    level 2 = เกิน 10 นาที ตัดออกจากการแข่งขัน (Disqualified): ไม่คำนวณคะแนน
+              อยู่ท้ายตาราง ไม่มีสิทธิ์ตีรอบถัดไป
     """
     __tablename__ = "athlete_penalty"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -426,11 +426,12 @@ class AthletePenalty(db.Model):
 
 
 # level -> (ป้าย, คะแนนที่หัก, หมดสิทธิ์)
+# 3 เก็บไว้เป็นชื่อเดิมของ "หมดสิทธิ์" เผื่อมีข้อมูลที่บันทึกก่อนเปลี่ยนกติกา
 PENALTY_LEVELS = {
     0: ("ไม่มีบทลงโทษ", 0, False),
-    1: ("มาช้าเกิน 5 นาที หัก 5 คะแนน", 5, False),
-    2: ("มาช้าเกิน 10 นาที หัก 10 คะแนน", 10, False),
-    3: ("ไม่มาแข่งขัน หมดสิทธิ์ลงทำการแข่งขัน", 10, True),
+    1: ("เกิน 5 นาที หัก 5 คะแนน", 5, False),
+    2: ("เกิน 10 นาที ตัดออกจากการแข่งขัน (Disqualified)", 0, True),
+    3: ("เกิน 10 นาที ตัดออกจากการแข่งขัน (Disqualified)", 0, True),
 }
 
 
@@ -438,6 +439,8 @@ def penalty_info(level) -> dict:
     level = int(level or 0)
     if level not in PENALTY_LEVELS:
         level = 0
+    if level == 3:
+        level = 2
     label, points, dq = PENALTY_LEVELS[level]
     return {"level": level, "label": label, "points": points, "disqualified": dq}
 
@@ -1045,7 +1048,8 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
 
     raw_total = sum(e.score for e in entries)
     pen = penalty_info(get_round_penalty_level(athlete_id, round_no))
-    total = raw_total - pen["points"]
+    # Disqualified = ไม่คำนวณคะแนน (รวมเป็น 0 และอยู่ท้ายตาราง)
+    total = 0 if pen["disqualified"] else raw_total - pen["points"]
     count_5 = sum(1 for e in entries if e.score == 5)
     count_3 = sum(1 for e in entries if e.score == 3)
     red_cards = sum(1 for e in entries if e.is_red_card)
@@ -4636,9 +4640,10 @@ def set_athlete_penalty(athlete_id: int):
     if level not in PENALTY_LEVELS:
         flash("ระดับบทลงโทษไม่ถูกต้อง", "danger")
         return redirect(back)
+    level = penalty_info(level)["level"]
     note = (request.form.get("note") or "").strip()[:300]
     row = AthletePenalty.query.filter_by(athlete_id=athlete.id, round_no=round_no).first()
-    old_level = int(row.level or 0) if row else 0
+    old_level = penalty_info(row.level if row else 0)["level"]
     if level == old_level:
         return redirect(back)
     if level == 0:

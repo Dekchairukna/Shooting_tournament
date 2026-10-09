@@ -8,7 +8,7 @@ os.environ.setdefault("SECRET_KEY", "test-only-secret")
 
 from flask import g
 from app import (app, db, User, Event, Athlete, ScoreEntry, ScoreSignature, AthletePenalty, ScoreEditLog,
-                 ensure_round_entries)
+                 ensure_round_entries, invalidate_poll_cache)
 
 
 class PenaltyTests(unittest.TestCase):
@@ -52,21 +52,24 @@ class PenaltyTests(unittest.TestCase):
 
     def overview(self, c, rnd=1):
         g.pop("shooting_request_cache", None)
+        invalidate_poll_cache(self.e.id)
         return {r["name"]: r for r in c.get(f"/events/{self.e.id}/overview-data?round={rnd}").get_json()}
 
     def pen(self, c, athlete, level, rnd=1):
         return c.post(f"/athletes/{athlete.id}/penalty", data={"round": str(rnd), "level": str(level), "note": "สาย"})
 
-    def test_minus_five_then_ten_changes_rank(self):
+    def test_minus_five_then_dq(self):
         c = self.client()
         self.pen(c, self.a[0], 1)
         rows = self.overview(c)
         self.assertEqual(rows["A1"]["total"], 20)
         self.assertEqual(rows["A1"]["penalty"], 5)
-        self.pen(c, self.a[0], 2)
+        self.assertEqual(rows["A1"]["rank"], 1)  # 20 เท่า A2 แต่ 5 มากกว่า
+        self.pen(c, self.a[0], 2)  # เกิน 10 นาที = DQ ไม่คำนวณคะแนน
         rows = self.overview(c)
-        self.assertEqual(rows["A1"]["total"], 15)
-        self.assertEqual(rows["A2"]["rank"], 1)  # A2 (20) แซงขึ้นที่ 1
+        self.assertEqual(rows["A1"]["total"], 0)
+        self.assertTrue(rows["A1"]["disqualified"])
+        self.assertEqual(rows["A2"]["rank"], 1)
         self.assertEqual(AthletePenalty.query.count(), 1)
         self.assertEqual(ScoreEditLog.query.filter(ScoreEditLog.reason.like("บทลงโทษ%")).count(), 2)
 
@@ -74,7 +77,7 @@ class PenaltyTests(unittest.TestCase):
         c = self.client()
         rows = self.overview(c)
         self.assertEqual(rows["A4"]["status"], "waiting")
-        self.pen(c, self.a[3], 3)
+        self.pen(c, self.a[3], 2)
         rows = self.overview(c)
         self.assertTrue(rows["A4"]["disqualified"])
         self.assertEqual(rows["A4"]["status"], "finished")  # ไม่ค้างคิว รอบ 1 จบได้
@@ -86,7 +89,7 @@ class PenaltyTests(unittest.TestCase):
 
     def test_dq_not_direct_even_with_high_score(self):
         c = self.client()
-        self.pen(c, self.a[0], 3)
+        self.pen(c, self.a[0], 2)
         rows = self.overview(c)
         self.assertEqual(rows["A1"]["rank"], 4)
         self.assertEqual(rows["A2"]["rank"], 1)
@@ -95,7 +98,7 @@ class PenaltyTests(unittest.TestCase):
 
     def test_cancel_penalty_restores(self):
         c = self.client()
-        self.pen(c, self.a[0], 3)
+        self.pen(c, self.a[0], 2)
         self.pen(c, self.a[0], 0)
         rows = self.overview(c)
         self.assertEqual(rows["A1"]["total"], 25)
@@ -109,6 +112,11 @@ class PenaltyTests(unittest.TestCase):
         self.assertIn("คะแนนสุทธิ 15", html)
         html = c.get(f"/athletes/{self.a[1].id}/scorecard-print?round=1").get_data(as_text=True)
         self.assertIn("หัก −5", html)
+
+    def test_old_level3_still_dq(self):
+        db.session.add(AthletePenalty(athlete_id=self.a[3].id, round_no=1, level=3)); db.session.commit()
+        rows = self.overview(self.client())
+        self.assertTrue(rows["A4"]["disqualified"])
 
     def test_reset_clears_penalty(self):
         c = self.client()
