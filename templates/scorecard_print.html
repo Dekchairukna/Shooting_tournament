@@ -546,7 +546,10 @@
         {% endfor %}
 
         <td class="grand-total-col">
-          {{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}
+          {% set pen = (item.round_penalties or {}).get(rn) %}
+          {% if pen and pen.disqualified %}<span style="color:#dc2626;font-weight:800;font-size:.75em;">หมดสิทธิ์</span>
+          {% elif pen and pen.points and has_started %}{{ round_totals[rn] - pen.points }}<div style="color:#dc2626;font-size:.6em;line-height:1;">หัก −{{ pen.points }}</div>
+          {% else %}{{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}{% endif %}
         </td>
         <td class="rank-col">{{ round_ranks[rn] if has_started and round_ranks[rn] is defined and round_ranks[rn] != '' else '' }}</td>
         <td class="rank-col">

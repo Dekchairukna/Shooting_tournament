@@ -407,6 +407,60 @@ class ScorecardLock(db.Model):
 SCORECARD_LOCK_TTL_SECONDS = 90
 
 
+class AthletePenalty(db.Model):
+    """บทลงโทษไม่มาทำการแข่งขันตามเวลา (กรรมการเป็นผู้บันทึก ยกเลิกได้)
+
+    level 1 = เกิน 5 นาที หัก 5 คะแนน
+    level 2 = เกินอีก 5 นาที (รวม 10 นาที) หักเพิ่มอีก 5 รวม 10 คะแนน
+    level 3 = หมดสิทธิ์ลงทำการแข่งขันรอบนั้น (จัดอันดับท้ายสุด ไม่มีสิทธิ์เข้ารอบ)
+    """
+    __tablename__ = "athlete_penalty"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    athlete_id = db.Column(db.Integer, db.ForeignKey("athlete.id"), nullable=False)
+    round_no = db.Column(db.Integer, nullable=False)
+    level = db.Column(db.Integer, nullable=False, default=0)
+    note = db.Column(db.String(300), nullable=True)
+    updated_by = db.Column(db.String(80), nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("athlete_id", "round_no", name="uq_athlete_penalty_round"),)
+
+
+# level -> (ป้าย, คะแนนที่หัก, หมดสิทธิ์)
+PENALTY_LEVELS = {
+    0: ("ไม่มีบทลงโทษ", 0, False),
+    1: ("มาช้าเกิน 5 นาที หัก 5 คะแนน", 5, False),
+    2: ("มาช้าเกิน 10 นาที หัก 10 คะแนน", 10, False),
+    3: ("ไม่มาแข่งขัน หมดสิทธิ์ลงทำการแข่งขัน", 10, True),
+}
+
+
+def penalty_info(level) -> dict:
+    level = int(level or 0)
+    if level not in PENALTY_LEVELS:
+        level = 0
+    label, points, dq = PENALTY_LEVELS[level]
+    return {"level": level, "label": label, "points": points, "disqualified": dq}
+
+
+def get_round_penalty_level(athlete_id: int, round_no: int) -> int:
+    key = (athlete_id, round_no)
+    if has_request_context():
+        cache = _request_cache()
+        penalties = cache.get("penalty_by_athlete_round")
+        if penalties is not None and cache.get("penalty_preload_ids") and athlete_id in cache["penalty_preload_ids"]:
+            return penalties.get(key, 0)
+        single = cache.setdefault("penalty_single", {})
+        if key in single:
+            return single[key]
+    row = AthletePenalty.query.filter_by(athlete_id=athlete_id, round_no=round_no).first()
+    level = int(row.level or 0) if row else 0
+    if has_request_context():
+        _request_cache().setdefault("penalty_single", {})[key] = level
+    return level
+
+
+
+
 def acquire_scorecard_lock(athlete_id: int, round_no: int, page_token: str, take_over: bool = False):
     """คืนค่า (ได้ล็อกหรือไม่, ชื่อผู้ถือล็อกปัจจุบัน)"""
     from datetime import timedelta
@@ -921,6 +975,11 @@ def preload_event_score_data(event: Event) -> None:
     for entry in TieBreakEntry.query.filter(TieBreakEntry.athlete_id.in_(athlete_ids)).all():
         tiebreak_by_key.setdefault((entry.athlete_id, entry.round_no), []).append(entry)
 
+    penalty_by_key = cache.setdefault("penalty_by_athlete_round", {})
+    for pen in AthletePenalty.query.filter(AthletePenalty.athlete_id.in_(athlete_ids)).all():
+        penalty_by_key[(pen.athlete_id, pen.round_no)] = int(pen.level or 0)
+    cache.setdefault("penalty_preload_ids", set()).update(athlete_ids)
+
 def get_round_score_map(athlete_id: int, round_no: int) -> Dict[Tuple[int, int], ScoreEntry]:
     entries = ScoreEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
     return {(e.station_no, e.distance_m): e for e in entries}
@@ -984,7 +1043,9 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
     else:
         entries = ScoreEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
 
-    total = sum(e.score for e in entries)
+    raw_total = sum(e.score for e in entries)
+    pen = penalty_info(get_round_penalty_level(athlete_id, round_no))
+    total = raw_total - pen["points"]
     count_5 = sum(1 for e in entries if e.score == 5)
     count_3 = sum(1 for e in entries if e.score == 3)
     red_cards = sum(1 for e in entries if e.is_red_card)
@@ -1007,6 +1068,10 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
         tiebreak_entries = TieBreakEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
     result = {
         "total": total,
+        "raw_total": raw_total,
+        "penalty": pen["points"],
+        "penalty_level": pen["level"],
+        "disqualified": pen["disqualified"],
         "count_5": count_5,
         "count_3": count_3,
         "red_cards": red_cards,
@@ -1062,6 +1127,9 @@ def build_scorecard_template_data(athlete_id: int) -> dict:
 
 
 def athlete_round_status(athlete: Athlete, round_no: int) -> str:
+    # หมดสิทธิ์ลงแข่ง = จบรอบนั้นแล้ว (ไม่ค้างคิว และไม่ทำให้รอบค้างไม่จบ)
+    if penalty_info(get_round_penalty_level(athlete.id, round_no))["disqualified"]:
+        return "finished"
     signature = get_round_signature(athlete.id, round_no)
     if signature and signature.finished_at:
         return "finished"
@@ -1131,6 +1199,8 @@ def ranking_key(item: dict):
     เพื่อไม่ให้สถานีใดมีน้ำหนักมากกว่าสถานีอื่น
     """
     return (
+        # ผู้หมดสิทธิ์ลงแข่ง (ไม่มาตามเวลา) อยู่ท้ายตารางเสมอ
+        not item.get("disqualified", False),
         item["total"],
         item["count_5"],
         item["count_3"],
@@ -1159,6 +1229,12 @@ def apply_round1_display_ranking(rows: list[dict], direct_limit: int) -> None:
     for idx, row in enumerate(rows, start=1):
         row["ordinal_rank"] = idx
         row["view_order"] = idx
+
+        if row.get("disqualified"):
+            row["rank"] = idx
+            row["display_rank"] = idx
+            previous_total = previous_direct_key = None
+            continue
 
         if idx <= direct_limit:
             # ใน 1-4 (หรือจำนวน direct ที่ตั้งไว้) ต้องแยกด้วย 5/3/Shoot-off
@@ -1204,6 +1280,12 @@ def apply_round2_display_ranking(rows: list[dict], start_rank: int, advancer_lim
         position_rank = start_rank + offset
         row["ordinal_rank"] = position_rank
         row["view_order"] = position_rank
+
+        if row.get("disqualified"):
+            row["rank"] = position_rank
+            row["display_rank"] = position_rank
+            previous_seed_key = previous_sum = None
+            continue
 
         if offset < advancer_limit:
             seed_key = (
@@ -1396,6 +1478,10 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             "approved": approved,
             "by_station": summary["by_station"],
             "red_cards": summary["red_cards"],
+            "raw_total": summary["raw_total"],
+            "penalty": summary["penalty"],
+            "penalty_level": summary["penalty_level"],
+            "disqualified": summary["disqualified"],
             "display_order": athlete.start_order,
             "display_lane_no": athlete.lane_no,
             "display_lane_order": athlete.lane_order,
@@ -1446,6 +1532,8 @@ def round_two_candidate_ids(event: Event) -> set[int]:
             if bool(getattr(athlete, "round_two_disabled", False))
         }
         ids -= disabled_ids
+        # ผู้หมดสิทธิ์ลงแข่งรอบ 1 ไม่มีสิทธิ์ตีรอบ 2
+        ids -= {row["athlete"].id for row in round1_rows if row.get("disqualified")}
 
     if has_request_context():
         cache[cache_key] = ids
@@ -1670,6 +1758,9 @@ def base_shootoff_key(row: dict) -> tuple:
     ถ้า 3 ตัวนี้ยังเท่ากัน แปลว่า "ยังจัดลำดับจริงไม่ได้"
     ต้องยิง Shoot-off ยกเว้นกรณีเส้นสุดท้ายของสิทธิ์ไปตีรอบ 2 ซึ่งกติกาให้ไปตีได้ทั้งหมด
     """
+    if row.get("disqualified"):
+        # ผู้หมดสิทธิ์ไม่ต้อง Shoot-off กับใคร
+        return ("dq", row["athlete"].id if row.get("athlete") else id(row))
     return (
         row.get("combined_total", row.get("total", 0)),
         row.get("count_5", 0),
@@ -1840,9 +1931,9 @@ def exact_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
         return set()
     if len(rows) <= cutoff_count:
         pending = unresolved_tie_ids(rows, len(rows))
-        return {row["athlete"].id for row in rows if row["athlete"].id not in pending}
+        return {row["athlete"].id for row in rows if row["athlete"].id not in pending and not row.get("disqualified")}
     pending = unresolved_tie_ids(rows, cutoff_count)
-    return {row["athlete"].id for row in rows[:cutoff_count] if row["athlete"].id not in pending}
+    return {row["athlete"].id for row in rows[:cutoff_count] if row["athlete"].id not in pending and not row.get("disqualified")}
 
 def shootoff_group_ids(rows: list[dict], athlete_id: int, round_no: int | None = None) -> list[int]:
     target = next((row for row in rows if row["athlete"].id == athlete_id), None)
@@ -2027,6 +2118,10 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             "display_lane_order": ((idx - 1) // lane_count) + 1,
             "round1_rank": source_row["rank"],
             "is_round2_direct_placeholder": False,
+            "raw_total": r2["raw_total"],
+            "penalty": r2["penalty"],
+            "penalty_level": r2["penalty_level"],
+            "disqualified": r2["disqualified"],
         }
         round2_rows.append(row)
 
@@ -2047,6 +2142,7 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             waiting_rows.append(row)
 
     played_rows.sort(key=lambda row: (
+        bool(row.get("disqualified")),
         -row["combined_total"],
         -row["count_5"],
         -row["count_3"],
@@ -2293,6 +2389,7 @@ def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
         "station_totals": template_data["station_totals"],
         "station_reds": template_data["station_reds"],
         "round_totals": template_data["round_totals"],
+        "round_penalties": {rn: penalty_info(get_round_penalty_level(athlete.id, rn)) for rn in scorecard_round_numbers(event)},
         "round_ranks": round_ranks,
         "round_signatures": round_signatures,
         "round_station_running_totals": round_station_running_totals,
@@ -4028,6 +4125,9 @@ def overview_data(event_id: int):
             "round2_has_played": row.get("round2_has_played", False),
             "cut_line_after": row.get("cut_line_after", False),
             "cut_line_label": row.get("cut_line_label", ""),
+            "penalty": row.get("penalty", 0),
+            "penalty_level": row.get("penalty_level", 0),
+            "disqualified": bool(row.get("disqualified", False)),
             # ใช้สำหรับเรียงแถว realtime: รอบ 1 ต้องเรียงตามคะแนน/Rank, รอบ 2 ใช้ view_order ที่ build_round_two_overview_rows กำหนด
             "view_order": row.get("view_order", row["rank"]),
             "stations": stations,
@@ -4465,6 +4565,9 @@ def scorecard(athlete_id: int):
         display_lane_no=display_lane_no,
         display_lane_order=display_lane_order,
         score_edit_count=ScoreEditLog.query.filter_by(athlete_id=athlete.id, round_no=round_no).count(),
+        penalty=penalty_info(get_round_penalty_level(athlete.id, round_no)),
+        penalty_levels=PENALTY_LEVELS,
+        penalty_raw_total=summarize_round(athlete.id, round_no)["raw_total"],
         current_round_score_complete=overview_score_complete(summarize_round(athlete.id, round_no)),
         current_round_approved=athlete_round_is_approved(athlete, round_no),
         is_finalized=bool(signature and signature.finished_at),
@@ -4510,10 +4613,60 @@ def reset_athlete_round(athlete: Athlete, round_no: int, reason: str) -> int:
     ScoreSignature.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete(synchronize_session=False)
     TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete(synchronize_session=False)
     ScorecardLock.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete(synchronize_session=False)
+    AthletePenalty.query.filter_by(athlete_id=athlete.id, round_no=round_no).delete(synchronize_session=False)
     if round_no == 1:
         athlete.status = "waiting"
         athlete.red_card_count = 0
     return cleared
+
+
+@app.route("/athletes/<int:athlete_id>/penalty", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin", "court")
+def set_athlete_penalty(athlete_id: int):
+    """กรรมการบันทึก/ยกเลิกบทลงโทษไม่มาทำการแข่งขันตามเวลา"""
+    athlete = Athlete.query.get_or_404(athlete_id)
+    event = athlete.event
+    round_no = request.form.get("round", 1, type=int) or 1
+    back = url_for("scorecard", athlete_id=athlete.id, round=round_no)
+    if not court_can_access_athlete(athlete, round_no):
+        flash("บัญชีนี้บันทึกบทลงโทษได้เฉพาะนักกีฬาในสนามของตัวเอง", "warning")
+        return redirect(back)
+    level = request.form.get("level", 0, type=int) or 0
+    if level not in PENALTY_LEVELS:
+        flash("ระดับบทลงโทษไม่ถูกต้อง", "danger")
+        return redirect(back)
+    note = (request.form.get("note") or "").strip()[:300]
+    row = AthletePenalty.query.filter_by(athlete_id=athlete.id, round_no=round_no).first()
+    old_level = int(row.level or 0) if row else 0
+    if level == old_level:
+        return redirect(back)
+    if level == 0:
+        if row:
+            db.session.delete(row)
+    else:
+        if not row:
+            row = AthletePenalty(athlete_id=athlete.id, round_no=round_no)
+            db.session.add(row)
+        row.level = level
+        row.note = note or None
+        row.updated_by = getattr(current_user, "username", None)
+        row.updated_at = datetime.utcnow()
+    # เก็บประวัติไว้ในบันทึกการแก้คะแนน เพื่อตรวจย้อนหลังได้
+    db.session.add(ScoreEditLog(
+        athlete_id=athlete.id, round_no=round_no, station_no=0, distance_m=0,
+        old_score=-PENALTY_LEVELS[old_level][1], new_score=-PENALTY_LEVELS[level][1],
+        old_red=False, new_red=False, old_played=False, new_played=False,
+        edited_by=current_user.id if current_user.is_authenticated else None,
+        editor_username=getattr(current_user, "username", None),
+        editor_court_no=getattr(current_user, "court_no", None),
+        reason=(f"บทลงโทษ: {PENALTY_LEVELS[old_level][0]} → {PENALTY_LEVELS[level][0]}" + (f" ({note})" if note else ""))[:500],
+    ))
+    db.session.commit()
+    clear_request_cache()
+    invalidate_poll_cache(event.id)
+    flash(f"{athlete.name}: {PENALTY_LEVELS[level][0]}", "success" if level == 0 else "warning")
+    return redirect(back)
 
 
 def _reset_reason(form) -> str:

@@ -698,6 +698,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
   #overviewTableBody td.status-cell .shoot-off-action{min-height:40px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
   #overviewTableBody tr[data-athlete-id] > td{padding-top:9px!important;padding-bottom:9px!important}
 }
+  .status-pill.dq{background:#fee2e2 !important;color:#b91c1c !important;border-color:#fca5a5 !important;}
 </style>
 
 <div class="overview-page">
@@ -873,7 +874,9 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
                 {% if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder %}
                   <span class="status-pill direct-placeholder-pill">เข้ารอบตรง</span>
                 {% else %}
-                  {% if row.approved %}
+                  {% if row.disqualified %}
+                    {% set status_text = 'หมดสิทธิ์' %}
+                  {% elif row.approved %}
                     {% set status_text = 'APPROVED' %}
                   {% elif row.score_complete %}
                     {% set status_text = 'ตีแล้ว' %}
@@ -882,13 +885,14 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
                   {% else %}
                     {% set status_text = 'รอตี' %}
                   {% endif %}
+                  {% if row.penalty and not row.disqualified %}{% set status_text = status_text ~ ' −' ~ row.penalty %}{% endif %}
                   {% if row.shoot_off_required %}
                     <div class="status-action-wrap">
-                      <span class="status-pill {{ row.status }}">{{ status_text }}</span>
+                      <span class="status-pill {{ row.status }}{% if row.disqualified %} dq{% endif %}">{{ status_text }}</span>
                       <a class="shoot-off-action" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.shoot_off_group_ids|join(','))) }}" title="กรอกผล Shoot-off">Shoot-off →</a>
                     </div>
                   {% else %}
-                    <span class="status-pill {{ row.status }}">{{ status_text }}</span>
+                    <span class="status-pill {{ row.status }}{% if row.disqualified %} dq{% endif %}">{{ status_text }}</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -979,10 +983,12 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
 
   function statusLabel(item, currentStation) {
     if (item.is_round2_direct_placeholder) return 'เข้ารอบตรง';
-    if (item.approved) return 'APPROVED';
-    if (item.score_complete) return 'ตีแล้ว';
-    if (item.status === 'active') return currentStation ? `กำลังตี ส${currentStation}` : 'กำลังตี';
-    return 'รอตี';
+    if (item.disqualified) return 'หมดสิทธิ์';
+    const pen = item.penalty ? ` −${item.penalty}` : '';
+    if (item.approved) return 'APPROVED' + pen;
+    if (item.score_complete) return 'ตีแล้ว' + pen;
+    if (item.status === 'active') return (currentStation ? `กำลังตี ส${currentStation}` : 'กำลังตี') + pen;
+    return 'รอตี' + pen;
   }
 
   function deriveCurrentStation(item) {
@@ -1042,9 +1048,9 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
         if (item.is_round2_direct_placeholder) {
           statusCell.innerHTML = `<span class="status-pill direct-placeholder-pill">เข้ารอบตรง</span>`;
         } else if (item.shoot_off_required) {
-          statusCell.innerHTML = `<div class="status-action-wrap"><span class="status-pill ${item.status}">${statusLabel(item, currentStation)}</span><a class="shoot-off-action" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}" title="กรอกผล Shoot-off">Shoot-off →</a></div>`;
+          statusCell.innerHTML = `<div class="status-action-wrap"><span class="status-pill ${item.status}${item.disqualified ? ' dq' : ''}">${statusLabel(item, currentStation)}</span><a class="shoot-off-action" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}" title="กรอกผล Shoot-off">Shoot-off →</a></div>`;
         } else {
-          statusCell.innerHTML = `<span class="status-pill ${item.status}">${statusLabel(item, currentStation)}</span>`;
+          statusCell.innerHTML = `<span class="status-pill ${item.status}${item.disqualified ? ' dq' : ''}">${statusLabel(item, currentStation)}</span>`;
         }
       }
 
