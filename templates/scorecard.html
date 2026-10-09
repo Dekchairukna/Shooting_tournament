@@ -1066,7 +1066,7 @@
       <div class="pen-status">{% if penalty.level %}{{ penalty.label }}{% if not penalty.disqualified %} · คะแนนสุทธิ {{ penalty_raw_total - penalty.points }} (ดิบ {{ penalty_raw_total }} − {{ penalty.points }}){% endif %}{% else %}ไม่มีบทลงโทษ{% endif %}</div>
     </div>
     <form method="post" action="{{ url_for('set_athlete_penalty', athlete_id=athlete.id) }}" data-name="{{ athlete.name }}"
-          onsubmit="const b=event.submitter; if(b && b.value==='2') return confirm('ยืนยัน: ' + this.dataset.name + ' ตัดออกจากการแข่งขัน (Disqualified)? ไม่คำนวณคะแนนและไม่มีสิทธิ์ตีรอบถัดไป'); return true;">
+          onsubmit="const b=event.submitter; if(b && b.value==='2') return confirm('ยืนยัน: ' + this.dataset.name + ' ตัดออกจากการแข่งขัน (Disqualified)? ไม่คำนวณคะแนนรอบนี้ (ยังตีรอบถัดไปได้ถ้าอันดับถึง)'); return true;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="round" value="{{ round_no }}">
       <input name="note" maxlength="300" placeholder="หมายเหตุ (ไม่บังคับ)" value="">

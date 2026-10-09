@@ -315,6 +315,8 @@ class Event(db.Model):
     round_two_mode = db.Column(db.String(20), nullable=False, default="cutoff")
     # หน้ารวม: True = เรียงแถวตามอันดับสด · False = คงลำดับการตี (บางรายการไม่ให้แถวสลับไปมา)
     overview_sort_by_rank = db.Column(db.Boolean, nullable=False, default=True)
+    # หน้ารวม: แสดงเส้นตัด (QUARTERFINALS / QUALIFIED FOR ROUND 2) หรือไม่
+    overview_show_cut_lines = db.Column(db.Boolean, nullable=False, default=True)
     # ต่อคิวสนามข้ามรุ่น: อีเวนต์ในสายเดียวกันใช้สนามชุดเดียวกัน คิวต่อกันตาม chain_position
     chain_id = db.Column(db.Integer, db.ForeignKey("court_chain.id"), nullable=True)
     chain_position = db.Column(db.Integer, nullable=True)
@@ -786,6 +788,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("UPDATE \"event\" SET round_two_mode = 'cutoff' WHERE round_two_mode IS NULL")
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS overview_sort_by_rank BOOLEAN DEFAULT true')
             conn.exec_driver_sql('UPDATE "event" SET overview_sort_by_rank = true WHERE overview_sort_by_rank IS NULL')
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS overview_show_cut_lines BOOLEAN DEFAULT true')
+            conn.exec_driver_sql('UPDATE "event" SET overview_show_cut_lines = true WHERE overview_show_cut_lines IS NULL')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS chain_id INTEGER')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS chain_position INTEGER')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled BOOLEAN DEFAULT false')
@@ -836,6 +840,9 @@ def ensure_schema() -> None:
         if "overview_sort_by_rank" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_sort_by_rank BOOLEAN DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET overview_sort_by_rank = 1 WHERE overview_sort_by_rank IS NULL")
+        if "overview_show_cut_lines" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_show_cut_lines BOOLEAN DEFAULT 1")
+            conn.exec_driver_sql("UPDATE event SET overview_show_cut_lines = 1 WHERE overview_show_cut_lines IS NULL")
         if "chain_id" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN chain_id INTEGER")
         if "chain_position" not in event_columns:
@@ -1382,7 +1389,7 @@ def round2_cutoff_rank(event: Event) -> int:
     return n
 
 
-ROUND_TWO_MODES = {"cutoff": "ถึงลำดับ (Class) ที่ N", "next": "ต่อจากผู้ผ่านตรงอีก N ลำดับ"}
+ROUND_TWO_MODES = {"cutoff": "ถึงลำดับ (Class) ที่ N", "next": "ต่อจากผู้ผ่านตรงอีก N ลำดับ (เท่ากันที่ลำดับสุดท้าย ตี Sudden death)"}
 
 
 def round_two_mode(event) -> str:
@@ -1523,12 +1530,15 @@ def round_two_candidate_ids(event: Event) -> set[int]:
         # มีสิทธิ์ตีรอบ 2 ทุกคน รวมทุกคนที่ Class เท่ากับอันดับตัด
         direct_ids = exact_cut_ids(round1_rows, direct)
         direct_shoot_ids = unresolved_tie_ids(round1_rows, direct)
-        ids = round1_round2_candidate_ids(
-            round1_rows,
-            direct_ids,
-            direct_shoot_ids,
-            cutoff_rank,
-        )
+        if round_two_mode(event) == "next":
+            ids, _pending = round2_next_mode_split(event)
+        else:
+            ids = round1_round2_candidate_ids(
+                round1_rows,
+                direct_ids,
+                direct_shoot_ids,
+                cutoff_rank,
+            )
 
         # Manual override: ผู้ดูแลสามารถปิดนักกีฬารายคนจากรอบ 2 ได้
         disabled_ids = {
@@ -1536,12 +1546,57 @@ def round_two_candidate_ids(event: Event) -> set[int]:
             if bool(getattr(athlete, "round_two_disabled", False))
         }
         ids -= disabled_ids
-        # ผู้หมดสิทธิ์ลงแข่งรอบ 1 ไม่มีสิทธิ์ตีรอบ 2
-        ids -= {row["athlete"].id for row in round1_rows if row.get("disqualified")}
 
     if has_request_context():
         cache[cache_key] = ids
     return ids
+
+
+def round2_next_mode_split(event: Event) -> tuple[set[int], set[int]]:
+    """โหมด "ต่อจากผู้ผ่านตรงอีก N ลำดับ": เอาแค่ N คนพอดี
+
+    ถ้าคนลำดับที่ N คะแนนเท่ากับคนถัดไป (TOTAL -> 5 -> 3 เท่ากัน) กลุ่มนั้นต้องตี
+    Sudden death (Shoot-off รอบ 1) จนแยกได้ · คืน (ผู้ได้สิทธิ์แน่นอน, กลุ่มที่ต้องตี Sudden death)
+    """
+    cache = _request_cache()
+    cache_key = ("round2_next_split", event.id)
+    if has_request_context() and cache_key in cache:
+        return cache[cache_key]
+    clear: set[int] = set()
+    pending: set[int] = set()
+    n = max(int(event.round_two_cutoff_rank or 0), 0)
+    if event.has_round_two and n > 0 and is_round_one_complete(event):
+        round1_rows = build_round_ranking(event, 1)
+        direct = direct_quota(event)
+        skip = exact_cut_ids(round1_rows, direct) | unresolved_tie_ids(round1_rows, direct)
+        rest = [
+            r for r in round1_rows
+            if r["athlete"].id not in skip and not bool(getattr(r["athlete"], "round_two_disabled", False))
+        ]
+        if len(rest) <= n:
+            clear = {r["athlete"].id for r in rest}
+        else:
+            last_in, first_out = rest[n - 1], rest[n]
+            key = base_shootoff_key(last_in)
+            if key != base_shootoff_key(first_out):
+                clear = {r["athlete"].id for r in rest[:n]}
+            else:
+                group = [r for r in rest if base_shootoff_key(r) == key]
+                counts = [r.get("tiebreak_count", 0) for r in group]
+                decided = (
+                    min(counts) > 0 and len(set(counts)) == 1
+                    and last_in.get("tiebreak_total", 0) != first_out.get("tiebreak_total", 0)
+                )
+                if decided:
+                    clear = {r["athlete"].id for r in rest[:n]}
+                else:
+                    group_ids = {r["athlete"].id for r in group}
+                    clear = {r["athlete"].id for r in rest[:n]} - group_ids
+                    pending = group_ids
+    result = (clear, pending)
+    if has_request_context():
+        cache[cache_key] = result
+    return result
 
 
 def is_round_two_candidate(event: Event, athlete: Athlete) -> bool:
@@ -1935,9 +1990,9 @@ def exact_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
         return set()
     if len(rows) <= cutoff_count:
         pending = unresolved_tie_ids(rows, len(rows))
-        return {row["athlete"].id for row in rows if row["athlete"].id not in pending and not row.get("disqualified")}
+        return {row["athlete"].id for row in rows if row["athlete"].id not in pending}
     pending = unresolved_tie_ids(rows, cutoff_count)
-    return {row["athlete"].id for row in rows[:cutoff_count] if row["athlete"].id not in pending and not row.get("disqualified")}
+    return {row["athlete"].id for row in rows[:cutoff_count] if row["athlete"].id not in pending}
 
 def shootoff_group_ids(rows: list[dict], athlete_id: int, round_no: int | None = None) -> list[int]:
     target = next((row for row in rows if row["athlete"].id == athlete_id), None)
@@ -2001,7 +2056,10 @@ def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
         if not is_round_one_complete(event):
             return set()
         rows = build_round_ranking(event, 1)
-        return round1_overview_unresolved_shootoff_ids(event, rows)
+        ids = round1_overview_unresolved_shootoff_ids(event, rows)
+        if event.has_round_two and round_two_mode(event) == "next":
+            ids = ids | round2_next_mode_split(event)[1]
+        return ids
 
     if round_no == 2 and event.has_round_two:
         rows = [
@@ -3827,6 +3885,11 @@ def apply_overview_order_mode(event: Event, rows: list[dict]) -> list[dict]:
     return rows
 
 
+def overview_shows_cut_lines(event) -> bool:
+    value = getattr(event, "overview_show_cut_lines", True)
+    return True if value is None else bool(value)
+
+
 def apply_overview_cut_lines(event: Event, rows: list[dict], round_no: int, round_complete: bool, groups: dict) -> None:
     """กำหนดเส้นแบ่งสิทธิ์บน Overview แบบสดตาม Class.
 
@@ -3840,7 +3903,7 @@ def apply_overview_cut_lines(event: Event, rows: list[dict], round_no: int, roun
     for row in rows:
         row["cut_line_after"] = False
         row["cut_line_label"] = ""
-    if not rows:
+    if not rows or not overview_shows_cut_lines(event):
         return
 
     def mark(idx: int | None, label: str) -> None:
@@ -3953,7 +4016,21 @@ def event_overview(event_id: int):
         theme=event_theme(event.category),
         station_images=[f"station_{i}.png" for i in STATIONS],
         sort_by_rank=overview_sorts_by_rank(event),
+        show_cut_lines=overview_shows_cut_lines(event),
     )
+
+
+@app.route("/events/<int:event_id>/overview-cut-lines", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def toggle_overview_cut_lines(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    event.overview_show_cut_lines = not overview_shows_cut_lines(event)
+    db.session.commit()
+    invalidate_poll_cache(event.id)
+    flash("แสดงเส้นตัดแล้ว" if event.overview_show_cut_lines else "ซ่อนเส้นตัดแล้ว", "success")
+    round_no = request.form.get("round", 1, type=int) or 1
+    return redirect(url_for("event_overview", event_id=event.id, round=round_no))
 
 
 @app.route("/events/<int:event_id>/overview-sort", methods=["POST"])

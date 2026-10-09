@@ -35,7 +35,7 @@
     <label>วิธีคัดผู้มีสิทธิ์ตีรอบ 2
       <select name="round_two_mode" id="round_two_mode">
         <option value="cutoff" {% if not event or (event.round_two_mode or 'cutoff') == 'cutoff' %}selected{% endif %}>ถึงลำดับ (Class) ที่ N</option>
-        <option value="next" {% if event and event.round_two_mode == 'next' %}selected{% endif %}>ต่อจากผู้ผ่านตรงอีก N ลำดับ</option>
+        <option value="next" {% if event and event.round_two_mode == 'next' %}selected{% endif %}>ต่อจากผู้ผ่านตรงอีก N ลำดับ (เท่ากันที่ลำดับสุดท้าย ตี Sudden death)</option>
       </select>
     </label>
     <label>N = <input type="number" min="1" id="round_two_cutoff_rank" name="round_two_cutoff_rank" value="{{ event.round_two_cutoff_rank if event else 16 }}"><small class="muted" id="round_two_hint"></small></label>

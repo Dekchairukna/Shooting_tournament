@@ -751,6 +751,13 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
               <span class="switch-dot" aria-hidden="true"></span>เรียงตามอันดับ: {{ 'เปิด' if sort_by_rank else 'ปิด' }}
             </button>
           </form>
+          <form method="post" action="{{ url_for('toggle_overview_cut_lines', event_id=event.id) }}" class="sort-toggle-form">
+            <input type="hidden" name="round" value="{{ round_no }}">
+            <button type="submit" class="btn secondary sort-toggle {{ 'is-on' if show_cut_lines else 'is-off' }}" role="switch" aria-checked="{{ 'true' if show_cut_lines else 'false' }}"
+                    title="{{ 'กดเพื่อซ่อนเส้นตัด QUARTERFINALS / QUALIFIED FOR ROUND 2' if show_cut_lines else 'กดเพื่อแสดงเส้นตัด' }}">
+              <span class="switch-dot" aria-hidden="true"></span>เส้นตัด: {{ 'เปิด' if show_cut_lines else 'ปิด' }}
+            </button>
+          </form>
           {% endif %}
           <button class="btn secondary" onclick="captureTable('overviewTableWrap','overview-{{ event.id }}-r{{ round_no }}')">บันทึกเป็นรูปภาพ</button>
           {% if round_no == 1 and not (current_user.is_authenticated and current_user.role == 'court') %}
