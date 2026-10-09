@@ -82,5 +82,24 @@ class Round2PlanTests(unittest.TestCase):
         self.assertEqual(db.session.get(Event, e.id).round_two_fill, "back")
 
 
+    def r2names(self, c, e):
+        g.pop("shooting_request_cache", None)
+        invalidate_poll_cache(e.id)
+        return {r["name"] for r in c.get(f"/events/{e.id}/overview-data?round=2").get_json() if not r["is_round2_direct_placeholder"]}
+
+    def test_click_select_round2_teams(self):
+        c = self.client()
+        e = self.events[0]
+        html = c.get(f"/events/round2-plan?ids={e.id}").get_data(as_text=True)
+        self.assertIn("เลือกทีมเข้ารอบ 2", html)
+        self.assertEqual(len(self.r2names(c, e)), 15)
+        picks = [a.id for a in e.athletes if a.name in ("12 ชาย-T1", "12 ชาย-T2", "12 ชาย-T20")]
+        c.post(f"/events/{e.id}/round2-select", data={"action": "manual", "athlete_ids": [str(i) for i in picks]})
+        self.assertEqual(self.r2names(c, e), {"12 ชาย-T1", "12 ชาย-T2", "12 ชาย-T20"})
+        c.post(f"/events/{e.id}/round2-select", data={"action": "auto"})
+        names = self.r2names(c, e)
+        self.assertEqual(len(names), 15); self.assertNotIn("12 ชาย-T1", names)
+
+
 if __name__ == "__main__":
     unittest.main()

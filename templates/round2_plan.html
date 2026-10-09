@@ -100,9 +100,65 @@
     </table>
     {% for p in plans %}{% if p.direct %}<div class="sub" style="margin-top:8px;">{{ p.event.name }} · ผ่านตรงไม่ต้องตีรอบ 2: {{ p.direct|map(attribute='name')|join(', ') }}</div>{% endif %}{% endfor %}
   </div>
+
+  {% for p in plans %}{% if p.choices %}
+  <section class="sheet no-print sel-box">
+    <form method="post" action="{{ url_for('round2_select', event_id=p.event.id) }}" class="sel-form"
+          data-target="{{ p.target or '' }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="ids" value="{{ ids_text }}">
+      <input type="hidden" name="fill" value="{{ fill }}">
+      <div class="controls" style="justify-content:space-between;">
+        <div>
+          <strong style="font-size:1.05rem;">เลือกทีมเข้ารอบ 2 · {{ p.event.name }}</strong>
+          {% if p.manual %}<span class="applied" style="background:#fef3c7;color:#92400e;">เลือกเอง</span>{% else %}<span class="applied">ระบบคัดอัตโนมัติ</span>{% endif %}
+          <div class="sub">คลิกที่ทีมเพื่อเลือก/ไม่เลือก แล้วกดบันทึก · ผู้ผ่านตรงไม่อยู่ในรายการนี้</div>
+        </div>
+        <div class="controls">
+          <span class="sel-count" style="font-weight:800;"></span>
+          <button class="btn" type="submit" name="action" value="manual">บันทึกทีมที่เลือก</button>
+          {% if p.manual %}<button class="btn secondary" type="submit" name="action" value="auto" formnovalidate
+                  onclick="return confirm('กลับไปใช้การคัดอัตโนมัติ? รายชื่อที่เลือกเองจะถูกยกเลิก');">กลับไปคัดอัตโนมัติ</button>{% endif %}
+        </div>
+      </div>
+      <div class="chips">
+        {% for c in p.choices %}
+        <label class="chip {{ 'on' if c.selected }}">
+          <input type="checkbox" name="athlete_ids" value="{{ c.athlete.id }}" {% if c.selected %}checked{% endif %}>
+          <span class="rk">{{ c.rank }}</span>
+          <span class="cn">{{ c.athlete.name }}{% if c.disqualified %} <em style="color:#b91c1c">DQ</em>{% endif %}</span>
+          <span class="ct">{{ c.total }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </form>
+  </section>
+  {% endif %}{% endfor %}
   {% endif %}
 </div>
+<style>
+  .chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px}
+  .chip{display:flex;align-items:center;gap:8px;border:2px solid #e2e8f0;border-radius:12px;padding:8px 10px;cursor:pointer;background:#fff;user-select:none}
+  .chip input{display:none}
+  .chip.on{border-color:#16a34a;background:#f0fdf4}
+  .chip .rk{min-width:30px;text-align:center;font-weight:800;background:#f1f5f9;border-radius:8px;padding:2px 4px}
+  .chip.on .rk{background:#16a34a;color:#fff}
+  .chip .cn{flex:1;font-weight:700}
+  .chip .ct{color:#64748b;font-weight:700}
+  @media (pointer:coarse){.chip{padding:12px}}
+</style>
 <script>
+document.querySelectorAll('.sel-form').forEach(form => {
+  const out = form.querySelector('.sel-count');
+  const target = form.dataset.target;
+  const upd = () => {
+    const n = form.querySelectorAll('.chip input:checked').length;
+    out.textContent = 'เลือกแล้ว ' + n + (target ? ' / ' + target : '') + ' ทีม';
+    out.style.color = target && String(n) !== target ? '#b45309' : '#166534';
+  };
+  form.querySelectorAll('.chip input').forEach(cb => cb.addEventListener('change', () => { cb.closest('.chip').classList.toggle('on', cb.checked); upd(); }));
+  upd();
+});
 document.querySelectorAll('.pick input').forEach(cb => cb.addEventListener('change', () => cb.closest('label').classList.toggle('on', cb.checked)));
 async function captureTable(id, filename) {
   const el = document.getElementById(id);

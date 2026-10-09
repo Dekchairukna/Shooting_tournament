@@ -319,6 +319,8 @@ class Event(db.Model):
     overview_show_cut_lines = db.Column(db.Boolean, nullable=False, default=True)
     # ลงสนามรอบ 2: "front" = เติมจากสนาม 1 · "back" = ช่องว่างไว้ต้นคิวแรก (คิวท้ายเต็ม)
     round_two_fill = db.Column(db.String(10), nullable=False, default="front")
+    # True = ผู้จัดคลิกเลือกทีมเข้ารอบ 2 เอง (แทนการคัดอัตโนมัติ)
+    round_two_manual = db.Column(db.Boolean, nullable=False, default=False)
     # ต่อคิวสนามข้ามรุ่น: อีเวนต์ในสายเดียวกันใช้สนามชุดเดียวกัน คิวต่อกันตาม chain_position
     chain_id = db.Column(db.Integer, db.ForeignKey("court_chain.id"), nullable=True)
     chain_position = db.Column(db.Integer, nullable=True)
@@ -355,6 +357,8 @@ class Athlete(db.Model):
     round_two_disabled = db.Column(db.Boolean, nullable=False, default=False)
     round_two_disabled_at = db.Column(db.DateTime, nullable=True)
     round_two_disabled_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    # เลือกเข้ารอบ 2 ด้วยมือ (ใช้เมื่ออีเวนต์เปิด round_two_manual)
+    round_two_forced = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     entries = db.relationship("ScoreEntry", backref="athlete", cascade="all, delete-orphan", lazy=True)
@@ -799,6 +803,10 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled BOOLEAN DEFAULT false')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_at TIMESTAMP')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_by INTEGER')
+            conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_forced BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('UPDATE "athlete" SET round_two_forced = false WHERE round_two_forced IS NULL')
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS round_two_manual BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('UPDATE "event" SET round_two_manual = false WHERE round_two_manual IS NULL')
         return
 
     # SQLite migration เดิม
@@ -847,6 +855,9 @@ def ensure_schema() -> None:
         if "overview_show_cut_lines" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_show_cut_lines BOOLEAN DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET overview_show_cut_lines = 1 WHERE overview_show_cut_lines IS NULL")
+        if "round_two_manual" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN round_two_manual BOOLEAN DEFAULT 0")
+            conn.exec_driver_sql("UPDATE event SET round_two_manual = 0 WHERE round_two_manual IS NULL")
         if "round_two_fill" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN round_two_fill VARCHAR(10) DEFAULT 'front'")
             conn.exec_driver_sql("UPDATE event SET round_two_fill = 'front' WHERE round_two_fill IS NULL")
@@ -874,6 +885,9 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_disabled_at DATETIME")
         if "round_two_disabled_by" not in athlete_columns:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_disabled_by INTEGER")
+        if "round_two_forced" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_forced BOOLEAN DEFAULT 0")
+            conn.exec_driver_sql("UPDATE athlete SET round_two_forced = 0 WHERE round_two_forced IS NULL")
 
         # Results Approved: คอลัมน์เก็บ path โลโก้ที่อัปโหลดเอง
         ra_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(results_approved_setting)").fetchall()}
@@ -1537,7 +1551,14 @@ def round_two_candidate_ids(event: Event) -> set[int]:
         # มีสิทธิ์ตีรอบ 2 ทุกคน รวมทุกคนที่ Class เท่ากับอันดับตัด
         direct_ids = exact_cut_ids(round1_rows, direct)
         direct_shoot_ids = unresolved_tie_ids(round1_rows, direct)
-        if round_two_mode(event) == "next":
+        if bool(getattr(event, "round_two_manual", False)):
+            # ผู้จัดคลิกเลือกเอง: ใช้ตามที่เลือกเท่านั้น (ไม่รวมผู้ผ่านตรง)
+            ids = {
+                a.id for a in event.athletes
+                if bool(getattr(a, "round_two_forced", False))
+                and a.id not in direct_ids and a.id not in direct_shoot_ids
+            }
+        elif round_two_mode(event) == "next":
             ids, _pending = round2_next_mode_split(event)
         else:
             ids = round1_round2_candidate_ids(
@@ -2088,7 +2109,7 @@ def overview_shootoff_ids(event: Event, round_no: int) -> set[int]:
             return set()
         rows = build_round_ranking(event, 1)
         ids = round1_overview_unresolved_shootoff_ids(event, rows)
-        if event.has_round_two and round_two_mode(event) == "next":
+        if event.has_round_two and round_two_mode(event) == "next" and not bool(getattr(event, "round_two_manual", False)):
             ids = ids | round2_next_mode_split(event)[1]
         return ids
 
@@ -3745,7 +3766,8 @@ def round2_plan_for_event(event: Event, fill: str) -> dict:
     """ผังลงสนามรอบ 2 ของหนึ่งอีเวนต์: แถว = สนาม, คอลัมน์ = ลำดับคิว"""
     lane_count = max(int(event.lane_count or 1), 1)
     info = {"event": event, "lane_count": lane_count, "queues": 0, "grid": {}, "count": 0,
-            "round1_done": False, "pending": [], "started": 0, "direct": []}
+            "round1_done": False, "pending": [], "started": 0, "direct": [], "choices": [],
+            "manual": bool(getattr(event, "round_two_manual", False)), "target": None}
     if not event.has_round_two:
         return info
     info["round1_done"] = is_round_one_complete(event)
@@ -3762,12 +3784,53 @@ def round2_plan_for_event(event: Event, fill: str) -> dict:
         info["queues"] = max(info["queues"], queue_no)
         if athlete_round_status(row["athlete"], 2) != "waiting":
             info["started"] += 1
-    if round_two_mode(event) == "next":
+    manual = bool(getattr(event, "round_two_manual", False))
+    info["manual"] = manual
+    if round_two_mode(event) == "next" and not manual:
         pending = round2_next_mode_split(event)[1]
         info["pending"] = [a for a in event.athletes if a.id in pending]
-    info["direct"] = [r["athlete"] for r in build_round_ranking(event, 1)
-                      if r["athlete"].id in exact_cut_ids(build_round_ranking(event, 1), direct_quota(event))]
+    round1_rows = build_round_ranking(event, 1)
+    direct_ids = exact_cut_ids(round1_rows, direct_quota(event))
+    direct_pending = unresolved_tie_ids(round1_rows, direct_quota(event))
+    info["direct"] = [r["athlete"] for r in round1_rows if r["athlete"].id in direct_ids]
+    selected = round_two_candidate_ids(event)
+    # รายชื่อให้คลิกเลือก: ทุกคนที่ไม่ได้ผ่านตรง เรียงตามอันดับรอบ 1
+    info["choices"] = [
+        {"athlete": r["athlete"], "rank": r.get("display_rank", r.get("rank")), "total": r["total"],
+         "selected": r["athlete"].id in selected, "disqualified": bool(r.get("disqualified"))}
+        for r in round1_rows
+        if r["athlete"].id not in direct_ids and r["athlete"].id not in direct_pending
+    ]
+    info["target"] = max(int(event.round_two_cutoff_rank or 0), 0) if round_two_mode(event) == "next" else None
     return info
+
+
+@app.route("/events/<int:event_id>/round2-select", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def round2_select(event_id: int):
+    """คลิกเลือกทีมเข้ารอบ 2 เอง หรือกลับไปใช้การคัดอัตโนมัติ"""
+    event = Event.query.get_or_404(event_id)
+    back = url_for("round2_plan", ids=request.form.get("ids") or str(event.id), fill=request.form.get("fill") or None)
+    if request.form.get("action") == "auto":
+        event.round_two_manual = False
+        for a in event.athletes:
+            a.round_two_forced = False
+        msg = f"{event.name}: กลับไปใช้การคัดเข้ารอบ 2 อัตโนมัติ"
+    else:
+        chosen = {int(x) for x in request.form.getlist("athlete_ids") if str(x).isdigit()}
+        event.round_two_manual = True
+        for a in event.athletes:
+            a.round_two_forced = a.id in chosen
+            if a.id in chosen:
+                a.round_two_disabled = False
+        msg = f"{event.name}: บันทึกทีมเข้ารอบ 2 ที่เลือกเอง {len(chosen)} ทีม"
+    db.session.commit()
+    clear_request_cache()
+    sync_round_two_candidates(event)
+    invalidate_poll_cache(event.id)
+    flash(msg, "success")
+    return redirect(back)
 
 
 @app.route("/events/round2-plan", methods=["GET", "POST"])
