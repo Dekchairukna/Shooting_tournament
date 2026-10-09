@@ -317,6 +317,8 @@ class Event(db.Model):
     overview_sort_by_rank = db.Column(db.Boolean, nullable=False, default=True)
     # หน้ารวม: แสดงเส้นตัด (QUARTERFINALS / QUALIFIED FOR ROUND 2) หรือไม่
     overview_show_cut_lines = db.Column(db.Boolean, nullable=False, default=True)
+    # ลงสนามรอบ 2: "front" = เติมจากสนาม 1 · "back" = ช่องว่างไว้ต้นคิวแรก (คิวท้ายเต็ม)
+    round_two_fill = db.Column(db.String(10), nullable=False, default="front")
     # ต่อคิวสนามข้ามรุ่น: อีเวนต์ในสายเดียวกันใช้สนามชุดเดียวกัน คิวต่อกันตาม chain_position
     chain_id = db.Column(db.Integer, db.ForeignKey("court_chain.id"), nullable=True)
     chain_position = db.Column(db.Integer, nullable=True)
@@ -790,6 +792,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('UPDATE "event" SET overview_sort_by_rank = true WHERE overview_sort_by_rank IS NULL')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS overview_show_cut_lines BOOLEAN DEFAULT true')
             conn.exec_driver_sql('UPDATE "event" SET overview_show_cut_lines = true WHERE overview_show_cut_lines IS NULL')
+            conn.exec_driver_sql("ALTER TABLE \"event\" ADD COLUMN IF NOT EXISTS round_two_fill VARCHAR(10) DEFAULT 'front'")
+            conn.exec_driver_sql("UPDATE \"event\" SET round_two_fill = 'front' WHERE round_two_fill IS NULL")
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS chain_id INTEGER')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS chain_position INTEGER')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled BOOLEAN DEFAULT false')
@@ -843,6 +847,9 @@ def ensure_schema() -> None:
         if "overview_show_cut_lines" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_show_cut_lines BOOLEAN DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET overview_show_cut_lines = 1 WHERE overview_show_cut_lines IS NULL")
+        if "round_two_fill" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN round_two_fill VARCHAR(10) DEFAULT 'front'")
+            conn.exec_driver_sql("UPDATE event SET round_two_fill = 'front' WHERE round_two_fill IS NULL")
         if "chain_id" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN chain_id INTEGER")
         if "chain_position" not in event_columns:
@@ -1461,12 +1468,12 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
         round2_source_rows.sort(key=lambda row: (
             row["total"], row["count_5"], row["count_3"], row["tiebreak_total"], row["athlete"].start_order,
         ))
-        lane_count = max(event.lane_count or 1, 1)
         for idx, source_row in enumerate(round2_source_rows, start=1):
+            lane_no, lane_order = round2_lane_slot(event, idx, len(round2_source_rows))
             round2_display_map[source_row["athlete"].id] = {
                 "display_order": idx,
-                "display_lane_no": ((idx - 1) % lane_count) + 1,
-                "display_lane_order": ((idx - 1) // lane_count) + 1,
+                "display_lane_no": lane_no,
+                "display_lane_order": lane_order,
             }
 
     for athlete in athletes:
@@ -1550,6 +1557,30 @@ def round_two_candidate_ids(event: Event) -> set[int]:
     if has_request_context():
         cache[cache_key] = ids
     return ids
+
+
+ROUND_TWO_FILLS = {
+    "front": "เติมจากสนาม 1 คิวแรก (ช่องว่างอยู่ท้าย)",
+    "back": "คิวสุดท้ายเต็มทุกสนาม (ช่องว่างอยู่ต้นคิวแรก)",
+}
+
+
+def round_two_fill(event) -> str:
+    value = getattr(event, "round_two_fill", None) or "front"
+    return value if value in ROUND_TWO_FILLS else "front"
+
+
+def round2_lane_slot(event: Event, idx: int, total: int, fill: str | None = None) -> tuple[int, int]:
+    """ตำแหน่งสนาม/คิวของคนลำดับ idx (1 = คะแนนรอบ 1 น้อยสุด ตีก่อน) ในรอบ 2
+
+    fill="back": เลื่อนช่องว่างไปไว้ต้นคิวแรก ให้คิวสุดท้ายเต็มทุกสนาม
+    เช่น 15 คน 8 สนาม: คิว 1 สนาม 1 ว่าง · คิว 1 สนาม 2-8 · คิว 2 สนาม 1-8
+    """
+    lane_count = max(int(event.lane_count or 1), 1)
+    fill = fill or round_two_fill(event)
+    offset = (-int(total or 0)) % lane_count if fill == "back" else 0
+    slot = idx - 1 + offset
+    return slot % lane_count + 1, slot // lane_count + 1
 
 
 def round2_next_mode_split(event: Event) -> tuple[set[int], set[int]]:
@@ -2176,8 +2207,8 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             "round2_by_station": r2["by_station"],
             "red_cards": r2["red_cards"],
             "display_order": idx,
-            "display_lane_no": ((idx - 1) % lane_count) + 1,
-            "display_lane_order": ((idx - 1) // lane_count) + 1,
+            "display_lane_no": round2_lane_slot(event, idx, len(round2_source_rows))[0],
+            "display_lane_order": round2_lane_slot(event, idx, len(round2_source_rows))[1],
             "round1_rank": source_row["rank"],
             "is_round2_direct_placeholder": False,
             "raw_total": r2["raw_total"],
@@ -3708,6 +3739,76 @@ def build_draw_lane_table(event: Event) -> list[dict]:
     for athlete in athletes:
         lanes.setdefault(int(athlete.lane_no or 1), []).append(athlete)
     return [{"lane_no": lane_no, "athletes": lanes[lane_no]} for lane_no in sorted(lanes)]
+
+
+def round2_plan_for_event(event: Event, fill: str) -> dict:
+    """ผังลงสนามรอบ 2 ของหนึ่งอีเวนต์: แถว = สนาม, คอลัมน์ = ลำดับคิว"""
+    lane_count = max(int(event.lane_count or 1), 1)
+    info = {"event": event, "lane_count": lane_count, "queues": 0, "grid": {}, "count": 0,
+            "round1_done": False, "pending": [], "started": 0, "direct": []}
+    if not event.has_round_two:
+        return info
+    info["round1_done"] = is_round_one_complete(event)
+    if not info["round1_done"]:
+        return info
+    sync_round_two_candidates(event)
+    rows = [r for r in build_round_two_overview_rows(event) if not r.get("is_round2_direct_placeholder")]
+    rows.sort(key=lambda r: (r.get("display_order") if isinstance(r.get("display_order"), int) else 9999, r["athlete"].id))
+    total = len(rows)
+    info["count"] = total
+    for idx, row in enumerate(rows, start=1):
+        lane_no, queue_no = round2_lane_slot(event, idx, total, fill)
+        info["grid"][(lane_no, queue_no)] = {"row": row, "order": idx}
+        info["queues"] = max(info["queues"], queue_no)
+        if athlete_round_status(row["athlete"], 2) != "waiting":
+            info["started"] += 1
+    if round_two_mode(event) == "next":
+        pending = round2_next_mode_split(event)[1]
+        info["pending"] = [a for a in event.athletes if a.id in pending]
+    info["direct"] = [r["athlete"] for r in build_round_ranking(event, 1)
+                      if r["athlete"].id in exact_cut_ids(build_round_ranking(event, 1), direct_quota(event))]
+    return info
+
+
+@app.route("/events/round2-plan", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def round2_plan():
+    """สรุปทีมที่ตีรอบ 2: เลือกหลายอีเวนต์ แสดงผังสนามแบบตาราง (สนาม x คิว) แล้วสั่งลงสนามตามผัง"""
+    if request.method == "POST":
+        ids = [int(i) for i in request.form.get("ids", "").split(",") if i.strip().isdigit()]
+        fill = request.form.get("fill", "front")
+        if fill not in ROUND_TWO_FILLS:
+            fill = "front"
+        events = Event.query.filter(Event.id.in_(ids)).all() if ids else []
+        for event in events:
+            event.round_two_fill = fill
+        db.session.commit()
+        clear_request_cache()
+        for event in events:
+            invalidate_poll_cache(event.id)
+        flash(f"ลงสนามรอบ 2 ตามผังแล้ว {len(events)} อีเวนต์ · กรรมการสนามเห็นคิวใหม่ทันที", "success")
+        return redirect(url_for("round2_plan", ids=",".join(str(i) for i in ids), fill=fill))
+
+    all_events = [e for e in Event.query.order_by(Event.competition_date.desc(), Event.id).all() if e.has_round_two]
+    ids = _parse_id_list(request.args.get("ids")) or [int(x) for x in request.args.getlist("e") if str(x).isdigit()]
+    picked = [e for i in ids for e in all_events if e.id == i]
+    fill = request.args.get("fill")
+    if fill not in ROUND_TWO_FILLS:
+        fill = round_two_fill(picked[0]) if picked else "back"
+    plans = [round2_plan_for_event(e, fill) for e in picked]
+    applied = bool(picked) and all(round_two_fill(e) == fill for e in picked)
+    return render_template(
+        "round2_plan.html",
+        all_events=all_events,
+        picked_ids={e.id for e in picked},
+        ids_text=",".join(str(e.id) for e in picked),
+        plans=plans,
+        fill=fill,
+        fills=ROUND_TWO_FILLS,
+        applied=applied,
+        max_lanes=max([p["lane_count"] for p in plans] or [0]),
+    )
 
 
 @app.route("/events/draw", methods=["GET", "POST"])

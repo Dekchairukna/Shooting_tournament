@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% block title %}ผังลงสนามรอบ 2 · Petanque Shooting{% endblock %}
+{% block content %}
+<style>
+  .r2p{display:grid;gap:16px}
+  .r2p h1{margin:0 0 4px}
+  .pick{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .pick label{display:inline-flex;gap:6px;align-items:center;border:1px solid #cbd5e1;border-radius:999px;padding:6px 12px;background:#fff;cursor:pointer;font-weight:700}
+  .pick label.on{background:#eff6ff;border-color:#2563eb;color:#1d4ed8}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .controls select{padding:8px;border-radius:9px;border:1px solid #cbd5e1}
+  .sheet{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:14px;overflow-x:auto}
+  .plan{border-collapse:collapse;min-width:100%;font-size:.95rem}
+  .plan th,.plan td{border:1px solid #94a3b8;padding:8px 10px;vertical-align:middle}
+  .plan thead th{background:#f1f5f9;text-align:center}
+  .plan th.ev{background:#1e3a8a;color:#fff;font-size:1rem}
+  .plan th.ev + th.ev,.plan .ev-start{border-left:4px solid #dc2626}
+  .plan td.lane{font-weight:800;text-align:center;background:#f8fafc;width:56px}
+  .plan td.cell{min-width:150px}
+  .plan td.empty{background:repeating-linear-gradient(45deg,#fff,#fff 6px,#f1f5f9 6px,#f1f5f9 12px)}
+  .nm{font-weight:800}
+  .sub{color:#64748b;font-size:.78rem}
+  .st{display:inline-block;font-size:.7rem;font-weight:800;border-radius:999px;padding:1px 7px;margin-left:4px}
+  .st.active{background:#fef3c7;color:#92400e}.st.finished{background:#dcfce7;color:#166534}
+  .warn{border:1px solid #fde68a;background:#fffbeb;border-radius:12px;padding:8px 12px;margin:6px 0;font-size:.9rem}
+  .warn.red{border-color:#fca5a5;background:#fef2f2}
+  .applied{display:inline-block;background:#dcfce7;color:#166534;border-radius:999px;padding:4px 12px;font-weight:800}
+  @media print{.no-print,nav,header,.flash{display:none!important}.sheet{border:0;padding:0}}
+</style>
+<div class="r2p">
+  <section class="card no-print" style="margin:0;">
+    <h1>ผังลงสนามรอบ 2</h1>
+    <p class="muted" style="margin:0;">1) เลือกอีเวนต์ (เรียงตามลำดับที่จะตี) · 2) ดูผัง สนาม × ลำดับคิว · 3) กด "ลงสนามตามผังนี้" กรรมการสนามจะเห็นคิวรอบ 2 ตามผังทันที · ลำดับในรอบ 2: คะแนนรอบ 1 น้อยสุดตีก่อน</p>
+    <form method="get" id="pickForm">
+      <div class="pick">
+        {% for e in all_events %}
+        <label class="{{ 'on' if e.id in picked_ids }}"><input type="checkbox" name="e" value="{{ e.id }}" {% if e.id in picked_ids %}checked{% endif %}> {{ e.name }}</label>
+        {% else %}
+        <span class="muted">ยังไม่มีอีเวนต์ที่มีรอบ 2</span>
+        {% endfor %}
+      </div>
+      <div class="controls">
+        <label>การวางช่องว่าง
+          <select name="fill">{% for k, v in fills.items() %}<option value="{{ k }}" {% if k == fill %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+        </label>
+        <button class="btn secondary" type="submit">แสดงผัง</button>
+      </div>
+    </form>
+  </section>
+
+  {% if plans %}
+  <div class="controls no-print">
+    {% if applied %}<span class="applied">✓ ระบบลงสนามตามผังนี้อยู่แล้ว</span>{% endif %}
+    <form method="post" action="{{ url_for('round2_plan') }}" style="margin:0" onsubmit="return confirm('ลงสนามรอบ 2 ตามผังนี้ทุกอีเวนต์ที่เลือก?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="ids" value="{{ ids_text }}">
+      <input type="hidden" name="fill" value="{{ fill }}">
+      <button class="btn" type="submit">ลงสนามตามผังนี้</button>
+    </form>
+    <button class="btn secondary" type="button" onclick="window.print()">พิมพ์ผัง</button>
+    <button class="btn secondary" type="button" onclick="captureTable('planSheet','round2-plan')">บันทึกเป็นรูปภาพ</button>
+  </div>
+
+  {% for p in plans %}
+    {% if not p.round1_done %}<div class="warn">{{ p.event.name }}: รอบ 1 ยังตีไม่ครบ ยังสร้างผังรอบ 2 ไม่ได้</div>{% endif %}
+    {% if p.pending %}<div class="warn red">{{ p.event.name }}: รอตี Sudden death ที่ลำดับสุดท้าย {{ p.pending|length }} คน ({{ p.pending|map(attribute='name')|join(', ') }}) · ตีเสร็จแล้วผู้ชนะจะเข้าผังเอง</div>{% endif %}
+    {% if p.started %}<div class="warn">{{ p.event.name }}: เริ่มตีรอบ 2 ไปแล้ว {{ p.started }} คน · ถ้าเปลี่ยนการวางช่องว่าง สนามของคนที่ยังไม่ตีจะขยับ</div>{% endif %}
+  {% endfor %}
+
+  <div class="sheet" id="planSheet">
+    <table class="plan">
+      <thead>
+        <tr>
+          <th rowspan="2">LANE</th>
+          {% for p in plans %}<th class="ev" colspan="{{ [p.queues, 1]|max }}">{{ p.event.name }} <span style="font-weight:400">({{ p.count }} ทีม)</span></th>{% endfor %}
+        </tr>
+        <tr>
+          {% for p in plans %}{% set outer = loop %}{% for q in range(1, [p.queues, 1]|max + 1) %}<th class="{{ 'ev-start' if loop.first and not outer.first }}">ลำดับที่ {{ q }}</th>{% endfor %}{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for lane in range(1, max_lanes + 1) %}
+        <tr>
+          <td class="lane">{{ lane }}</td>
+          {% for p in plans %}{% set outer = loop %}
+            {% for q in range(1, [p.queues, 1]|max + 1) %}
+              {% set c = p.grid.get((lane, q)) %}
+              <td class="cell {{ 'empty' if not c }} {{ 'ev-start' if loop.first and not outer.first }}">
+                {% if c %}
+                  {% set a = c.row.athlete %}{% set st = c.row.status %}
+                  <div class="nm">{{ a.name }}{% if st in ['active','finished'] %}<span class="st {{ st }}">{{ 'กำลังตี' if st == 'active' else 'ตีแล้ว' }}</span>{% endif %}</div>
+                  <div class="sub">#{{ c.order }}{% if a.affiliation and a.affiliation != a.name %} · {{ a.affiliation }}{% endif %} · R1 {{ c.row.round1_total }}</div>
+                {% endif %}
+              </td>
+            {% endfor %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% for p in plans %}{% if p.direct %}<div class="sub" style="margin-top:8px;">{{ p.event.name }} · ผ่านตรงไม่ต้องตีรอบ 2: {{ p.direct|map(attribute='name')|join(', ') }}</div>{% endif %}{% endfor %}
+  </div>
+  {% endif %}
+</div>
+<script>
+document.querySelectorAll('.pick input').forEach(cb => cb.addEventListener('change', () => cb.closest('label').classList.toggle('on', cb.checked)));
+async function captureTable(id, filename) {
+  const el = document.getElementById(id);
+  if (!el || typeof html2canvas !== 'function') { window.print(); return; }
+  const oldW = el.style.width;
+  el.style.width = el.scrollWidth + 'px';
+  try {
+    const canvas = await html2canvas(el, {scale: 2, backgroundColor: '#ffffff'});
+    const a = document.createElement('a');
+    a.download = filename + '.jpg';
+    a.href = canvas.toDataURL('image/jpeg', 0.95);
+    a.click();
+  } finally { el.style.width = oldW; }
+}
+</script>
+{% endblock %}
