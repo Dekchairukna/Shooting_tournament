@@ -74,14 +74,30 @@
   }
 
   .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: 78px minmax(0, 1fr) 78px;
+    align-items: center;
     gap: 12px;
     margin-bottom: 6px;
+    min-height: 72px;
   }
 
-  .header-left { flex: 1; min-width: 0; }
+  .header-left { min-width: 0; text-align: center; }
+
+  .scorecard-logo-box {
+    width: 78px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .scorecard-logo {
+    display: block;
+    width: 68px;
+    height: 68px;
+    object-fit: contain;
+  }
 
   .event-name {
     font-size: 20px;
@@ -406,6 +422,11 @@
     .championship-hero {
       display: none !important;
     }
+
+    .scorecard-logo {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
   }
 
 </style>
@@ -436,6 +457,9 @@
 {% set display_lane_order = item.display_lane_order %}
 <div class="sheet" data-file-stem="scorecard-print-{{ event.id }}-r{{ round_no }}-a{{ athlete.id }}">
   <div class="header">
+    <div class="scorecard-logo-box">
+      {% if site_theme.logo_url %}<img class="scorecard-logo" src="{{ site_theme.logo_url }}" alt="โลโก้ {{ site_theme.short_name or site_theme.title }}">{% endif %}
+    </div>
     <div class="header-left">
       <div class="event-name">{{ event.name }}</div>
       <div class="event-name">SHOOTING &nbsp;&nbsp; {{ event.category }}</div>
@@ -446,6 +470,13 @@
         <div class="meta-item"><strong>ชื่อ:</strong> {{ athlete.name }}</div>
         <div class="meta-item"><strong>สนาม:</strong> {{ display_lane_no or athlete.lane_no }}/{{ display_lane_order or athlete.lane_order }}</div>
       </div>
+    </div>
+    <div class="scorecard-logo-box">
+      {% if site_theme.partners_url %}
+      <img class="scorecard-logo" src="{{ site_theme.partners_url }}" alt="โลโก้หน่วยงานร่วม">
+      {% elif site_theme.logo_url %}
+      <img class="scorecard-logo" src="{{ site_theme.logo_url }}" alt="โลโก้ {{ site_theme.short_name or site_theme.title }}">
+      {% endif %}
     </div>
   </div>
 
