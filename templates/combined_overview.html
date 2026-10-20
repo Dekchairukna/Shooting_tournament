@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}ดูผลหลายอีเวนต์{% endblock %}
+{% block content %}
+<style>
+  .combined-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}.combined-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:16px}.event-panel{background:#fff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;box-shadow:0 10px 25px rgba(15,23,42,.06)}
+  .panel-head{padding:15px 17px;background:linear-gradient(135deg,#f5f3ff,#fff7ed);display:flex;justify-content:space-between;gap:10px;align-items:start}.panel-head h2{font-size:1.1rem;margin:0}.panel-head p{margin:4px 0 0;color:#64748b}.panel-head a{white-space:nowrap;text-decoration:none;font-weight:800;color:#6d28d9}
+  .result-table{width:100%;border-collapse:collapse;font-size:.9rem}.result-table th,.result-table td{padding:9px 11px;border-top:1px solid #eef2f7;text-align:left}.result-table th{background:#f8fafc;color:#475569}.rank{font-weight:900;color:#6d28d9}.score{font-weight:900;text-align:right!important}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap}.toolbar a{padding:9px 12px;border:1px solid #cbd5e1;border-radius:10px;text-decoration:none;color:#334155;background:#fff;font-weight:800}.toolbar a.active{background:#7c3aed;color:#fff;border-color:#7c3aed}
+  @media(max-width:500px){.combined-grid{grid-template-columns:1fr}.event-panel{border-radius:15px}.result-table th,.result-table td{padding:8px 7px;font-size:.82rem}}
+</style>
+<div class="combined-head"><div><h1 style="margin:0">ผลรวมหลายอีเวนต์</h1><div style="color:#64748b">{{ panels|length }} รายการ · อัปเดตหน้าอัตโนมัติทุก 15 วินาที</div></div><div class="toolbar"><a class="{{ 'active' if round_no == 1 }}" href="{{ url_for('combined_event_overview', ids=ids_text, round=1) }}">รอบ 1</a><a class="{{ 'active' if round_no == 2 }}" href="{{ url_for('combined_event_overview', ids=ids_text, round=2) }}">รอบ 2</a><a href="{{ url_for('index') }}">เลือกรายการใหม่</a></div></div>
+<div class="combined-grid">
+{% for panel in panels %}<section class="event-panel"><header class="panel-head"><div><h2>{{ panel.event.name }}</h2><p>{{ panel.event.event_group }} · {{ panel.event.category }}</p></div><a href="{{ url_for('event_overview', event_id=panel.event.id, round=round_no) }}">ดูเต็มจอ →</a></header><table class="result-table"><thead><tr><th>อันดับ</th><th>นักกีฬา/ทีม</th><th>สังกัด</th><th style="text-align:right">คะแนน</th></tr></thead><tbody>{% for row in panel.rows %}<tr><td class="rank">{{ row.display_rank|default(row.rank, true) }}</td><td>{{ row.athlete.name }}</td><td>{{ row.athlete.affiliation }}</td><td class="score">{{ row.total }}</td></tr>{% else %}<tr><td colspan="4" style="text-align:center;color:#64748b">ยังไม่มีข้อมูล</td></tr>{% endfor %}</tbody></table></section>{% endfor %}
+</div>
+<script>setTimeout(function(){ location.reload(); }, 15000);</script>
+{% endblock %}

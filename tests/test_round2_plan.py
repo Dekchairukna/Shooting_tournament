@@ -53,33 +53,30 @@ class Round2PlanTests(unittest.TestCase):
         c.environ_base["HTTP_X_CSRF_TOKEN"] = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
         return c
 
-    def test_slot_back_fill_like_sheet(self):
+    def test_slot_starts_lane_one(self):
         e = self.events[0]
-        self.assertEqual(round2_lane_slot(e, 1, 15, "back"), (2, 1))   # คิว 1 สนาม 1 ว่าง
-        self.assertEqual(round2_lane_slot(e, 7, 15, "back"), (8, 1))
-        self.assertEqual(round2_lane_slot(e, 8, 15, "back"), (1, 2))
-        self.assertEqual(round2_lane_slot(e, 15, 15, "back"), (8, 2))
-        self.assertEqual(round2_lane_slot(e, 1, 15, "front"), (1, 1))
+        e.round_two_fill = "back"  # ค่าเก่าที่เคยบันทึกไว้ ต้องกลับมาเริ่มสนาม 1
+        self.assertEqual([round2_lane_slot(e, i, 6) for i in range(1, 7)], [(i, 1) for i in range(1, 7)])
+        self.assertEqual(round2_lane_slot(e, 9, 15), (1, 2))
 
     def test_plan_page_and_apply(self):
         c = self.client()
         ids = ",".join(str(e.id) for e in self.events)
-        html = c.get(f"/events/round2-plan?ids={ids}&fill=back").get_data(as_text=True)
+        html = c.get(f"/events/round2-plan?ids={ids}").get_data(as_text=True)
         self.assertIn("12 ชาย", html); self.assertIn("12 หญิง", html)
         self.assertIn("(15 ทีม)", html)
         self.assertEqual(html.count("ลำดับที่ 2"), 2)
-        r = c.post("/events/round2-plan", data={"ids": ids, "fill": "back"})
+        r = c.post("/events/round2-plan", data={"ids": ids, "fill": "front"})
         self.assertEqual(r.status_code, 302)
         g.pop("shooting_request_cache", None)
         e = self.events[0]
         invalidate_poll_cache(e.id)
         rows = [r for r in c.get(f"/events/{e.id}/overview-data?round=2").get_json() if not r["is_round2_direct_placeholder"]]
         first = min(rows, key=lambda r: r["display_order"])
-        self.assertEqual((first["display_lane_no"], first["display_lane_order"]), (2, 1))
-        lane1 = [r for r in rows if r["display_lane_no"] == 1]
-        self.assertEqual([r["display_lane_order"] for r in lane1], [2])
-        # หน้าคิวสนาม 1 รอบ 2 เห็นแค่คนเดียว
-        self.assertEqual(db.session.get(Event, e.id).round_two_fill, "back")
+        self.assertEqual((first["display_lane_no"], first["display_lane_order"]), (1, 1))
+        self.assertEqual(first["name"], "12 ชาย-T7")  # คะแนนน้อยสุดในกลุ่มรอบ 2 (T7-T21 = 15 ทีม) อยู่สนาม 1
+        lane8 = [r for r in rows if r["display_lane_no"] == 8]
+        self.assertEqual([r["display_lane_order"] for r in lane8], [1])  # 15 ทีม: คิว 2 สนาม 8 ว่าง
 
 
     def r2names(self, c, e):

@@ -1580,9 +1580,10 @@ def round_two_candidate_ids(event: Event) -> set[int]:
     return ids
 
 
+# รอบ 2 เริ่มจากสนาม 1 เสมอ (เช่น 6 คน 8 สนาม = สนาม 1-6) ช่องว่างอยู่ท้ายคิวสุดท้าย
+# ค่า "back" ที่เคยบันทึกไว้จะถูกมองเป็น "front"
 ROUND_TWO_FILLS = {
-    "front": "เติมจากสนาม 1 คิวแรก (ช่องว่างอยู่ท้าย)",
-    "back": "คิวสุดท้ายเต็มทุกสนาม (ช่องว่างอยู่ต้นคิวแรก)",
+    "front": "เริ่มจากสนาม 1 (ช่องว่างอยู่ท้าย)",
 }
 
 
@@ -2996,6 +2997,93 @@ def index():
     return render_template("index.html", events=events, stats=stats)
 
 
+def selected_events(raw_ids: str | None) -> list[Event]:
+    """คืนอีเวนต์ตามลำดับที่ผู้ใช้เลือก พร้อมตัด id ซ้ำ/ไม่มีจริงออก"""
+    ids = list(dict.fromkeys(_parse_id_list(raw_ids)))[:MAX_BULK_EVENTS]
+    if not ids:
+        return []
+    found = {event.id: event for event in Event.query.filter(Event.id.in_(ids)).all()}
+    return [found[event_id] for event_id in ids if event_id in found]
+
+
+@app.route("/events/combined-overview")
+def combined_event_overview():
+    events = selected_events(request.args.get("ids"))
+    if not events:
+        flash("กรุณาเลือกอีเวนต์อย่างน้อย 1 รายการ", "warning")
+        return redirect(url_for("index"))
+    round_no = 2 if request.args.get("round", 1, type=int) == 2 else 1
+    panels = []
+    for event in events:
+        if round_no == 2 and event.has_round_two:
+            rows = [row for row in build_round_two_overview_rows(event)
+                    if not row.get("is_round2_direct_placeholder")]
+        else:
+            rows = build_round_ranking(event, 1)
+        panels.append({"event": event, "rows": apply_overview_order_mode(event, rows)})
+    return render_template(
+        "combined_overview.html",
+        panels=panels,
+        round_no=round_no,
+        ids_text=",".join(str(event.id) for event in events),
+    )
+
+
+@app.route("/events/bulk-settings", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def bulk_event_settings():
+    raw_ids = request.form.get("ids") if request.method == "POST" else request.args.get("ids")
+    events = selected_events(raw_ids)
+    if not events:
+        flash("กรุณาเลือกอีเวนต์อย่างน้อย 1 รายการ", "warning")
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        changed = []
+        if request.form.get("apply_direct_qualifiers"):
+            value = _form_int(request.form.get("direct_qualifiers"), 0, 0)
+            changed.append(("direct_qualifiers", value))
+        if request.form.get("apply_has_round_two"):
+            changed.append(("has_round_two", request.form.get("has_round_two") == "yes"))
+        if request.form.get("apply_round_two_mode"):
+            mode = request.form.get("round_two_mode")
+            changed.append(("round_two_mode", mode if mode in {"cutoff", "next"} else "cutoff"))
+        if request.form.get("apply_round_two_cutoff_rank"):
+            changed.append(("round_two_cutoff_rank", _form_int(request.form.get("round_two_cutoff_rank"), 16, 1)))
+        if request.form.get("apply_round_two_advancers"):
+            changed.append(("round_two_advancers", _form_int(request.form.get("round_two_advancers"), 4, 1)))
+        if request.form.get("apply_next_round_label"):
+            label = (request.form.get("next_round_label") or "รอบ 8 คน").strip()[:50]
+            changed.append(("next_round_label", label or "รอบ 8 คน"))
+        if request.form.get("apply_overview_sort_by_rank"):
+            changed.append(("overview_sort_by_rank", request.form.get("overview_sort_by_rank") == "yes"))
+        if request.form.get("apply_overview_show_cut_lines"):
+            changed.append(("overview_show_cut_lines", request.form.get("overview_show_cut_lines") == "yes"))
+        if not changed:
+            flash("ยังไม่ได้ติ๊กหัวข้อการตั้งค่าที่ต้องการใช้ร่วมกัน", "warning")
+            return redirect(url_for("bulk_event_settings", ids=raw_ids))
+        qualification_fields = {"direct_qualifiers", "has_round_two", "round_two_mode",
+                                "round_two_cutoff_rank", "round_two_advancers", "next_round_label"}
+        reset_brackets = any(name in qualification_fields for name, _ in changed)
+        for event in events:
+            for name, value in changed:
+                setattr(event, name, value)
+            if reset_brackets:
+                BracketMatch.query.filter_by(event_id=event.id).delete(synchronize_session=False)
+        db.session.commit()
+        clear_request_cache()
+        for event in events:
+            invalidate_poll_cache(event.id)
+        flash(f"บันทึกการตั้งค่าร่วมให้ {len(events)} อีเวนต์แล้ว", "success")
+        return redirect(url_for("bulk_event_settings", ids=raw_ids))
+    return render_template(
+        "bulk_event_settings.html",
+        events=events,
+        ids_text=",".join(str(event.id) for event in events),
+        next_round_labels=NEXT_ROUND_LABELS,
+    )
+
+
 @app.route("/events/<int:event_id>/courts/create", methods=["POST"])
 @login_required
 @role_required("superadmin")
@@ -3858,7 +3946,7 @@ def round2_plan():
     picked = [e for i in ids for e in all_events if e.id == i]
     fill = request.args.get("fill")
     if fill not in ROUND_TWO_FILLS:
-        fill = round_two_fill(picked[0]) if picked else "back"
+        fill = "front"
     plans = [round2_plan_for_event(e, fill) for e in picked]
     applied = bool(picked) and all(round_two_fill(e) == fill for e in picked)
     return render_template(

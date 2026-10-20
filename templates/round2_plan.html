@@ -30,7 +30,7 @@
 <div class="r2p">
   <section class="card no-print" style="margin:0;">
     <h1>ผังลงสนามรอบ 2</h1>
-    <p class="muted" style="margin:0;">1) เลือกอีเวนต์ (เรียงตามลำดับที่จะตี) · 2) ดูผัง สนาม × ลำดับคิว · 3) กด "ลงสนามตามผังนี้" กรรมการสนามจะเห็นคิวรอบ 2 ตามผังทันที · ลำดับในรอบ 2: คะแนนรอบ 1 น้อยสุดตีก่อน</p>
+    <p class="muted" style="margin:0;">1) เลือกอีเวนต์ (เรียงตามลำดับที่จะตี) · 2) ดูผัง สนาม × ลำดับคิว · 3) กด "ลงสนามตามผังนี้" กรรมการสนามจะเห็นคิวรอบ 2 ตามผังทันที · ลำดับในรอบ 2: คะแนนรอบ 1 น้อยสุดตีก่อน เริ่มจากสนาม 1</p>
     <form method="get" id="pickForm">
       <div class="pick">
         {% for e in all_events %}
@@ -40,9 +40,8 @@
         {% endfor %}
       </div>
       <div class="controls">
-        <label>การวางช่องว่าง
-          <select name="fill">{% for k, v in fills.items() %}<option value="{{ k }}" {% if k == fill %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
-        </label>
+        <input type="hidden" name="fill" value="front">
+        <span class="muted">เริ่มจากสนาม 1 · คะแนนรอบ 1 น้อยสุดตีก่อน (เท่ากันดูจำนวน 5 แล้วจำนวน 3 น้อยกว่าตีก่อน)</span>
         <button class="btn secondary" type="submit">แสดงผัง</button>
       </div>
     </form>

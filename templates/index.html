@@ -218,6 +218,26 @@
     padding:18px !important;
   }
 
+  .selection-bar{
+    display:none;
+    position:sticky;
+    top:66px;
+    z-index:20;
+    margin:0 0 14px;
+    padding:12px 14px;
+    border:1px solid #c4b5fd;
+    border-radius:16px;
+    background:#f5f3ff;
+    box-shadow:0 10px 24px rgba(76,29,149,.12);
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .selection-bar.is-visible{ display:flex; }
+  .event-check{ width:20px;height:20px;accent-color:#7c3aed;cursor:pointer; }
+
   .muted{
     color:#64748b;
   }
@@ -498,9 +518,20 @@
     </div>
 
     <div class="table-wrap mobile-cards">
+      <div class="selection-bar" id="event-selection-bar">
+        <strong>เลือกแล้ว <span id="event-selection-count">0</span> อีเวนต์</strong>
+        <div class="action-group">
+          <button class="btn secondary" type="button" data-selection-action="combined">👀 เปิดดูรวมกัน</button>
+          {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
+          <button class="btn secondary" type="button" data-selection-action="round2">🗂 ผังเข้ารอบ 2</button>
+          <button class="btn" type="button" data-selection-action="settings">⚙️ ตั้งค่าร่วมกัน</button>
+          {% endif %}
+        </div>
+      </div>
       <table class="table">
         <thead>
           <tr>
+            <th style="width:46px"><input class="event-check" id="event-select-all" type="checkbox" aria-label="เลือกทุกอีเวนต์"></th>
             <th>ชื่องาน</th>
             <th>รุ่น</th>
             <th>ประเภท</th>
@@ -512,6 +543,10 @@
         <tbody>
           {% for event in events %}
           <tr>
+            <td>
+              <div class="mobile-label">เลือก</div>
+              <input class="event-check js-event-check" type="checkbox" value="{{ event.id }}" aria-label="เลือก {{ event.name }}">
+            </td>
             <td>
               <div class="mobile-label">ชื่องาน</div>
               <strong>{{ event.name }}</strong>
@@ -550,7 +585,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="6" class="empty-row">ยังไม่มีอีเวนต์</td>
+            <td colspan="7" class="empty-row">ยังไม่มีอีเวนต์</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -558,4 +593,32 @@
     </div>
   </section>
 </div>
+<script>
+(function () {
+  const checks = Array.from(document.querySelectorAll('.js-event-check'));
+  const all = document.getElementById('event-select-all');
+  const bar = document.getElementById('event-selection-bar');
+  const count = document.getElementById('event-selection-count');
+  function ids() { return checks.filter(c => c.checked).map(c => c.value); }
+  function refresh() {
+    const picked = ids();
+    count.textContent = picked.length;
+    bar.classList.toggle('is-visible', picked.length > 0);
+    all.checked = checks.length > 0 && picked.length === checks.length;
+    all.indeterminate = picked.length > 0 && picked.length < checks.length;
+  }
+  all.addEventListener('change', () => { checks.forEach(c => c.checked = all.checked); refresh(); });
+  checks.forEach(c => c.addEventListener('change', refresh));
+  document.querySelectorAll('[data-selection-action]').forEach(button => button.addEventListener('click', () => {
+    const picked = ids();
+    if (!picked.length) return;
+    const routes = {
+      combined: {{ url_for('combined_event_overview')|tojson }},
+      round2: {{ url_for('round2_plan')|tojson }},
+      settings: {{ url_for('bulk_event_settings')|tojson }}
+    };
+    location.href = routes[button.dataset.selectionAction] + '?ids=' + encodeURIComponent(picked.join(','));
+  }));
+})();
+</script>
 {% endblock %}
