@@ -4272,6 +4272,125 @@ def event_overview(event_id: int):
     )
 
 
+@app.route("/events/<int:event_id>/overview.xlsx")
+def event_overview_excel(event_id: int):
+    """ดาวน์โหลดผลที่แสดงใน Overview เป็น Excel แยกตามรอบการแข่งขัน"""
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    event = Event.query.get_or_404(event_id)
+    if is_court_user() and not court_can_access_event(event):
+        abort(403)
+    round_no = 2 if request.args.get("round", 1, type=int) == 2 else 1
+    if round_no == 2 and event.has_round_two:
+        all_rows = build_round_two_overview_rows(event)
+    else:
+        round_no = 1
+        all_rows = build_round_ranking(event, round_no)
+    rows = apply_overview_order_mode(event, filter_rows_for_court(all_rows))
+    export_last_column = get_column_letter(35 if round_no == 2 and event.has_round_two else 33)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = f"Results Round {round_no}"
+    sheet.sheet_view.showGridLines = False
+    sheet.merge_cells(f"A1:{export_last_column}1")
+    sheet["A1"] = event.name
+    sheet["A1"].font = Font(size=18, bold=True, color="FFFFFF")
+    sheet["A1"].fill = PatternFill("solid", fgColor="5B2182")
+    sheet["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    sheet.row_dimensions[1].height = 30
+    sheet.merge_cells(f"A2:{export_last_column}2")
+    sheet["A2"] = f"{event.event_group} | {event.category} | ROUND {round_no} | {event.competition_date.strftime('%d/%m/%Y')}"
+    sheet["A2"].font = Font(bold=True, color="5B2182")
+    sheet["A2"].alignment = Alignment(horizontal="center")
+
+    headers = ["ลำดับการตี", "สนาม", "คิว", "สังกัด", "ชื่อ/ทีม"]
+    if round_no == 2 and event.has_round_two:
+        headers.append("คะแนนรอบ 1")
+    for station in STATIONS:
+        headers.extend([f"A{station} 6m", f"A{station} 7m", f"A{station} 8m", f"A{station} 9m", f"A{station} Total"])
+    headers.extend(["คะแนนรวมรอบนี้"])
+    if round_no == 2 and event.has_round_two:
+        headers.append("คะแนนรวมสองรอบ")
+    headers.extend(["อันดับ", "สถานะ"])
+    sheet.append([])
+    sheet.append(headers)
+    header_row = sheet.max_row
+
+    status_labels = {"waiting": "รอตี", "active": "กำลังตี", "finished": "ตีแล้ว"}
+    for row in rows:
+        placeholder = bool(row.get("is_round2_direct_placeholder"))
+        values = [
+            row.get("display_order") or row["athlete"].start_order,
+            row.get("display_lane_no") or row["athlete"].lane_no,
+            row.get("display_lane_order") or row["athlete"].lane_order,
+            row["athlete"].affiliation,
+            row["athlete"].name,
+        ]
+        if round_no == 2 and event.has_round_two:
+            values.append(row.get("round1_total", row.get("total", 0)))
+        for station in STATIONS:
+            station_data = (row.get("by_station") or {}).get(station, {})
+            distances = station_data.get("distances", {})
+            if placeholder:
+                values.extend(["-", "-", "-", "-", "-"])
+            else:
+                values.extend([distances.get(distance, 0) for distance in DISTANCES])
+                values.append(station_data.get("total", 0))
+        round_total = row.get("round2_total", row.get("total", 0)) if round_no == 2 else row.get("total", 0)
+        values.append("-" if placeholder else round_total)
+        if round_no == 2 and event.has_round_two:
+            values.append(row.get("combined_total", row.get("round1_total", 0)))
+        values.append(row.get("display_rank", row.get("rank", "")))
+        if placeholder:
+            status = "เข้ารอบตรง"
+        elif row.get("disqualified"):
+            status = "DQ ตัดออก"
+        elif row.get("approved"):
+            status = "APPROVED"
+        elif row.get("score_complete"):
+            status = "ตีแล้ว"
+        else:
+            status = status_labels.get(row.get("status"), row.get("status") or "")
+        values.append(status)
+        sheet.append(values)
+
+    purple_fill = PatternFill("solid", fgColor="6D28D9")
+    white_font = Font(bold=True, color="FFFFFF")
+    thin = Side(style="thin", color="CBD5E1")
+    for cell in sheet[header_row]:
+        cell.fill = purple_fill
+        cell.font = white_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for excel_row in sheet.iter_rows(min_row=header_row + 1, max_row=sheet.max_row):
+        for cell in excel_row:
+            cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        excel_row[3].alignment = Alignment(horizontal="left", vertical="center")
+        excel_row[4].alignment = Alignment(horizontal="left", vertical="center")
+    sheet.freeze_panes = f"A{header_row + 1}"
+    last_column = sheet.cell(row=header_row, column=len(headers)).column_letter
+    sheet.auto_filter.ref = f"A{header_row}:{last_column}{sheet.max_row}"
+    for column in range(1, len(headers) + 1):
+        letter = sheet.cell(row=header_row, column=column).column_letter
+        sheet.column_dimensions[letter].width = 12
+    sheet.column_dimensions["D"].width = 24
+    sheet.column_dimensions["E"].width = 28
+    sheet.column_dimensions[last_column].width = 16
+
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    return send_file(
+        stream,
+        as_attachment=True,
+        download_name=f"event_{event.id}_round_{round_no}_results.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @app.route("/events/<int:event_id>/overview-cut-lines", methods=["POST"])
 @login_required
 @role_required("admin", "superadmin")

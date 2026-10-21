@@ -3,6 +3,9 @@ import re
 import tempfile
 import unittest
 from datetime import date
+from io import BytesIO
+
+from openpyxl import load_workbook
 
 _test_dir = tempfile.TemporaryDirectory(prefix="shooting-bulk-settings-")
 os.environ["DATABASE_URL"] = "sqlite:///" + _test_dir.name + "/test.db"
@@ -81,6 +84,18 @@ class BulkEventSettingsTests(unittest.TestCase):
         self.assertIn("รายการ 2", page)
         self.assertNotIn("รายการ 3", page)
         self.assertIn("ทีม 1", page)
+
+    def test_overview_results_export_is_valid_excel(self):
+        event = self.events[0]
+        response = self.client.get(f"/events/{event.id}/overview.xlsx?round=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("spreadsheetml", response.content_type)
+        workbook = load_workbook(BytesIO(response.data), data_only=True)
+        sheet = workbook.active
+        self.assertEqual(sheet["A1"].value, event.name)
+        self.assertEqual(sheet["A4"].value, "ลำดับการตี")
+        self.assertEqual(sheet["E5"].value, "ทีม 1")
+        self.assertEqual(sheet.cell(row=4, column=sheet.max_column).value, "สถานะ")
 
 
 if __name__ == "__main__":
