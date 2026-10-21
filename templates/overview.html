@@ -136,6 +136,8 @@
 .qualification-table thead th.round1-history-col{background:#0f766e;color:#fff;}
 .qualification-table thead th.round2-total-head{background:#0f172a;color:#fff;}
 .qualification-table thead th.sum-head{background:#f59e0b;color:#111827;}
+.qualification-table thead th.stat-5-head{background:#dcfce7;color:#166534;}
+.qualification-table thead th.stat-3-head{background:#dbeafe;color:#1e3a8a;}
 .qualification-table thead th.col-class{background:#7c3aed;}
 .qualification-table thead th.col-status{background:#0f172a;}
 
@@ -171,6 +173,16 @@
 #overviewTableBody td.sum-total-cell{
   background:#f59e0b!important;
   color:#111827!important;
+  font-weight:950;
+}
+#overviewTableBody td.stats-count-5{
+  background:#ecfdf5!important;
+  color:#166534!important;
+  font-weight:950;
+}
+#overviewTableBody td.stats-count-3{
+  background:#eff6ff!important;
+  color:#1e40af!important;
   font-weight:950;
 }
 #overviewTableBody td.overall-rank{
@@ -804,7 +816,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
         <table class="qualification-table {{ theme }} overview-round-{{ round_no }}">
           <thead>
             <tr class="qualification-title-row">
-              <th colspan="{{ 34 if round_no == 2 and event.has_round_two else 32 }}">
+              <th colspan="{{ 37 if round_no == 2 and event.has_round_two else 33 }}">
                 <div class="qualification-title">Qualification Shooting ROUND {{ round_no }}</div>
               </th>
             </tr>
@@ -823,6 +835,8 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
               <th rowspan="3" class="col-total round2-total-head">Total</th>
               {% if round_no == 2 and event.has_round_two %}
               <th rowspan="3" class="col-total sum-head">SUM</th>
+              <th rowspan="3" class="col-total stat-5-head" title="จำนวนคะแนน 5 รวมรอบ 1 และรอบ 2">5</th>
+              <th rowspan="3" class="col-total stat-3-head" title="จำนวนคะแนน 3 รวมรอบ 1 และรอบ 2">3</th>
               {% endif %}
               <th rowspan="3" class="col-class">Class</th>
               <th rowspan="3" class="col-status compact-status-head">สถานะ</th>
@@ -876,6 +890,8 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
               <td class="overall-total round2-total-cell">{{ '-' if round_no == 2 and event.has_round_two and row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else (row.round2_total if round_no == 2 and event.has_round_two and row.round2_total is defined else row.total) }}</td>
               {% if round_no == 2 and event.has_round_two %}
               <td class="sum-total-cell">{{ row.combined_total }}</td>
+              <td class="stats-count-5">{{ row.count_5 }}</td>
+              <td class="stats-count-3">{{ row.count_3 }}</td>
               {% endif %}
               <td class="overall-rank">{{ row.display_rank if row.display_rank is defined else row.rank }}</td>
               <td class="status-cell">
@@ -907,7 +923,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
             </tr>
             {% else %}
             <tr>
-              <td colspan="{{ 34 if round_no == 2 and event.has_round_two else 32 }}">ยังไม่มีข้อมูล</td>
+              <td colspan="{{ 37 if round_no == 2 and event.has_round_two else 33 }}">ยังไม่มีข้อมูล</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -1039,6 +1055,8 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
       const name = row.querySelector('.cell-name');
       const total = row.querySelector('.overall-total');
       const sumTotal = row.querySelector('.sum-total-cell');
+      const count5 = row.querySelector('.stats-count-5');
+      const count3 = row.querySelector('.stats-count-3');
       const rank = row.querySelector('.overall-rank');
       const pill = row.querySelector('.status-pill');
 
@@ -1049,6 +1067,8 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
       if (name) name.textContent = item.name;
       if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.round2_total ?? item.total ?? 0);
       if (sumTotal) sumTotal.textContent = item.combined_total ?? ((item.round1_total ?? 0) + (item.round2_total ?? item.total ?? 0));
+      if (count5) count5.textContent = item.count_5 ?? 0;
+      if (count3) count3.textContent = item.count_3 ?? 0;
       if (rank) rank.textContent = item.display_rank ?? item.rank;
       const statusCell = row.querySelector('.status-cell') || row.querySelector('td:last-child');
       if (statusCell) {
@@ -1066,6 +1086,8 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
         if (row.querySelector('.r1-total')) row.querySelector('.r1-total').textContent = item.round1_total ?? item.combined_total ?? 0;
         if (total) total.textContent = item.is_round2_direct_placeholder ? '-' : (item.round2_total ?? item.total ?? 0);
         if (sumTotal) sumTotal.textContent = item.combined_total ?? ((item.round1_total ?? 0) + (item.round2_total ?? item.total ?? 0));
+        if (count5) count5.textContent = item.count_5 ?? 0;
+        if (count3) count3.textContent = item.count_3 ?? 0;
         if (rank) rank.textContent = item.display_rank ?? item.rank;
       }
       if (!item.is_round2_direct_placeholder) {

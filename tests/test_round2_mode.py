@@ -83,6 +83,18 @@ class Round2ModeTests(unittest.TestCase):
         self.assertIn('data-score="5"', html)
         self.assertIn('tr.visual-finished > td.score-col[data-score="5"]', html)
 
+    def test_round2_overview_shows_combined_5_and_3_statistics(self):
+        e = self._event("next", 4, athletes=6)
+        html = self.client.get(f"/events/{e.id}/overview?round=2").get_data(as_text=True)
+        self.assertIn('class="col-total stat-5-head"', html)
+        self.assertIn('class="col-total stat-3-head"', html)
+        self.assertIn('class="stats-count-5"', html)
+        self.assertIn('class="stats-count-3"', html)
+        payload = self.client.get(f"/events/{e.id}/overview-data?round=2").get_json()
+        self.assertTrue(payload)
+        self.assertIn("count_5", payload[0])
+        self.assertIn("count_3", payload[0])
+
 
 if __name__ == "__main__":
     unittest.main()

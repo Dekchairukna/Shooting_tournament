@@ -4916,6 +4916,8 @@ def overview_data(event_id: int):
             "round1_total": row.get("round1_total"),
             "round2_total": row.get("round2_total"),
             "combined_total": row.get("combined_total", row["total"]),
+            "count_5": row.get("count_5", 0),
+            "count_3": row.get("count_3", 0),
             "round1_stations": round1_stations,
             "round2_stations": round2_stations,
             "athlete_id": row["athlete"].id,
