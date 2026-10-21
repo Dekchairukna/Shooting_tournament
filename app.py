@@ -4275,13 +4275,63 @@ def event_overview(event_id: int):
 def official_results_template_stream(event: Event, round_no: int, rows: list[dict]) -> BytesIO | None:
     """เติมผลลงในฟอร์ม TIR ต้นฉบับ โดยรักษารูปแบบ โลโก้ และหน้าพิมพ์เดิมทั้งเล่ม"""
     from copy import copy
+    from openpyxl.styles import Color
+    from openpyxl.worksheet.formula import ArrayFormula
+
+    def theme_hex(value: str | None, fallback: str) -> str:
+        raw = (value or fallback).strip().lstrip("#")
+        return raw.upper() if len(raw) == 6 else fallback.lstrip("#").upper()
+
+    try:
+        active_theme = SiteTheme.query.filter_by(is_active=True).order_by(SiteTheme.id).first()
+    except Exception:
+        active_theme = None
+    theme_source = active_theme or SimpleNamespace(**PLAIN_THEME_DEFAULTS)
+    theme_colors = {
+        "primary": theme_hex(theme_source.color_primary, PLAIN_THEME_DEFAULTS["color_primary"]),
+        "dark": theme_hex(theme_source.color_primary_dark, PLAIN_THEME_DEFAULTS["color_primary_dark"]),
+        "soft": theme_hex(theme_source.color_soft, PLAIN_THEME_DEFAULTS["color_soft"]),
+        "cream": theme_hex(theme_source.color_cream, PLAIN_THEME_DEFAULTS["color_cream"]),
+        "accent": theme_hex(theme_source.color_accent, PLAIN_THEME_DEFAULTS["color_accent"]),
+    }
+
+    def apply_current_theme(target_workbook) -> None:
+        """แปลงเฉพาะสีประจำฟอร์มเดิม โดยคงเลย์เอาต์ เส้น และโลโก้ไว้"""
+        color_map = {
+            "9A0650": theme_colors["dark"],
+            "E50977": theme_colors["primary"],
+            "FFE7FF": theme_colors["soft"],
+            "FAF7B4": theme_colors["cream"],
+            "FFFF00": theme_colors["accent"],
+            "0070C0": theme_colors["accent"],
+        }
+        for target_sheet in target_workbook.worksheets:
+            for row_cells in target_sheet.iter_rows():
+                for cell in row_cells:
+                    fill_color = cell.fill.fgColor
+                    if fill_color.type == "rgb" and fill_color.rgb:
+                        replacement = color_map.get(fill_color.rgb[-6:].upper())
+                        if replacement:
+                            updated_fill = copy(cell.fill)
+                            updated_fill.fgColor = Color(rgb=f"FF{replacement}")
+                            cell.fill = updated_fill
+                    font_color = cell.font.color
+                    if font_color is not None and font_color.type == "rgb" and font_color.rgb:
+                        replacement = color_map.get(font_color.rgb[-6:].upper())
+                        if replacement:
+                            updated_font = copy(cell.font)
+                            updated_font.color = Color(rgb=f"FF{replacement}")
+                            cell.font = updated_font
 
     template_path = os.path.join(BASE_DIR, "resources", "tir_qualif_template.xlsx")
     if not os.path.exists(template_path):
         return None
     workbook = load_workbook(template_path)
     sheet = workbook["TIR QUALIFICATION"]
-    qualification_rows = apply_overview_order_mode(event, build_round_ranking(event, 1))
+    qualification_rows = sorted(
+        build_round_ranking(event, 1),
+        key=lambda result: (result["athlete"].start_order or 10**9, result["athlete"].id),
+    )
     sheet["E2"] = f"{event.name} · ROUND 1"
     sheet["AM2"] = f"{event.name} · ROUND 1"
     sheet["AJ3"] = "PETANQUE SHOOTING\nQUALIFICATION"
@@ -4313,39 +4363,35 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
     for offset, result in enumerate(qualification_rows):
         row_no = first_row + offset
         athlete = result["athlete"]
-        rank = result.get("display_rank", result.get("rank", offset + 1))
-        start_order = result.get("display_order") or athlete.start_order
         affiliation = athlete.affiliation or ""
         name = athlete.name or ""
         placeholder = bool(result.get("is_round2_direct_placeholder"))
-        station_values = []
-        for station in STATIONS:
+        sheet.cell(row_no, 2, f"=AF{row_no}")
+        sheet.cell(row_no, 3, affiliation)
+        sheet.cell(row_no, 4, name)
+        for station_index, station in enumerate(STATIONS):
             station_data = (result.get("by_station") or {}).get(station, {})
             distances = station_data.get("distances", {})
             values = ["-" if placeholder else distances.get(distance, 0) for distance in DISTANCES]
-            total = "-" if placeholder else station_data.get("total", 0)
-            station_values.extend([*values, total])
-        round_total = "-" if placeholder else result.get("total", 0)
+            start_col = 5 + station_index * 5
+            for distance_index, value in enumerate(values):
+                sheet.cell(row_no, start_col + distance_index, value)
+            total_col = start_col + 4
+            first_score_col = sheet.cell(row_no, start_col).column_letter
+            last_score_col = sheet.cell(row_no, start_col + 3).column_letter
+            sheet.cell(row_no, total_col, f"=SUM({first_score_col}{row_no}:{last_score_col}{row_no})")
+        sheet.cell(row_no, 30, None)
+        sheet.cell(row_no, 31, f"=I{row_no}+N{row_no}+S{row_no}+X{row_no}+AC{row_no}")
+        ranking_last_row = first_row + len(qualification_rows) - 1
+        sheet.cell(row_no, 32, f"=RANK(AE{row_no},$AE${first_row}:$AE${ranking_last_row},0)")
 
-        # ตารางซ้ายของฟอร์มต้นฉบับ (ข้อมูลต้นทาง)
-        sheet.cell(row_no, 2, rank)
-        sheet.cell(row_no, 3, affiliation)
-        sheet.cell(row_no, 4, name)
-        for index, value in enumerate(station_values, start=5):
-            sheet.cell(row_no, index, value)
-        sheet.cell(row_no, 30, None)         # AD เว้นตามฟอร์มเดิม
-        sheet.cell(row_no, 31, round_total)  # AE Total
-        sheet.cell(row_no, 32, rank)         # AF Class
-
-        # ตารางผลเรียงอันดับด้านขวา ซึ่งเป็นพื้นที่พิมพ์ของฟอร์มเดิม
-        sheet.cell(row_no, 36, start_order)  # AJ
-        sheet.cell(row_no, 37, affiliation)  # AK
-        sheet.cell(row_no, 38, name)         # AL
-        for index, value in enumerate(station_values, start=39):
-            sheet.cell(row_no, index, value)
-        sheet.cell(row_no, 64, None)         # BL ช่องคั่นตามต้นฉบับ
-        sheet.cell(row_no, 65, round_total)  # BM Total
-        sheet.cell(row_no, 66, rank)         # BN Class
+    # พื้นที่พิมพ์ด้านขวาใช้ SORTBY จากตารางต้นทางเหมือนไฟล์แม่แบบ
+    if qualification_rows:
+        ranking_last_row = first_row + len(qualification_rows) - 1
+        sheet["AJ10"] = ArrayFormula(
+            ref=f"AJ{first_row}:BN{ranking_last_row}",
+            text=f"=_xlfn.SORTBY(B{first_row}:AF{ranking_last_row},AF{first_row}:AF{ranking_last_row},1,C{first_row}:C{ranking_last_row},1)",
+        )
 
     last_print_row = max(52, first_row + len(qualification_rows) - 1)
     sheet.print_area = f"$AJ$2:$BN${last_print_row}"
@@ -4366,8 +4412,8 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             athlete = result["athlete"]
             repechage.cell(row_no, 2, athlete.affiliation)
             repechage.cell(row_no, 3, athlete.name)
-            repechage.cell(row_no, 37, result.get("round1_total", result.get("total", 0)))
-            repechage.cell(row_no, 38, result.get("display_rank", result.get("rank", offset + 1)))
+            repechage.cell(row_no, 37, f'=INDEX(\'TIR QUALIFICATION\'!$BM$10:$BM${max(10, first_row + len(qualification_rows) - 1)},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${max(10, first_row + len(qualification_rows) - 1)},0))')
+            repechage.cell(row_no, 38, f'=INDEX(\'TIR QUALIFICATION\'!$BN$10:$BN${max(10, first_row + len(qualification_rows) - 1)},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${max(10, first_row + len(qualification_rows) - 1)},0))')
         for row_no in range(18, 35):
             for column in range(2, 39):
                 repechage.cell(row_no, column).value = None
@@ -4376,17 +4422,21 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             athlete = result["athlete"]
             repechage.cell(row_no, 2, athlete.affiliation)
             repechage.cell(row_no, 3, athlete.name)
-            repechage.cell(row_no, 9, result.get("round1_total", 0))
+            qualification_last_row = max(10, first_row + len(qualification_rows) - 1)
+            repechage.cell(row_no, 9, f'=INDEX(\'TIR QUALIFICATION\'!$BM$10:$BM${qualification_last_row},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${qualification_last_row},0))')
             for station_index, station in enumerate(STATIONS):
                 station_data = (result.get("by_station") or {}).get(station, {})
                 distances = station_data.get("distances", {})
                 start_col = 10 + station_index * 5
                 for distance_index, distance in enumerate(DISTANCES):
                     repechage.cell(row_no, start_col + distance_index, distances.get(distance, 0))
-                repechage.cell(row_no, start_col + 4, station_data.get("total", 0))
-            repechage.cell(row_no, 36, result.get("round2_total", result.get("total", 0)))
-            repechage.cell(row_no, 37, result.get("combined_total", result.get("total", 0)))
-            repechage.cell(row_no, 38, result.get("display_rank", result.get("rank", offset + 1)))
+                first_score_col = repechage.cell(row_no, start_col).column_letter
+                last_score_col = repechage.cell(row_no, start_col + 3).column_letter
+                repechage.cell(row_no, start_col + 4, f"=SUM({first_score_col}{row_no}:{last_score_col}{row_no})")
+            repechage.cell(row_no, 36, f"=N{row_no}+S{row_no}+X{row_no}+AC{row_no}+AH{row_no}")
+            repechage.cell(row_no, 37, f"=I{row_no}+AJ{row_no}")
+            competitor_last_row = 18 + len(competitor_rows[:17]) - 1
+            repechage.cell(row_no, 38, f"=RANK(AK{row_no},$AK$18:$AK${competitor_last_row},0)")
         repechage.sheet_view.showGridLines = False
 
     # ชีต 3: ดึงผู้เล่นและคะแนนจากสาย QF → SF → Final ของระบบ
@@ -4421,7 +4471,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             final_sheet.cell(row_no, 7, bracket_data["r1r2"])
             for index, score in enumerate(bracket_data["stations"], start=8):
                 final_sheet.cell(row_no, index, score)
-            final_sheet.cell(row_no, 13, bracket_data["total"])
+            final_sheet.cell(row_no, 13, f"=SUM(H{row_no}:L{row_no})")
 
         sf_ids = []
         for match in grouped_matches["SF"][:2]:
@@ -4434,7 +4484,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             final_sheet.cell(row_no, 14, athlete.name)
             for index, score in enumerate(bracket_data["stations"], start=15):
                 final_sheet.cell(row_no, index, score)
-            final_sheet.cell(row_no, 20, bracket_data["total"])
+            final_sheet.cell(row_no, 20, f"=SUM(O{row_no}:S{row_no})")
 
         final_match = grouped_matches["F"][0] if grouped_matches["F"] else None
         final_ids = [final_match.athlete_a_id, final_match.athlete_b_id] if final_match else []
@@ -4446,10 +4496,13 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             final_sheet.cell(row_no, 21, athlete.name)
             for index, score in enumerate(bracket_data["stations"], start=22):
                 final_sheet.cell(row_no, index, score)
-            final_sheet.cell(row_no, 27, bracket_data["total"])
+            final_sheet.cell(row_no, 27, f"=SUM(V{row_no}:Z{row_no + 1})")
         final_sheet.sheet_view.showGridLines = False
 
+    apply_current_theme(workbook)
     workbook.active = workbook.sheetnames.index("TIR QUALIFICATION")
+    workbook.calculation.calcMode = "auto"
+    workbook.calculation.calcOnSave = True
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True
     stream = BytesIO()

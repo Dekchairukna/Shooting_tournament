@@ -11,7 +11,7 @@ _test_dir = tempfile.TemporaryDirectory(prefix="shooting-bulk-settings-")
 os.environ["DATABASE_URL"] = "sqlite:///" + _test_dir.name + "/test.db"
 os.environ.setdefault("SECRET_KEY", "test-only-secret")
 
-from app import app, db, User, Event, Athlete, BracketMatch
+from app import app, db, User, Event, Athlete, BracketMatch, SiteTheme
 
 
 class BulkEventSettingsTests(unittest.TestCase):
@@ -90,14 +90,19 @@ class BulkEventSettingsTests(unittest.TestCase):
         response = self.client.get(f"/events/{event.id}/overview.xlsx?round=1")
         self.assertEqual(response.status_code, 200)
         self.assertIn("spreadsheetml", response.content_type)
-        workbook = load_workbook(BytesIO(response.data), data_only=True)
+        workbook = load_workbook(BytesIO(response.data), data_only=False)
         self.assertEqual(workbook.sheetnames, ["TIR QUALIFICATION", "TIR REPECHAGE", "TIR FINAL "])
         sheet = workbook["TIR QUALIFICATION"]
         self.assertIn(event.name, sheet["E2"].value)
         self.assertEqual(sheet["D10"].value, "ทีม 1")
-        self.assertEqual(sheet["AL10"].value, "ทีม 1")
+        self.assertEqual(sheet["I10"].value, "=SUM(E10:H10)")
+        self.assertEqual(sheet["AE10"].value, "=I10+N10+S10+X10+AC10")
+        self.assertEqual(sheet["AF10"].value, "=RANK(AE10,$AE$10:$AE$10,0)")
+        self.assertEqual(sheet["AJ10"].value.text, "=_xlfn.SORTBY(B10:AF10,AF10:AF10,1,C10:C10,1)")
         self.assertEqual(sheet["AM3"].value, "Atelier 1")
-        self.assertEqual(sheet["BM10"].value, 0)
+        self.assertEqual(sheet["B10"].value, "=AF10")
+        active_theme = SiteTheme.query.filter_by(is_active=True).first()
+        self.assertEqual(sheet["B10"].fill.fgColor.rgb[-6:], active_theme.color_primary_dark.lstrip("#").upper())
         self.assertGreaterEqual(len(sheet._images), 10)
         self.assertIn(event.name, workbook["TIR REPECHAGE"]["B2"].value)
         self.assertIn(event.name, workbook["TIR FINAL "]["C1"].value)
