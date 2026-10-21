@@ -4272,6 +4272,93 @@ def event_overview(event_id: int):
     )
 
 
+def official_results_template_stream(event: Event, round_no: int, rows: list[dict]) -> BytesIO | None:
+    """เติมผลลงในฟอร์ม TIR ต้นฉบับ โดยรักษารูปแบบ โลโก้ และหน้าพิมพ์เดิมทั้งเล่ม"""
+    from copy import copy
+
+    template_path = os.path.join(BASE_DIR, "resources", "tir_qualif_template.xlsx")
+    if not os.path.exists(template_path):
+        return None
+    workbook = load_workbook(template_path)
+    sheet = workbook["TIR QUALIFICATION"]
+    sheet["E2"] = f"{event.name} · ROUND {round_no}"
+    sheet["AM2"] = f"{event.name} · ROUND {round_no}"
+    sheet["AJ3"] = f"PETANQUE SHOOTING\nROUND {round_no}"
+    sheet["AL3"] = "FINAL\nSTANDING"
+
+    first_row = 10
+    template_capacity = 43
+    extra_rows = max(0, len(rows) - template_capacity)
+    if extra_rows:
+        sheet.insert_rows(first_row + template_capacity, extra_rows)
+        source_row = first_row + template_capacity - 1
+        for row_no in range(first_row + template_capacity, first_row + template_capacity + extra_rows):
+            sheet.row_dimensions[row_no].height = sheet.row_dimensions[source_row].height
+            for column in range(2, 67):
+                source = sheet.cell(source_row, column)
+                target = sheet.cell(row_no, column)
+                if source.has_style:
+                    target._style = copy(source._style)
+                target.number_format = source.number_format
+                target.alignment = copy(source.alignment)
+                target.border = copy(source.border)
+                target.fill = copy(source.fill)
+                target.font = copy(source.font)
+    capacity = max(template_capacity, len(rows))
+    for row_no in range(first_row, first_row + capacity):
+        for column in range(2, 67):
+            sheet.cell(row_no, column).value = None
+
+    for offset, result in enumerate(rows):
+        row_no = first_row + offset
+        athlete = result["athlete"]
+        rank = result.get("display_rank", result.get("rank", offset + 1))
+        start_order = result.get("display_order") or athlete.start_order
+        affiliation = athlete.affiliation or ""
+        name = athlete.name or ""
+        placeholder = bool(result.get("is_round2_direct_placeholder"))
+        station_values = []
+        for station in STATIONS:
+            station_data = (result.get("by_station") or {}).get(station, {})
+            distances = station_data.get("distances", {})
+            values = ["-" if placeholder else distances.get(distance, 0) for distance in DISTANCES]
+            total = "-" if placeholder else station_data.get("total", 0)
+            station_values.extend([*values, total])
+        round_total = result.get("round2_total", result.get("total", 0)) if round_no == 2 else result.get("total", 0)
+        round_total = "-" if placeholder else round_total
+
+        # ตารางซ้ายของฟอร์มต้นฉบับ (ข้อมูลต้นทาง)
+        sheet.cell(row_no, 2, rank)
+        sheet.cell(row_no, 3, affiliation)
+        sheet.cell(row_no, 4, name)
+        for index, value in enumerate(station_values, start=5):
+            sheet.cell(row_no, index, value)
+        sheet.cell(row_no, 30, None)         # AD เว้นตามฟอร์มเดิม
+        sheet.cell(row_no, 31, round_total)  # AE Total
+        sheet.cell(row_no, 32, rank)         # AF Class
+
+        # ตารางผลเรียงอันดับด้านขวา ซึ่งเป็นพื้นที่พิมพ์ของฟอร์มเดิม
+        sheet.cell(row_no, 36, start_order)  # AJ
+        sheet.cell(row_no, 37, affiliation)  # AK
+        sheet.cell(row_no, 38, name)         # AL
+        for index, value in enumerate(station_values, start=39):
+            sheet.cell(row_no, index, value)
+        sheet.cell(row_no, 64, None)         # BL ช่องคั่นตามต้นฉบับ
+        sheet.cell(row_no, 65, round_total)  # BM Total
+        sheet.cell(row_no, 66, rank)         # BN Class
+
+    last_print_row = max(52, first_row + len(rows) - 1)
+    sheet.print_area = f"$AJ$2:$BN${last_print_row}"
+    sheet.sheet_view.showGridLines = False
+    workbook.active = workbook.sheetnames.index("TIR QUALIFICATION")
+    workbook.calculation.fullCalcOnLoad = True
+    workbook.calculation.forceFullCalc = True
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    return stream
+
+
 @app.route("/events/<int:event_id>/overview.xlsx")
 def event_overview_excel(event_id: int):
     """ดาวน์โหลดผลที่แสดงใน Overview เป็น Excel แยกตามรอบการแข่งขัน"""
@@ -4289,6 +4376,15 @@ def event_overview_excel(event_id: int):
         round_no = 1
         all_rows = build_round_ranking(event, round_no)
     rows = apply_overview_order_mode(event, filter_rows_for_court(all_rows))
+
+    official_stream = official_results_template_stream(event, round_no, rows)
+    if official_stream is not None:
+        return send_file(
+            official_stream,
+            as_attachment=True,
+            download_name=f"event_{event.id}_round_{round_no}_official_results.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     headers = ["ลำดับการตี", "สนาม", "คิว", "สังกัด", "ชื่อ/ทีม"]
     if round_no == 2 and event.has_round_two:

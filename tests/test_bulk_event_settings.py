@@ -91,13 +91,14 @@ class BulkEventSettingsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("spreadsheetml", response.content_type)
         workbook = load_workbook(BytesIO(response.data), data_only=True)
-        sheet = workbook.active
-        self.assertEqual(sheet["A1"].value, event.name)
-        self.assertEqual(sheet["A4"].value, "ลำดับการตี")
-        self.assertEqual(sheet["E8"].value, "ทีม 1")
-        self.assertEqual(sheet.cell(row=4, column=sheet.max_column).value, "สถานะ")
-        self.assertEqual(sheet.page_setup.orientation, "landscape")
-        self.assertEqual(len(sheet._images), 5)
+        self.assertEqual(workbook.sheetnames, ["TIR QUALIFICATION"])
+        sheet = workbook["TIR QUALIFICATION"]
+        self.assertIn(event.name, sheet["E2"].value)
+        self.assertEqual(sheet["D10"].value, "ทีม 1")
+        self.assertEqual(sheet["AL10"].value, "ทีม 1")
+        self.assertEqual(sheet["AM3"].value, "Atelier 1")
+        self.assertEqual(sheet["BM10"].value, 0)
+        self.assertGreaterEqual(len(sheet._images), 10)
 
 
 if __name__ == "__main__":
