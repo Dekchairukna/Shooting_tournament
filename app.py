@@ -4275,6 +4275,7 @@ def event_overview(event_id: int):
 @app.route("/events/<int:event_id>/overview.xlsx")
 def event_overview_excel(event_id: int):
     """ดาวน์โหลดผลที่แสดงใน Overview เป็น Excel แยกตามรอบการแข่งขัน"""
+    from openpyxl.drawing.image import Image as ExcelImage
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
@@ -4288,7 +4289,18 @@ def event_overview_excel(event_id: int):
         round_no = 1
         all_rows = build_round_ranking(event, round_no)
     rows = apply_overview_order_mode(event, filter_rows_for_court(all_rows))
-    export_last_column = get_column_letter(35 if round_no == 2 and event.has_round_two else 33)
+
+    headers = ["ลำดับการตี", "สนาม", "คิว", "สังกัด", "ชื่อ/ทีม"]
+    if round_no == 2 and event.has_round_two:
+        headers.append("คะแนนรอบ 1")
+    station_start_col = len(headers) + 1
+    for station in STATIONS:
+        headers.extend(["6m", "7m", "8m", "9m", "Total"])
+    headers.append("คะแนนรวมรอบนี้")
+    if round_no == 2 and event.has_round_two:
+        headers.append("คะแนนรวมสองรอบ")
+    headers.extend(["อันดับ", "สถานะ"])
+    export_last_column = get_column_letter(len(headers))
 
     workbook = Workbook()
     sheet = workbook.active
@@ -4296,29 +4308,87 @@ def event_overview_excel(event_id: int):
     sheet.sheet_view.showGridLines = False
     sheet.merge_cells(f"A1:{export_last_column}1")
     sheet["A1"] = event.name
-    sheet["A1"].font = Font(size=18, bold=True, color="FFFFFF")
-    sheet["A1"].fill = PatternFill("solid", fgColor="5B2182")
+    sheet["A1"].font = Font(name="Arial", size=22, bold=True, color="A5005A")
     sheet["A1"].alignment = Alignment(horizontal="center", vertical="center")
-    sheet.row_dimensions[1].height = 30
+    sheet.row_dimensions[1].height = 36
     sheet.merge_cells(f"A2:{export_last_column}2")
-    sheet["A2"] = f"{event.event_group} | {event.category} | ROUND {round_no} | {event.competition_date.strftime('%d/%m/%Y')}"
-    sheet["A2"].font = Font(bold=True, color="5B2182")
-    sheet["A2"].alignment = Alignment(horizontal="center")
+    sheet["A2"] = f"PETANQUE PRECISION SHOOTING · {event.event_group} · {event.category} · ROUND {round_no} · {event.competition_date.strftime('%d/%m/%Y')}"
+    sheet["A2"].font = Font(name="Arial", size=12, bold=True, color="A5005A")
+    sheet["A2"].alignment = Alignment(horizontal="center", vertical="center")
+    sheet.row_dimensions[2].height = 23
 
-    headers = ["ลำดับการตี", "สนาม", "คิว", "สังกัด", "ชื่อ/ทีม"]
-    if round_no == 2 and event.has_round_two:
-        headers.append("คะแนนรอบ 1")
-    for station in STATIONS:
-        headers.extend([f"A{station} 6m", f"A{station} 7m", f"A{station} 8m", f"A{station} 9m", f"A{station} Total"])
-    headers.extend(["คะแนนรวมรอบนี้"])
-    if round_no == 2 and event.has_round_two:
-        headers.append("คะแนนรวมสองรอบ")
-    headers.extend(["อันดับ", "สถานะ"])
-    sheet.append([])
-    sheet.append(headers)
-    header_row = sheet.max_row
+    magenta = "A5005A"
+    pink = "FCE6F7"
+    pale_pink = "F4D6D9"
+    pale_blue = "DDE8F4"
+    pale_yellow = "FFF9B0"
+    border_side = Side(style="thin", color="262626")
+    medium_side = Side(style="medium", color="262626")
+    thin_border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+    strong_border = Border(left=medium_side, right=medium_side, top=medium_side, bottom=medium_side)
+    white_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    magenta_font = Font(name="Arial", size=10, bold=True, color=magenta)
+
+    header_top, header_name, header_image, header_distance = 4, 5, 6, 7
+    fixed_headers = headers[:station_start_col - 1]
+    for column, label in enumerate(fixed_headers, start=1):
+        sheet.merge_cells(start_row=header_top, start_column=column, end_row=header_distance, end_column=column)
+        cell = sheet.cell(header_top, column, label)
+        cell.fill = PatternFill("solid", fgColor=magenta if column in (1, 4) else pink)
+        cell.font = white_font if column in (1, 4) else magenta_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = strong_border
+
+    station_names = ["ลูกเดี่ยว", "ลูกหลังแก่น", "ลูกกลางสองลูก", "ลูกกระโดด", "ยิงแก่น"]
+    for station_index, station in enumerate(STATIONS):
+        start_col = station_start_col + station_index * 5
+        end_col = start_col + 4
+        for row_no in (header_top, header_name, header_image):
+            sheet.merge_cells(start_row=row_no, start_column=start_col, end_row=row_no, end_column=end_col)
+            merged = sheet.cell(row_no, start_col)
+            merged.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            merged.border = strong_border
+        sheet.cell(header_top, start_col, f"Atelier {station}")
+        sheet.cell(header_top, start_col).font = Font(name="Arial", size=11, bold=True, color=magenta)
+        sheet.cell(header_name, start_col, station_names[station_index])
+        sheet.cell(header_name, start_col).font = Font(name="Arial", size=9, bold=True)
+        for offset, distance in enumerate((*DISTANCES, "Total")):
+            cell = sheet.cell(header_distance, start_col + offset, distance if isinstance(distance, str) else f"{distance}m")
+            cell.fill = PatternFill("solid", fgColor=pale_blue if offset == 4 else "FFFFFF")
+            cell.font = Font(name="Arial", size=9, bold=True, color=magenta if offset == 4 else "262626")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = strong_border if offset == 4 else thin_border
+        image_path = os.path.join(BASE_DIR, "static", f"station_{station}.png")
+        if os.path.exists(image_path):
+            station_image = ExcelImage(image_path)
+            station_image.width = 48
+            station_image.height = 42
+            sheet.add_image(station_image, f"{get_column_letter(start_col + 2)}{header_image}")
+
+    trailing_headers = headers[station_start_col - 1 + len(STATIONS) * 5:]
+    trailing_start = station_start_col + len(STATIONS) * 5
+    for offset, label in enumerate(trailing_headers):
+        column = trailing_start + offset
+        sheet.merge_cells(start_row=header_top, start_column=column, end_row=header_distance, end_column=column)
+        cell = sheet.cell(header_top, column, label)
+        if label == "อันดับ":
+            cell.fill = PatternFill("solid", fgColor=magenta)
+            cell.font = white_font
+        elif "คะแนนรวม" in label:
+            cell.fill = PatternFill("solid", fgColor=pale_pink if label == "คะแนนรวมรอบนี้" else pale_yellow)
+            cell.font = magenta_font
+        else:
+            cell.fill = PatternFill("solid", fgColor=pink)
+            cell.font = magenta_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", text_rotation=90 if label == "สถานะ" else 0, wrap_text=True)
+        cell.border = strong_border
+    sheet.row_dimensions[4].height = 22
+    sheet.row_dimensions[5].height = 20
+    sheet.row_dimensions[6].height = 42
+    sheet.row_dimensions[7].height = 21
 
     status_labels = {"waiting": "รอตี", "active": "กำลังตี", "finished": "ตีแล้ว"}
+    data_start_row = header_distance + 1
     for row in rows:
         placeholder = bool(row.get("is_round2_direct_placeholder"))
         values = [
@@ -4356,29 +4426,60 @@ def event_overview_excel(event_id: int):
         values.append(status)
         sheet.append(values)
 
-    purple_fill = PatternFill("solid", fgColor="6D28D9")
-    white_font = Font(bold=True, color="FFFFFF")
-    thin = Side(style="thin", color="CBD5E1")
-    for cell in sheet[header_row]:
-        cell.fill = purple_fill
-        cell.font = white_font
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    for excel_row in sheet.iter_rows(min_row=header_row + 1, max_row=sheet.max_row):
+    total_col = trailing_start
+    combined_col = trailing_start + 1 if round_no == 2 and event.has_round_two else None
+    rank_col = trailing_start + (2 if combined_col else 1)
+    status_col = rank_col + 1
+    for excel_row in sheet.iter_rows(min_row=data_start_row, max_row=sheet.max_row, max_col=len(headers)):
         for cell in excel_row:
-            cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+            cell.font = Font(name="Arial", size=9)
+            cell.border = thin_border
             cell.alignment = Alignment(horizontal="center", vertical="center")
+        excel_row[3].fill = PatternFill("solid", fgColor="FBEAF8")
         excel_row[3].alignment = Alignment(horizontal="left", vertical="center")
         excel_row[4].alignment = Alignment(horizontal="left", vertical="center")
-    sheet.freeze_panes = f"A{header_row + 1}"
-    last_column = sheet.cell(row=header_row, column=len(headers)).column_letter
-    sheet.auto_filter.ref = f"A{header_row}:{last_column}{sheet.max_row}"
+        for station_index in range(len(STATIONS)):
+            station_total = station_start_col + station_index * 5 + 4
+            excel_row[station_total - 1].fill = PatternFill("solid", fgColor=pale_blue)
+            excel_row[station_total - 1].font = Font(name="Arial", size=10, bold=True, color=magenta)
+            excel_row[station_total - 1].border = strong_border
+        excel_row[total_col - 1].fill = PatternFill("solid", fgColor=pale_pink)
+        excel_row[total_col - 1].font = Font(name="Arial", size=11, bold=True, color=magenta)
+        if combined_col:
+            excel_row[combined_col - 1].fill = PatternFill("solid", fgColor=pale_yellow)
+            excel_row[combined_col - 1].font = Font(name="Arial", size=11, bold=True, color=magenta)
+        excel_row[rank_col - 1].fill = PatternFill("solid", fgColor=magenta)
+        excel_row[rank_col - 1].font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+        excel_row[status_col - 1].font = Font(name="Arial", size=9, bold=True, color=magenta)
+        sheet.row_dimensions[excel_row[0].row].height = 21
+
+    sheet.freeze_panes = f"F{data_start_row}"
     for column in range(1, len(headers) + 1):
-        letter = sheet.cell(row=header_row, column=column).column_letter
-        sheet.column_dimensions[letter].width = 12
-    sheet.column_dimensions["D"].width = 24
-    sheet.column_dimensions["E"].width = 28
-    sheet.column_dimensions[last_column].width = 16
+        sheet.column_dimensions[get_column_letter(column)].width = 5.3
+    sheet.column_dimensions["A"].width = 9
+    sheet.column_dimensions["B"].width = 6
+    sheet.column_dimensions["C"].width = 6
+    sheet.column_dimensions["D"].width = 23
+    sheet.column_dimensions["E"].width = 24
+    if round_no == 2 and event.has_round_two:
+        sheet.column_dimensions["F"].width = 10
+    for column in (total_col, combined_col, rank_col, status_col):
+        if column:
+            sheet.column_dimensions[get_column_letter(column)].width = 10 if column != status_col else 12
+
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.paperSize = sheet.PAPERSIZE_A3
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.print_title_rows = "$1:$7"
+    sheet.print_area = f"A1:{export_last_column}{max(sheet.max_row, data_start_row)}"
+    sheet.page_margins.left = 0.2
+    sheet.page_margins.right = 0.2
+    sheet.page_margins.top = 0.3
+    sheet.page_margins.bottom = 0.3
+    sheet.oddFooter.center.text = f"{event.name} · Round {round_no} · &P / &N"
+    sheet.oddFooter.center.size = 8
 
     stream = BytesIO()
     workbook.save(stream)

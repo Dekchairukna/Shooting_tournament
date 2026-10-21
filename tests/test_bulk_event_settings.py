@@ -94,8 +94,10 @@ class BulkEventSettingsTests(unittest.TestCase):
         sheet = workbook.active
         self.assertEqual(sheet["A1"].value, event.name)
         self.assertEqual(sheet["A4"].value, "ลำดับการตี")
-        self.assertEqual(sheet["E5"].value, "ทีม 1")
+        self.assertEqual(sheet["E8"].value, "ทีม 1")
         self.assertEqual(sheet.cell(row=4, column=sheet.max_column).value, "สถานะ")
+        self.assertEqual(sheet.page_setup.orientation, "landscape")
+        self.assertEqual(len(sheet._images), 5)
 
 
 if __name__ == "__main__":
