@@ -4281,14 +4281,15 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
         return None
     workbook = load_workbook(template_path)
     sheet = workbook["TIR QUALIFICATION"]
-    sheet["E2"] = f"{event.name} · ROUND {round_no}"
-    sheet["AM2"] = f"{event.name} · ROUND {round_no}"
-    sheet["AJ3"] = f"PETANQUE SHOOTING\nROUND {round_no}"
+    qualification_rows = apply_overview_order_mode(event, build_round_ranking(event, 1))
+    sheet["E2"] = f"{event.name} · ROUND 1"
+    sheet["AM2"] = f"{event.name} · ROUND 1"
+    sheet["AJ3"] = "PETANQUE SHOOTING\nQUALIFICATION"
     sheet["AL3"] = "FINAL\nSTANDING"
 
     first_row = 10
     template_capacity = 43
-    extra_rows = max(0, len(rows) - template_capacity)
+    extra_rows = max(0, len(qualification_rows) - template_capacity)
     if extra_rows:
         sheet.insert_rows(first_row + template_capacity, extra_rows)
         source_row = first_row + template_capacity - 1
@@ -4304,12 +4305,12 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
                 target.border = copy(source.border)
                 target.fill = copy(source.fill)
                 target.font = copy(source.font)
-    capacity = max(template_capacity, len(rows))
+    capacity = max(template_capacity, len(qualification_rows))
     for row_no in range(first_row, first_row + capacity):
         for column in range(2, 67):
             sheet.cell(row_no, column).value = None
 
-    for offset, result in enumerate(rows):
+    for offset, result in enumerate(qualification_rows):
         row_no = first_row + offset
         athlete = result["athlete"]
         rank = result.get("display_rank", result.get("rank", offset + 1))
@@ -4324,8 +4325,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             values = ["-" if placeholder else distances.get(distance, 0) for distance in DISTANCES]
             total = "-" if placeholder else station_data.get("total", 0)
             station_values.extend([*values, total])
-        round_total = result.get("round2_total", result.get("total", 0)) if round_no == 2 else result.get("total", 0)
-        round_total = "-" if placeholder else round_total
+        round_total = "-" if placeholder else result.get("total", 0)
 
         # ตารางซ้ายของฟอร์มต้นฉบับ (ข้อมูลต้นทาง)
         sheet.cell(row_no, 2, rank)
@@ -4347,9 +4347,108 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
         sheet.cell(row_no, 65, round_total)  # BM Total
         sheet.cell(row_no, 66, rank)         # BN Class
 
-    last_print_row = max(52, first_row + len(rows) - 1)
+    last_print_row = max(52, first_row + len(qualification_rows) - 1)
     sheet.print_area = f"$AJ$2:$BN${last_print_row}"
     sheet.sheet_view.showGridLines = False
+
+    # ชีต 2: ผู้ผ่านตรงด้านบน และผู้ตี Repechage/รอบ 2 ด้านล่าง
+    if "TIR REPECHAGE" in workbook.sheetnames:
+        repechage = workbook["TIR REPECHAGE"]
+        repechage["B2"] = f"{event.name} · {event.event_group} · {event.category}"
+        round_two_rows = build_round_two_overview_rows(event) if event.has_round_two else []
+        direct_rows = [row for row in round_two_rows if row.get("is_round2_direct_placeholder")]
+        competitor_rows = [row for row in round_two_rows if not row.get("is_round2_direct_placeholder")]
+        for row_no in range(3, 7):
+            for column in (2, 3, 37, 38):
+                repechage.cell(row_no, column).value = None
+        for offset, result in enumerate(direct_rows[:4]):
+            row_no = 3 + offset
+            athlete = result["athlete"]
+            repechage.cell(row_no, 2, athlete.affiliation)
+            repechage.cell(row_no, 3, athlete.name)
+            repechage.cell(row_no, 37, result.get("round1_total", result.get("total", 0)))
+            repechage.cell(row_no, 38, result.get("display_rank", result.get("rank", offset + 1)))
+        for row_no in range(18, 35):
+            for column in range(2, 39):
+                repechage.cell(row_no, column).value = None
+        for offset, result in enumerate(competitor_rows[:17]):
+            row_no = 18 + offset
+            athlete = result["athlete"]
+            repechage.cell(row_no, 2, athlete.affiliation)
+            repechage.cell(row_no, 3, athlete.name)
+            repechage.cell(row_no, 9, result.get("round1_total", 0))
+            for station_index, station in enumerate(STATIONS):
+                station_data = (result.get("by_station") or {}).get(station, {})
+                distances = station_data.get("distances", {})
+                start_col = 10 + station_index * 5
+                for distance_index, distance in enumerate(DISTANCES):
+                    repechage.cell(row_no, start_col + distance_index, distances.get(distance, 0))
+                repechage.cell(row_no, start_col + 4, station_data.get("total", 0))
+            repechage.cell(row_no, 36, result.get("round2_total", result.get("total", 0)))
+            repechage.cell(row_no, 37, result.get("combined_total", result.get("total", 0)))
+            repechage.cell(row_no, 38, result.get("display_rank", result.get("rank", offset + 1)))
+        repechage.sheet_view.showGridLines = False
+
+    # ชีต 3: ดึงผู้เล่นและคะแนนจากสาย QF → SF → Final ของระบบ
+    if "TIR FINAL " in workbook.sheetnames:
+        final_sheet = workbook["TIR FINAL "]
+        final_sheet["C1"] = f"{event.name} · FINAL · {event.event_group} · {event.category}"
+        athlete_map = {athlete.id: athlete for athlete in event.athletes}
+        qualifiers = build_combined_qualifiers(event)
+        seed_map = {row["athlete"].id: row.get("seed", index) for index, row in enumerate(qualifiers, start=1)}
+        matches = BracketMatch.query.filter_by(event_id=event.id).all()
+        grouped_matches = {
+            name: sorted([match for match in matches if match.round_name == name], key=lambda match: match.match_no)
+            for name in ("QF", "SF", "F")
+        }
+
+        qf_ids = []
+        for match in grouped_matches["QF"][:4]:
+            qf_ids.extend([match.athlete_a_id, match.athlete_b_id])
+        if not any(qf_ids):
+            seeded = [row["athlete"].id for row in qualifiers[:8]]
+            order = [0, 7, 3, 4, 2, 5, 1, 6]
+            qf_ids = [seeded[index] if index < len(seeded) else None for index in order]
+        qf_rows = (5, 6, 9, 10, 13, 14, 17, 18)
+        for row_no, athlete_id in zip(qf_rows, qf_ids):
+            athlete = athlete_map.get(athlete_id)
+            if not athlete:
+                continue
+            bracket_data = build_bracket_row_data(event, athlete, "QF", seed_map)
+            final_sheet.cell(row_no, 3, bracket_data["seed"])
+            final_sheet.cell(row_no, 4, athlete.name)
+            final_sheet.cell(row_no, 6, bracket_data["r1"])
+            final_sheet.cell(row_no, 7, bracket_data["r1r2"])
+            for index, score in enumerate(bracket_data["stations"], start=8):
+                final_sheet.cell(row_no, index, score)
+            final_sheet.cell(row_no, 13, bracket_data["total"])
+
+        sf_ids = []
+        for match in grouped_matches["SF"][:2]:
+            sf_ids.extend([match.athlete_a_id, match.athlete_b_id])
+        for row_no, athlete_id in zip((7, 8, 15, 16), sf_ids):
+            athlete = athlete_map.get(athlete_id)
+            if not athlete:
+                continue
+            bracket_data = build_bracket_row_data(event, athlete, "SF", seed_map)
+            final_sheet.cell(row_no, 14, athlete.name)
+            for index, score in enumerate(bracket_data["stations"], start=15):
+                final_sheet.cell(row_no, index, score)
+            final_sheet.cell(row_no, 20, bracket_data["total"])
+
+        final_match = grouped_matches["F"][0] if grouped_matches["F"] else None
+        final_ids = [final_match.athlete_a_id, final_match.athlete_b_id] if final_match else []
+        for row_no, athlete_id in zip((9, 13), final_ids):
+            athlete = athlete_map.get(athlete_id)
+            if not athlete:
+                continue
+            bracket_data = build_bracket_row_data(event, athlete, "F", seed_map)
+            final_sheet.cell(row_no, 21, athlete.name)
+            for index, score in enumerate(bracket_data["stations"], start=22):
+                final_sheet.cell(row_no, index, score)
+            final_sheet.cell(row_no, 27, bracket_data["total"])
+        final_sheet.sheet_view.showGridLines = False
+
     workbook.active = workbook.sheetnames.index("TIR QUALIFICATION")
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True

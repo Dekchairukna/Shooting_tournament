@@ -91,7 +91,7 @@ class BulkEventSettingsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("spreadsheetml", response.content_type)
         workbook = load_workbook(BytesIO(response.data), data_only=True)
-        self.assertEqual(workbook.sheetnames, ["TIR QUALIFICATION"])
+        self.assertEqual(workbook.sheetnames, ["TIR QUALIFICATION", "TIR REPECHAGE", "TIR FINAL "])
         sheet = workbook["TIR QUALIFICATION"]
         self.assertIn(event.name, sheet["E2"].value)
         self.assertEqual(sheet["D10"].value, "ทีม 1")
@@ -99,6 +99,8 @@ class BulkEventSettingsTests(unittest.TestCase):
         self.assertEqual(sheet["AM3"].value, "Atelier 1")
         self.assertEqual(sheet["BM10"].value, 0)
         self.assertGreaterEqual(len(sheet._images), 10)
+        self.assertIn(event.name, workbook["TIR REPECHAGE"]["B2"].value)
+        self.assertIn(event.name, workbook["TIR FINAL "]["C1"].value)
 
 
 if __name__ == "__main__":
