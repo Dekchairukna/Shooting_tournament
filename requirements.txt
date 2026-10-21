@@ -4,6 +4,7 @@ Flask-SQLAlchemy
 Werkzeug
 gunicorn
 openpyxl
+Pillow
 SQLAlchemy
 psycopg2-binary
 python-docx
