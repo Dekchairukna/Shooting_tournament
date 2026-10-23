@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}นำเข้าชื่อนักกีฬา · Petanque Shooting{% endblock %}
+{% block content %}
+<section class="card">
+  <h1 style="margin-top:0;">นำเข้าชื่อนักกีฬา</h1>
+  <p class="muted">อัปโหลดไฟล์ Excel ที่มีคอลัมน์ <b>athlete_id</b> และ <b>ชื่อนักกีฬา (ใส่ระบบ)</b> ระบบจะใส่ชื่อให้นักกีฬาตาม id
+    ไม่เปลี่ยนสังกัด ลำดับตี สนาม หรือคะแนน · แถวที่ชื่อว่างจะข้าม · อัปโหลดซ้ำได้</p>
+  <form method="post" enctype="multipart/form-data" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="file" name="file" accept=".xlsx,.xls" required>
+    <button class="btn" type="submit">ใส่ชื่อจากไฟล์</button>
+  </form>
+</section>
+{% if results %}
+<section class="card">
+  <h2 style="margin-top:0;">ผลการนำเข้า</h2>
+  <p>อ่านได้ {{ results.total }} แถว · เปลี่ยนชื่อ <b>{{ results.changed|length }}</b> คน · เหมือนเดิม {{ results.same }}{% if results.missing %} · <span style="color:#b91c1c">ไม่พบ athlete_id: {{ results.missing|join(', ') }}</span>{% endif %}</p>
+  {% if results.changed %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>อีเวนต์</th><th>ลำดับ</th><th>สังกัด</th><th>ชื่อเดิม</th><th>ชื่อใหม่</th></tr></thead>
+    <tbody>{% for c in results.changed %}
+      <tr><td>{{ c.event.name }}</td><td>{{ c.athlete.start_order }}</td><td>{{ c.athlete.affiliation }}</td><td class="muted">{{ c.old }}</td><td><b>{{ c.new }}</b></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

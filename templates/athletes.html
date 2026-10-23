@@ -107,7 +107,7 @@
       <tr>
         <td>{{ athlete.start_order }}</td>
         <td>{{ athlete.bib_no }}</td>
-        <td>{{ athlete.name }}</td>
+        <td>{{ athlete.name }}{% if athlete.withdrawn %} <span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-weight:800;border-radius:999px;padding:1px 8px;font-size:.8rem;">ถอนตัว</span>{% endif %}</td>
         <td>{{ athlete.affiliation }}</td>
         <td>{{ athlete.lane_no }}</td>
         <td>{{ athlete.lane_order }}</td>
@@ -126,7 +126,18 @@
           {% endif %}
         </td>
         {% endif %}
-        <td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          {% if athlete.withdrawn %}
+          <form method="post" action="{{ url_for('toggle_athlete_withdrawn', athlete_id=athlete.id) }}" style="margin:0;" onsubmit="return confirm('ยกเลิกการถอนตัวของ ' + {{ athlete.name|tojson }} + ' ? กลับเข้าคิวตีตามเดิม');">
+            <input type="hidden" name="action" value="cancel">
+            <button type="submit" class="btn secondary" style="background:#15803d;border-color:#15803d;color:#fff;">ยกเลิกถอนตัว</button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('toggle_athlete_withdrawn', athlete_id=athlete.id) }}" style="margin:0;" onsubmit="return confirm('ตั้ง ' + {{ athlete.name|tojson }} + ' เป็นถอนตัว? ไม่ลงตี ไม่คิดคะแนน ไม่มีสิทธิ์รอบถัดไป (ยกเลิกได้)');">
+            <input type="hidden" name="action" value="withdraw">
+            <button type="submit" class="btn secondary" style="background:#b45309;border-color:#b45309;color:#fff;">ถอนตัว</button>
+          </form>
+          {% endif %}
           <form method="post" action="{{ url_for('delete_athlete', athlete_id=athlete.id) }}" onsubmit="return confirm('ยืนยันลบ ' + {{ athlete.name|tojson }} + ' ?');">
             <button type="submit" class="btn secondary" style="background:#dc2626; border-color:#dc2626; color:#fff;">ลบ</button>
           </form>

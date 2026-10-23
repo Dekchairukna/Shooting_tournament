@@ -898,7 +898,9 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
                 {% if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder %}
                   <span class="status-pill direct-placeholder-pill">เข้ารอบตรง</span>
                 {% else %}
-                  {% if row.disqualified %}
+                  {% if row.withdrawn %}
+                    {% set status_text = 'ถอนตัว' %}
+                  {% elif row.disqualified %}
                     {% set status_text = 'DQ ตัดออก' %}
                   {% elif row.approved %}
                     {% set status_text = 'APPROVED' %}
@@ -1007,6 +1009,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
 
   function statusLabel(item, currentStation) {
     if (item.is_round2_direct_placeholder) return 'เข้ารอบตรง';
+    if (item.withdrawn) return 'ถอนตัว';
     if (item.disqualified) return 'DQ ตัดออก';
     const pen = item.penalty ? ` −${item.penalty}` : '';
     if (item.approved) return 'APPROVED' + pen;

@@ -691,6 +691,12 @@
               ผังรอบ 2
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.endpoint == 'import_athlete_names' %}active{% endif %}"
+              href="{{ url_for('import_athlete_names') }}">
+              นำเข้าชื่อ
+            </a>
+          </li>
           {% endif %}
 
           {% if current_user.is_authenticated and current_user.role == 'superadmin' %}

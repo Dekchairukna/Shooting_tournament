@@ -80,7 +80,7 @@
         {% endfor %}
         <td class="s49-sum">
           {% set pen = (item.round_penalties or {}).get(rn) %}
-          {% if pen and pen.disqualified %}<span class="s49-dq">DQ</span>
+          {% if pen and pen.disqualified %}<span class="s49-dq">{{ "ถอนตัว" if pen.withdrawn else "DQ" }}</span>
           {% elif pen and pen.points and has_started %}{{ round_totals[rn] - pen.points }}<div class="s49-pen">หัก −{{ pen.points }}</div>
           {% else %}{{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}{% endif %}
         </td>

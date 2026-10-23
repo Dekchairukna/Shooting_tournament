@@ -361,6 +361,9 @@ class Athlete(db.Model):
     round_two_disabled_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     # เลือกเข้ารอบ 2 ด้วยมือ (ใช้เมื่ออีเวนต์เปิด round_two_manual)
     round_two_forced = db.Column(db.Boolean, nullable=False, default=False)
+    # ถอนตัวจากการแข่งขัน (ไม่ลงตี ไม่คิดคะแนน ไม่มีสิทธิ์รอบถัดไป) · ยกเลิกได้
+    withdrawn = db.Column(db.Boolean, nullable=False, default=False)
+    withdrawn_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     entries = db.relationship("ScoreEntry", backref="athlete", cascade="all, delete-orphan", lazy=True)
@@ -453,6 +456,28 @@ def penalty_info(level) -> dict:
         level = 2
     label, points, dq = PENALTY_LEVELS[level]
     return {"level": level, "label": label, "points": points, "disqualified": dq}
+
+
+def athlete_is_withdrawn(athlete_id: int) -> bool:
+    if has_request_context():
+        cache = _request_cache().setdefault("withdrawn_by_athlete", {})
+        if athlete_id in cache:
+            return cache[athlete_id]
+    athlete = db.session.get(Athlete, athlete_id)
+    value = bool(getattr(athlete, "withdrawn", False)) if athlete else False
+    if has_request_context():
+        _request_cache()["withdrawn_by_athlete"][athlete_id] = value
+    return value
+
+
+def round_penalty_info(athlete_id: int, round_no: int) -> dict:
+    """บทลงโทษของรอบ + สถานะถอนตัว (ถอนตัว = เหมือนตัดสิทธิ์ทุกรอบ แต่ป้ายต่างกัน)"""
+    info = penalty_info(get_round_penalty_level(athlete_id, round_no))
+    if athlete_is_withdrawn(athlete_id):
+        info = {**info, "disqualified": True, "withdrawn": True, "points": 0, "label": "ถอนตัว"}
+    else:
+        info["withdrawn"] = False
+    return info
 
 
 def get_round_penalty_level(athlete_id: int, round_no: int) -> int:
@@ -858,6 +883,9 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_at TIMESTAMP')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_disabled_by INTEGER')
             conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS round_two_forced BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS withdrawn BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('UPDATE "athlete" SET withdrawn = false WHERE withdrawn IS NULL')
+            conn.exec_driver_sql('ALTER TABLE "athlete" ADD COLUMN IF NOT EXISTS withdrawn_at TIMESTAMP')
             conn.exec_driver_sql('UPDATE "athlete" SET round_two_forced = false WHERE round_two_forced IS NULL')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS round_two_manual BOOLEAN DEFAULT false')
             conn.exec_driver_sql('UPDATE "event" SET round_two_manual = false WHERE round_two_manual IS NULL')
@@ -944,6 +972,11 @@ def ensure_schema() -> None:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_disabled_at DATETIME")
         if "round_two_disabled_by" not in athlete_columns:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_disabled_by INTEGER")
+        if "withdrawn" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN withdrawn BOOLEAN DEFAULT 0")
+            conn.exec_driver_sql("UPDATE athlete SET withdrawn = 0 WHERE withdrawn IS NULL")
+        if "withdrawn_at" not in athlete_columns:
+            conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN withdrawn_at DATETIME")
         if "round_two_forced" not in athlete_columns:
             conn.exec_driver_sql("ALTER TABLE athlete ADD COLUMN round_two_forced BOOLEAN DEFAULT 0")
             conn.exec_driver_sql("UPDATE athlete SET round_two_forced = 0 WHERE round_two_forced IS NULL")
@@ -1065,6 +1098,9 @@ def preload_event_score_data(event: Event) -> None:
     for entry in TieBreakEntry.query.filter(TieBreakEntry.athlete_id.in_(athlete_ids)).all():
         tiebreak_by_key.setdefault((entry.athlete_id, entry.round_no), []).append(entry)
 
+    wd = cache.setdefault("withdrawn_by_athlete", {})
+    for athlete in event.athletes:
+        wd[athlete.id] = bool(getattr(athlete, "withdrawn", False))
     penalty_by_key = cache.setdefault("penalty_by_athlete_round", {})
     for pen in AthletePenalty.query.filter(AthletePenalty.athlete_id.in_(athlete_ids)).all():
         penalty_by_key[(pen.athlete_id, pen.round_no)] = int(pen.level or 0)
@@ -1134,7 +1170,7 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
         entries = ScoreEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).all()
 
     raw_total = sum(e.score for e in entries)
-    pen = penalty_info(get_round_penalty_level(athlete_id, round_no))
+    pen = round_penalty_info(athlete_id, round_no)
     # Disqualified = ไม่คำนวณคะแนน (รวมเป็น 0 และอยู่ท้ายตาราง)
     total = 0 if pen["disqualified"] else raw_total - pen["points"]
     count_5 = sum(1 for e in entries if e.score == 5)
@@ -1163,6 +1199,7 @@ def summarize_round(athlete_id: int, round_no: int) -> dict:
         "penalty": pen["points"],
         "penalty_level": pen["level"],
         "disqualified": pen["disqualified"],
+        "withdrawn": pen["withdrawn"],
         "count_5": count_5,
         "count_3": count_3,
         "red_cards": red_cards,
@@ -1219,7 +1256,7 @@ def build_scorecard_template_data(athlete_id: int) -> dict:
 
 def athlete_round_status(athlete: Athlete, round_no: int) -> str:
     # หมดสิทธิ์ลงแข่ง = จบรอบนั้นแล้ว (ไม่ค้างคิว และไม่ทำให้รอบค้างไม่จบ)
-    if penalty_info(get_round_penalty_level(athlete.id, round_no))["disqualified"]:
+    if round_penalty_info(athlete.id, round_no)["disqualified"]:
         return "finished"
     signature = get_round_signature(athlete.id, round_no)
     if signature and signature.finished_at:
@@ -1573,6 +1610,7 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             "penalty": summary["penalty"],
             "penalty_level": summary["penalty_level"],
             "disqualified": summary["disqualified"],
+            "withdrawn": summary.get("withdrawn", False),
             "display_order": athlete.start_order,
             "display_lane_no": athlete.lane_no,
             "display_lane_order": athlete.lane_order,
@@ -1633,6 +1671,8 @@ def round_two_candidate_ids(event: Event) -> set[int]:
             if bool(getattr(athlete, "round_two_disabled", False))
         }
         ids -= disabled_ids
+        # ถอนตัวแล้ว ไม่มีสิทธิ์ตีรอบ 2
+        ids -= {a.id for a in event.athletes if bool(getattr(a, "withdrawn", False))}
 
     if has_request_context():
         cache[cache_key] = ids
@@ -1684,6 +1724,7 @@ def round2_next_mode_split(event: Event) -> tuple[set[int], set[int]]:
         rest = [
             r for r in round1_rows
             if r["athlete"].id not in skip and not bool(getattr(r["athlete"], "round_two_disabled", False))
+            and not bool(getattr(r["athlete"], "withdrawn", False))
         ]
         if len(rest) <= n:
             clear = {r["athlete"].id for r in rest}
@@ -2574,7 +2615,7 @@ def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
         "station_totals": template_data["station_totals"],
         "station_reds": template_data["station_reds"],
         "round_totals": template_data["round_totals"],
-        "round_penalties": {rn: penalty_info(get_round_penalty_level(athlete.id, rn)) for rn in scorecard_round_numbers(event)},
+        "round_penalties": {rn: round_penalty_info(athlete.id, rn) for rn in scorecard_round_numbers(event)},
         "round_ranks": round_ranks,
         "round_signatures": round_signatures,
         "round_station_running_totals": round_station_running_totals,
@@ -4037,6 +4078,67 @@ def round2_select(event_id: int):
     return redirect(back)
 
 
+def parse_names_import(file_storage) -> list[tuple[int, str]]:
+    """อ่านไฟล์ที่มีคอลัมน์ athlete_id และ "ชื่อนักกีฬา (ใส่ระบบ)" (หรือหัวคอลัมน์ขึ้นต้น ชื่อนักกีฬา)"""
+    pairs: list[tuple[int, str]] = []
+    for rows in _read_workbook_rows(file_storage):
+        id_idx = name_idx = None
+        for row in rows:
+            cells = [str(c or "").strip() for c in row]
+            if id_idx is None:
+                low = [c.replace(" ", "").lower() for c in cells]
+                if "athlete_id" in low:
+                    id_idx = low.index("athlete_id")
+                    name_idx = next((i for i, c in enumerate(cells) if c.replace(" ", "").startswith("ชื่อนักกีฬา")), None)
+                continue
+            if name_idx is None or id_idx >= len(cells) or name_idx >= len(cells):
+                continue
+            raw_id, name = cells[id_idx], " ".join(cells[name_idx].split())
+            if raw_id.endswith(".0"):
+                raw_id = raw_id[:-2]
+            if raw_id.isdigit() and name:
+                pairs.append((int(raw_id), name[:255]))
+    return pairs
+
+
+@app.route("/athletes/names-import", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def import_athlete_names():
+    """ใส่ชื่อนักกีฬาจากไฟล์ (จับคู่ด้วย athlete_id) · ไม่เปลี่ยนสังกัด ลำดับตี หรือสนาม"""
+    results = None
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or not file.filename:
+            flash("กรุณาเลือกไฟล์", "warning")
+            return redirect(url_for("import_athlete_names"))
+        try:
+            pairs = parse_names_import(file)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("import_athlete_names"))
+        changed, same, missing = [], 0, []
+        touched_events = set()
+        for athlete_id, name in pairs:
+            athlete = db.session.get(Athlete, athlete_id)
+            if not athlete:
+                missing.append(athlete_id)
+                continue
+            if athlete.name == name:
+                same += 1
+                continue
+            changed.append({"athlete": athlete, "old": athlete.name, "new": name, "event": athlete.event})
+            athlete.name = name
+            touched_events.add(athlete.event_id)
+        db.session.commit()
+        clear_request_cache()
+        for eid in touched_events:
+            invalidate_poll_cache(eid)
+        results = {"changed": changed, "same": same, "missing": missing, "total": len(pairs)}
+        flash(f"ใส่ชื่อแล้ว {len(changed)} คน · เหมือนเดิม {same} · ไม่พบ id {len(missing)}", "success" if not missing else "warning")
+    return render_template("names_import.html", results=results)
+
+
 @app.route("/events/round2-plan", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "superadmin")
@@ -5047,6 +5149,7 @@ def overview_data(event_id: int):
             "penalty": row.get("penalty", 0),
             "penalty_level": row.get("penalty_level", 0),
             "disqualified": bool(row.get("disqualified", False)),
+            "withdrawn": bool(row.get("withdrawn", False)),
             # ใช้สำหรับเรียงแถว realtime: รอบ 1 ต้องเรียงตามคะแนน/Rank, รอบ 2 ใช้ view_order ที่ build_round_two_overview_rows กำหนด
             "view_order": row.get("view_order", row["rank"]),
             "stations": stations,
@@ -5484,7 +5587,7 @@ def scorecard(athlete_id: int):
         display_lane_no=display_lane_no,
         display_lane_order=display_lane_order,
         score_edit_count=ScoreEditLog.query.filter_by(athlete_id=athlete.id, round_no=round_no).count(),
-        penalty=penalty_info(get_round_penalty_level(athlete.id, round_no)),
+        penalty=round_penalty_info(athlete.id, round_no),
         penalty_levels=PENALTY_LEVELS,
         penalty_raw_total=summarize_round(athlete.id, round_no)["raw_total"],
         current_round_score_complete=overview_score_complete(summarize_round(athlete.id, round_no)),
@@ -5586,6 +5689,34 @@ def set_athlete_penalty(athlete_id: int):
     clear_request_cache()
     invalidate_poll_cache(event.id)
     flash(f"{athlete.name}: {PENALTY_LEVELS[level][0]}", "success" if level == 0 else "warning")
+    return redirect(back)
+
+
+@app.route("/athletes/<int:athlete_id>/withdraw", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def toggle_athlete_withdrawn(athlete_id: int):
+    """ตั้ง/ยกเลิกสถานะถอนตัว"""
+    athlete = Athlete.query.get_or_404(athlete_id)
+    event = athlete.event
+    now_withdrawn = request.form.get("action") != "cancel"
+    if bool(athlete.withdrawn) != now_withdrawn:
+        athlete.withdrawn = now_withdrawn
+        athlete.withdrawn_at = datetime.utcnow() if now_withdrawn else None
+        db.session.add(ScoreEditLog(
+            athlete_id=athlete.id, round_no=1, station_no=0, distance_m=0, old_score=0, new_score=0,
+            old_red=False, new_red=False, old_played=False, new_played=False,
+            edited_by=current_user.id if current_user.is_authenticated else None,
+            editor_username=getattr(current_user, "username", None),
+            reason=("ถอนตัว" if now_withdrawn else "ยกเลิกการถอนตัว"),
+        ))
+        db.session.commit()
+        clear_request_cache()
+        invalidate_poll_cache(event.id)
+    flash(f"{athlete.name}: {'ถอนตัวแล้ว' if now_withdrawn else 'ยกเลิกการถอนตัวแล้ว · กลับเข้าคิวตีตามเดิม'}", "warning" if now_withdrawn else "success")
+    back = request.form.get("next") or url_for("manage_athletes", event_id=event.id)
+    if not back.startswith("/"):
+        back = url_for("manage_athletes", event_id=event.id)
     return redirect(back)
 
 
