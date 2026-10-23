@@ -54,6 +54,13 @@
       </select>
       <small class="muted">ปิดเมื่อรายการไม่ต้องการให้แถวสลับไปมา · อันดับ (Class) ยังแสดงตามปกติ</small>
     </label>
+    <label>รูปแบบใบบันทึกคะแนน (พิมพ์)
+      <select name="scorecard_layout">
+        {% for k, v in SCORECARD_LAYOUTS.items() %}
+        <option value="{{ k }}" {% if (event.scorecard_layout if event else 'standard') == k %}selected{% endif %}>{{ v.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <input type="hidden" name="location" value="{{ event.location if event else '' }}">
     <button class="btn" type="submit">{{ 'บันทึกการแก้ไข' if is_edit else 'สร้างอีเวนต์' }}</button>
   </form>

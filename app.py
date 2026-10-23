@@ -321,6 +321,8 @@ class Event(db.Model):
     round_two_fill = db.Column(db.String(10), nullable=False, default="front")
     # True = ผู้จัดคลิกเลือกทีมเข้ารอบ 2 เอง (แทนการคัดอัตโนมัติ)
     round_two_manual = db.Column(db.Boolean, nullable=False, default=False)
+    # รูปแบบใบบันทึกคะแนนที่พิมพ์ (ดู SCORECARD_LAYOUTS)
+    scorecard_layout = db.Column(db.String(20), nullable=False, default="standard")
     # ต่อคิวสนามข้ามรุ่น: อีเวนต์ในสายเดียวกันใช้สนามชุดเดียวกัน คิวต่อกันตาม chain_position
     chain_id = db.Column(db.Integer, db.ForeignKey("court_chain.id"), nullable=True)
     chain_position = db.Column(db.Integer, nullable=True)
@@ -656,6 +658,58 @@ def event_has_round_of_16(event) -> bool:
     return BracketMatch.query.filter_by(event_id=event.id, round_name="R16").first() is not None
 
 
+# รูปแบบใบบันทึกคะแนนสำหรับพิมพ์ · เพิ่มงานใหม่ได้โดยเพิ่ม key ที่นี่ + โลโก้ใน static/scorecard/<key>/
+SCORECARD_LAYOUTS = {
+    "standard": {"label": "มาตรฐาน (ใบเดิมของระบบ)"},
+    "school49": {
+        "label": "กีฬาสาธิตสามัคคี ครั้งที่ 49 “คำมอกหลวงเกมส์”",
+        "title": "ใบบันทึกคะแนนกีฬาเปตอง  ประเภทสุดยอดความแม่นยำ (SHOOTING)",
+        "subtitle": "กีฬาสาธิตสามัคคี ครั้งที่ 49  “คำมอกหลวงเกมส์”",
+        "footer": "ณ โรงเรียนสาธิตมหาวิทยาลัยพะเยา     24 – 30 ตุลาคม 2569",
+        "logo_left": "scorecard/school49/logo_left.png",
+        "logos_right": ["scorecard/school49/logo_r1.png", "scorecard/school49/logo_r2.png"],
+        "stations": [
+            ("สถานที่ 1", "ยิงลูกเดี่ยว"), ("สถานที่ 2", "ยิงลูกเหนือลูกเป้า"), ("สถานที่ 3", "ยิงลูกกลางขาว"),
+            ("สถานที่ 4", "ยิงลูกสีขาวเหนือลูกดำ"), ("สถานที่ 5", "ยิงลูกเป้า"),
+        ],
+        "station_images": [f"scorecard/school49/st{i}.png" for i in range(1, 6)],
+    },
+}
+
+
+app.jinja_env.globals["SCORECARD_LAYOUTS"] = SCORECARD_LAYOUTS
+
+
+def scorecard_layout_key(event, override: str | None = None) -> str:
+    key = (override or getattr(event, "scorecard_layout", None) or "standard").strip()
+    return key if key in SCORECARD_LAYOUTS else "standard"
+
+
+def parse_scorecard_layout(form) -> str:
+    key = (form.get("scorecard_layout") or "standard").strip()
+    return key if key in SCORECARD_LAYOUTS else "standard"
+
+
+def scorecard_level_flags(event) -> dict:
+    """ติ๊กช่องระดับ/เพศบนหัวใบบันทึกจากชื่อรุ่นของอีเวนต์"""
+    text = " ".join(str(x or "") for x in (event.name, event.event_group, event.category))
+    compact = text.replace(" ", "")
+    return {
+        "primary": "ประถม" in compact,
+        "lower": any(w in compact for w in ("ม.ต้น", "มัธยมต้น", "มัธยมศึกษาตอนต้น")),
+        "upper": any(w in compact for w in ("ม.ปลาย", "มัธยมปลาย", "มัธยมศึกษาตอนปลาย")),
+        "male": any(w in text for w in ("ชาย", "men", "Men", "male")) and "หญิง" not in text,
+        "female": any(w in text for w in ("หญิง", "women", "Women", "female")),
+    }
+
+
+def thai_date(d) -> str:
+    if not d:
+        return ""
+    months = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+    return f"{d.day} {months[d.month]} {d.year + 543}"
+
+
 def scorecard_round_labels(event) -> list[str]:
     return SCORECARD_ROUND_LABELS_16 if event_has_round_of_16(event) else SCORECARD_ROUND_LABELS_8
 
@@ -807,6 +861,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('UPDATE "athlete" SET round_two_forced = false WHERE round_two_forced IS NULL')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS round_two_manual BOOLEAN DEFAULT false')
             conn.exec_driver_sql('UPDATE "event" SET round_two_manual = false WHERE round_two_manual IS NULL')
+            conn.exec_driver_sql("ALTER TABLE \"event\" ADD COLUMN IF NOT EXISTS scorecard_layout VARCHAR(20) DEFAULT 'standard'")
+            conn.exec_driver_sql("UPDATE \"event\" SET scorecard_layout = 'standard' WHERE scorecard_layout IS NULL")
         return
 
     # SQLite migration เดิม
@@ -855,6 +911,9 @@ def ensure_schema() -> None:
         if "overview_show_cut_lines" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_show_cut_lines BOOLEAN DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET overview_show_cut_lines = 1 WHERE overview_show_cut_lines IS NULL")
+        if "scorecard_layout" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN scorecard_layout VARCHAR(20) DEFAULT 'standard'")
+            conn.exec_driver_sql("UPDATE event SET scorecard_layout = 'standard' WHERE scorecard_layout IS NULL")
         if "round_two_manual" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN round_two_manual BOOLEAN DEFAULT 0")
             conn.exec_driver_sql("UPDATE event SET round_two_manual = 0 WHERE round_two_manual IS NULL")
@@ -2433,6 +2492,17 @@ def athletes_for_scorecard_round(event: Event, round_no: int, selected_ids: list
     return keep_selected(athletes)
 
 
+def scorecard_layout_context(event) -> dict:
+    key = scorecard_layout_key(event, request.args.get("layout"))
+    return {
+        "layout_key": key,
+        "layout": SCORECARD_LAYOUTS[key],
+        "layouts": SCORECARD_LAYOUTS,
+        "level_flags": scorecard_level_flags(event),
+        "event_date_th": thai_date(event.competition_date),
+    }
+
+
 def build_scorecard_print_context(athlete: Athlete, round_no: int) -> dict:
     """รวมข้อมูลให้ template พิมพ์ Scorecard แบบหลายคน โดยใช้โครงเดียวกับหน้าพิมพ์รายคน."""
     event = athlete.event
@@ -3059,6 +3129,8 @@ def bulk_event_settings():
             changed.append(("overview_sort_by_rank", request.form.get("overview_sort_by_rank") == "yes"))
         if request.form.get("apply_overview_show_cut_lines"):
             changed.append(("overview_show_cut_lines", request.form.get("overview_show_cut_lines") == "yes"))
+        if request.form.get("apply_scorecard_layout"):
+            changed.append(("scorecard_layout", parse_scorecard_layout(request.form)))
         if not changed:
             flash("ยังไม่ได้ติ๊กหัวข้อการตั้งค่าที่ต้องการใช้ร่วมกัน", "warning")
             return redirect(url_for("bulk_event_settings", ids=raw_ids))
@@ -3236,6 +3308,7 @@ def create_event():
             has_round_two=request.form.get("has_round_two") == "yes",
             round_two_cutoff_rank=int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None,
             round_two_mode=parse_round_two_mode(request.form),
+            scorecard_layout=parse_scorecard_layout(request.form),
             overview_sort_by_rank=request.form.get("overview_sort_by_rank", "yes") == "yes",
             next_round_label=request.form["next_round_label"],
             round_two_advancers=int(request.form.get("round_two_advancers") or 4),
@@ -3268,6 +3341,7 @@ def edit_event(event_id: int):
         event.has_round_two = request.form.get("has_round_two") == "yes"
         event.round_two_cutoff_rank = int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None
         event.round_two_mode = parse_round_two_mode(request.form)
+        event.scorecard_layout = parse_scorecard_layout(request.form)
         event.overview_sort_by_rank = request.form.get("overview_sort_by_rank", "yes") == "yes"
         event.next_round_label = request.form["next_round_label"]
         event.round_two_advancers = int(request.form.get("round_two_advancers") or 4)
@@ -3522,6 +3596,7 @@ def new_event_from_settings(name: str, event_group: str, category: str, lane_cou
         has_round_two=bool(shared.get("has_round_two", True)),
         round_two_cutoff_rank=shared.get("round_two_cutoff_rank"),
         round_two_mode=shared.get("round_two_mode", "cutoff"),
+        scorecard_layout=shared.get("scorecard_layout", "standard"),
         overview_sort_by_rank=shared.get("overview_sort_by_rank", True),
         next_round_label=next_label,
         round_two_advancers=shared.get("round_two_advancers", quota_for_next_round(next_label)),
@@ -3550,6 +3625,7 @@ def parse_shared_event_settings(form) -> dict:
         "has_round_two": has_round_two,
         "round_two_cutoff_rank": _form_int(cutoff, 16, 1) if cutoff else None,
         "round_two_mode": parse_round_two_mode(form),
+        "scorecard_layout": parse_scorecard_layout(form),
         "overview_sort_by_rank": form.get("overview_sort_by_rank", "yes") == "yes",
         "round_two_advancers": _form_int(form.get("round_two_advancers"), quota, 1),
     }
@@ -5640,6 +5716,7 @@ def scorecards_print_bulk(event_id: int):
         print_items=print_items,
         is_bulk=True,
         station_images=[f"station_{i}.png" for i in STATIONS],
+        **scorecard_layout_context(event),
     )
 
 @app.route("/athletes/<int:athlete_id>/scorecard-print")
@@ -5664,6 +5741,7 @@ def scorecard_print(athlete_id: int):
         print_items=[print_item],
         is_bulk=False,
         station_images=[f"station_{i}.png" for i in STATIONS],
+        **scorecard_layout_context(event),
     )
 
 @app.route("/athletes/<int:athlete_id>/activate", methods=["POST"])

@@ -429,6 +429,62 @@
     }
   }
 
+
+{% if layout_key == 'school49' %}
+  .s49-sheet{border:3px solid #000 !important;padding:8px 10px !important;width:285mm;max-width:100%;margin:0 auto 8px;font-family:'Sarabun','Kanit',Tahoma,sans-serif;color:#000;box-sizing:border-box}
+  .s49-top{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .s49-logo-left{height:62px;width:auto}
+  .s49-titles{flex:1;text-align:center}
+  .s49-title{font-size:22px;font-weight:800;line-height:1.15}
+  .s49-subtitle{font-size:14px;font-weight:700}
+  .s49-logos-right{display:flex;gap:6px}
+  .s49-logos-right img{height:58px;width:auto}
+  .s49-info{border:2px solid #000;padding:3px 8px;margin-bottom:6px;font-size:12.5px}
+  .s49-line{display:flex;gap:14px;align-items:baseline;line-height:1.7}
+  .s49-f{white-space:nowrap;display:flex;gap:4px;align-items:baseline}
+  .s49-no{flex:0 0 18%}.s49-name{flex:1 1 40%}.s49-school{flex:1 1 42%}
+  .s49-level{flex:0 0 40%}.s49-sex{flex:0 0 22%}.s49-date{flex:1}
+  .s49-val{flex:1;border-bottom:1px dotted #000;min-width:40px;padding:0 4px;font-weight:700;color:#0400ff;overflow:hidden;text-overflow:ellipsis}
+  .s49-short{flex:0 0 110px;min-width:0}
+  .s49-box{display:inline-block;width:11px;height:11px;border:1.2px solid #000;line-height:10px;text-align:center;font-size:10px;font-weight:900;vertical-align:-1px}
+  .s49-table{width:100%;border-collapse:collapse;table-layout:fixed;border:2.5px solid #000}
+  .s49-table th,.s49-table td{border:1px solid #000;text-align:center;vertical-align:middle;padding:0;overflow:hidden}
+  .s49-c-round{width:8.6%}.s49-c-d{width:2.62%}.s49-c-t{width:2.62%}.s49-c-sum{width:6.2%}.s49-c-rank{width:4.4%}.s49-c-sign{width:7.6%}
+  .s49-vert{font-size:10px;font-weight:800;line-height:1.05}
+  .s49-st-head{height:34px;border-bottom:0 !important}
+  .s49-st-name{font-size:13px;font-weight:800;line-height:1.05}
+  .s49-st-desc{font-size:9.5px;font-weight:700;line-height:1.1}
+  .s49-st-img{height:74px;border-top:0 !important}
+  .s49-st-img img{height:66px;width:auto}
+  .s49-dist th{font-size:11px;font-weight:800;height:22px}
+  .s49-dist th.s49-small{font-size:9px}
+  .s49-table th:nth-child(5n+1):not(:first-child){}
+  .s49-r1 td,.s49-r2 td{height:30px;font-size:14px;font-weight:700}
+  .s49-r1 td{border-top:2.5px solid #000 !important}
+  .s49-round{font-size:12px !important;font-weight:800 !important;text-align:left !important;padding-left:6px !important}
+  .s49-score{color:#0400ff}
+  .s49-red-card{display:block;font-size:8px;color:#dc2626;line-height:1}
+  .s49-st-total{color:#ff0000}
+  .s49-redbox{outline:3px solid #e00000;outline-offset:-3px;color:#ff0000;font-weight:900 !important}
+  .s49-sum{font-size:15px !important;font-weight:900 !important}
+  .s49-pen{font-size:9px;color:#dc2626;line-height:1}
+  .s49-dq{color:#dc2626;font-weight:900}
+  .s49-sign img{max-height:24px;max-width:100%}
+  .s49-table td:nth-child(5n+1), .s49-table tr.s49-r2 td:nth-child(5n){border-right:2px solid #000}
+  .s49-signs{display:grid;grid-template-columns:1fr 1fr;border:2.5px solid #000;margin-top:6px}
+  .s49-sign-col{padding:2px 8px}
+  .s49-sign-col + .s49-sign-col{border-left:2.5px solid #000}
+  .s49-sign-title{text-align:center;font-weight:800;font-size:13px}
+  .s49-sign-line{border-bottom:1px dotted #000;height:22px;font-size:11.5px;display:flex;align-items:flex-end;gap:10px}
+  .s49-sign-line img{max-height:18px}
+  .s49-footer{text-align:center;font-weight:800;font-size:13px;margin-top:4px}
+  .active-layout{outline:2px solid #2563eb}
+  @media print{
+    .s49-sheet{width:auto;margin:0 !important;border:3px solid #000 !important;padding:6px 8px !important;page-break-after:always;break-after:page}
+    .s49-sheet:last-of-type{page-break-after:auto;break-after:auto}
+    .s49-r1 td,.s49-r2 td{height:29px}
+  }
+{% endif %}
 </style>
 
 <div class="print-tools">
@@ -441,6 +497,11 @@
   <a class="btn secondary" href="{{ url_for('scorecard', athlete_id=print_items[0].athlete.id, round=round_no) }}">← กลับ scorecard</a>
   <button class="btn secondary" onclick="window.print()">พิมพ์</button>
   <button type="button" class="btn secondary" id="downloadScorecardPrintJpgBtn" onclick="downloadScorecardPrintJpg()">บันทึกเป็น JPG</button>
+  {% endif %}
+  {% if layouts %}
+  <span class="bulk-info">รูปแบบใบ:
+    {% for k, v in layouts.items() %}<a class="btn secondary{% if k == layout_key %} active-layout{% endif %}" href="{{ request.path }}?{% for a, b in request.args.items() if a != 'layout' %}{{ a }}={{ b|urlencode }}&{% endfor %}layout={{ k }}">{{ v.label }}</a>{% endfor %}
+  </span>
   {% endif %}
 </div>
 
@@ -455,6 +516,9 @@
 {% set display_order = item.display_order %}
 {% set display_lane_no = item.display_lane_no %}
 {% set display_lane_order = item.display_lane_order %}
+{% if layout_key == 'school49' %}
+{% include '_scorecard_sheet_school49.html' %}
+{% else %}
 <div class="sheet" data-file-stem="scorecard-print-{{ event.id }}-r{{ round_no }}-a{{ athlete.id }}">
   <div class="header">
     <div class="scorecard-logo-box">
@@ -624,6 +688,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% else %}
 <div class="bulk-info">ยังไม่มีนักกีฬาสำหรับพิมพ์ในรอบนี้</div>
 {% endfor %}

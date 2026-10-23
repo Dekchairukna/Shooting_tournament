@@ -20,6 +20,9 @@
   <label>หน้ารวม: เรียงแถวตามอันดับสด
     <select name="overview_sort_by_rank"><option value="yes" selected>เปิด</option><option value="no">ปิด (คงลำดับการตี)</option></select>
   </label>
+  <label>รูปแบบใบบันทึกคะแนน
+    <select name="scorecard_layout">{% for k, v in SCORECARD_LAYOUTS.items() %}<option value="{{ k }}">{{ v.label }}</option>{% endfor %}</select>
+  </label>
   <label>จากรอบ 2 คัดเข้ารอบต่อ (คน)<input type="number" min="1" name="round_two_advancers" class="js-adv" value="4"></label>
 </div>
 <script>

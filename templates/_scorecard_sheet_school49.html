@@ -1,0 +1,106 @@
+{# ใบบันทึกคะแนนรูปแบบ "คำมอกหลวงเกมส์" (กีฬาสาธิตสามัคคี ครั้งที่ 49) · ใช้ตัวแปรจาก loop ใน scorecard_print.html #}
+{% macro box(on) %}<span class="s49-box">{{ '✓' if on else '' }}</span>{% endmacro %}
+<div class="sheet s49-sheet" data-file-stem="scorecard-print-{{ event.id }}-r{{ round_no }}-a{{ athlete.id }}">
+  <div class="s49-top">
+    <img class="s49-logo-left" src="{{ url_for('static', filename=layout.logo_left) }}" alt="">
+    <div class="s49-titles">
+      <div class="s49-title">{{ layout.title }}</div>
+      <div class="s49-subtitle">{{ layout.subtitle }}</div>
+    </div>
+    <div class="s49-logos-right">{% for lg in layout.logos_right %}<img src="{{ url_for('static', filename=lg) }}" alt="">{% endfor %}</div>
+  </div>
+
+  <div class="s49-info">
+    <div class="s49-line">
+      <span class="s49-f s49-no"><b>หมายเลข</b> <span class="s49-val">{{ athlete.bib_no or display_order or athlete.start_order or '' }}</span></span>
+      <span class="s49-f s49-name"><b>ชื่อ - สกุล</b> <span class="s49-val">{{ athlete.name if athlete.name != athlete.affiliation else '' }}</span></span>
+      <span class="s49-f s49-school"><b>สังกัด / โรงเรียน</b> <span class="s49-val">{{ athlete.affiliation or '' }}</span></span>
+    </div>
+    <div class="s49-line">
+      <span class="s49-f s49-level"><b>ระดับ</b> {{ box(level_flags.primary) }} ประถม &nbsp; {{ box(level_flags.lower) }} ม.ต้น &nbsp; {{ box(level_flags.upper) }} ม.ปลาย</span>
+      <span class="s49-f s49-sex"><b>ประเภท</b> {{ box(level_flags.male) }} ชาย &nbsp; {{ box(level_flags.female) }} หญิง</span>
+      <span class="s49-f s49-date"><b>วันที่</b> <span class="s49-val s49-short">{{ event_date_th }}</span> <b>สนาม</b> <span class="s49-val s49-short">{{ display_lane_no or athlete.lane_no or '' }}{% if (display_lane_order or athlete.lane_order) %}/{{ display_lane_order or athlete.lane_order }}{% endif %}</span></span>
+    </div>
+  </div>
+
+  <table class="s49-table">
+    <colgroup>
+      <col class="s49-c-round">
+      {% for st in [1,2,3,4,5] %}<col class="s49-c-d"><col class="s49-c-d"><col class="s49-c-d"><col class="s49-c-d"><col class="s49-c-t">{% endfor %}
+      <col class="s49-c-sum"><col class="s49-c-rank"><col class="s49-c-sign">
+    </colgroup>
+    <thead>
+      <tr>
+        <th rowspan="2" class="s49-vert">S<br>H<br>O<br>O<br>T<br>I<br>N<br>G</th>
+        {% for st in [1,2,3,4,5] %}
+        {% set info = layout.stations[st-1] %}
+        <th colspan="5" class="s49-st-head"><div class="s49-st-name">{{ info[0] }}</div><div class="s49-st-desc">{{ info[1] }}</div></th>
+        {% endfor %}
+        <th colspan="3" rowspan="2" class="s49-vert s49-petanque">P<br>E<br>T<br>A<br>N<br>Q<br>U<br>E</th>
+      </tr>
+      <tr>
+        {% for st in [1,2,3,4,5] %}
+        <th colspan="5" class="s49-st-img"><img src="{{ url_for('static', filename=layout.station_images[st-1]) }}" alt=""></th>
+        {% endfor %}
+      </tr>
+      <tr class="s49-dist">
+        <th>ระยะ / เมตร</th>
+        {% for st in [1,2,3,4,5] %}<th>6M</th><th>7M</th><th>8M</th><th>9M</th><th class="s49-small">รวม</th>{% endfor %}
+        <th>คะแนนรวม</th><th>ลำดับ</th><th>ลายมือชื่อ</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for round_label in round_labels %}
+      {% set rn = loop.index %}
+      {% set sig = round_signatures[rn] %}
+      {% set ns_started = namespace(value=(sig and (sig.started_at or sig.finished_at))) %}
+      {% if not ns_started.value %}
+        {% for st in [1,2,3,4,5] %}{% for dm in [6,7,8,9] %}
+          {% set entry = score_map.get((rn, st, dm)) %}
+          {% if entry and (entry.is_scored or (entry.score not in [none, '', 0]) or entry.is_red_card) %}{% set ns_started.value = true %}{% endif %}
+        {% endfor %}{% endfor %}
+      {% endif %}
+      {% set has_started = ns_started.value %}
+      <tr class="s49-r1">
+        <td rowspan="2" class="s49-round">{{ round_label }}</td>
+        {% for st in [1,2,3,4,5] %}
+          {% for dm in [6,7,8,9] %}
+          {% set c = score_map.get((rn, st, dm)) %}
+          <td class="s49-score">{% if has_started and c and (c.is_scored or c.score not in [none, '', 0] or c.is_red_card) %}{{ c.score }}{% if c.is_red_card %}<span class="s49-red-card">แดง</span>{% endif %}{% endif %}</td>
+          {% endfor %}
+          <td class="s49-st-total">{{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}</td>
+        {% endfor %}
+        <td></td><td></td><td></td>
+      </tr>
+      <tr class="s49-r2">
+        {% set ns = namespace(running=0) %}
+        {% for st in [1,2,3,4,5] %}
+          <td></td><td></td><td></td><td></td>
+          <td class="s49-redbox">{% if has_started %}{% set ns.running = ns.running + (station_totals[(rn, st)] if station_totals[(rn, st)] is defined else 0) %}{{ ns.running }}{% endif %}</td>
+        {% endfor %}
+        <td class="s49-sum">
+          {% set pen = (item.round_penalties or {}).get(rn) %}
+          {% if pen and pen.disqualified %}<span class="s49-dq">DQ</span>
+          {% elif pen and pen.points and has_started %}{{ round_totals[rn] - pen.points }}<div class="s49-pen">หัก −{{ pen.points }}</div>
+          {% else %}{{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}{% endif %}
+        </td>
+        <td class="s49-rank">{{ round_ranks[rn] if has_started and round_ranks[rn] is defined and round_ranks[rn] != '' else '' }}</td>
+        <td class="s49-sign">{% if sig and sig.athlete_signature %}<img src="{{ sig.athlete_signature }}" alt="" class="signature-image-print">{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="s49-signs">
+    {% for who, key in [('ลายมือชื่อกรรมการตัดสิน', 'referee_signature'), ('ลายมือชื่อกรรมการบันทึกคะแนน', 'recorder_signature')] %}
+    <div class="s49-sign-col">
+      <div class="s49-sign-title">{{ who }}</div>
+      {% for round_label in round_labels %}
+      {% set sig = round_signatures[loop.index] %}
+      <div class="s49-sign-line"><b>{{ round_label }}</b>{% if sig and sig[key] %}<img src="{{ sig[key] }}" alt="" class="signature-image-print">{% endif %}</div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="s49-footer">{{ layout.footer }}</div>
+</div>

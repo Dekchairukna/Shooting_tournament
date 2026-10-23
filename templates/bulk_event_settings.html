@@ -26,6 +26,7 @@
     <div class="setting-row"><label class="apply-check"><input type="checkbox" name="apply_next_round_label">ชื่อรอบถัดไป</label><select name="next_round_label">{% for label in next_round_labels %}<option>{{ label }}</option>{% endfor %}</select></div>
     <div class="setting-row"><label class="apply-check"><input type="checkbox" name="apply_overview_sort_by_rank">การจัดลำดับ</label><select name="overview_sort_by_rank"><option value="yes">เรียงตามอันดับสด</option><option value="no">คงลำดับการตี</option></select></div>
     <div class="setting-row"><label class="apply-check"><input type="checkbox" name="apply_overview_show_cut_lines">เส้นแบ่งเข้ารอบ</label><select name="overview_show_cut_lines"><option value="yes">แสดงเส้นแบ่ง</option><option value="no">ซ่อนเส้นแบ่ง</option></select></div>
+    <div class="setting-row"><label class="apply-check"><input type="checkbox" name="apply_scorecard_layout">รูปแบบใบบันทึกคะแนน</label><select name="scorecard_layout">{% for k, v in SCORECARD_LAYOUTS.items() %}<option value="{{ k }}">{{ v.label }}</option>{% endfor %}</select></div>
     <div class="buttons"><button class="btn" type="submit">บันทึกให้ {{ events|length }} อีเวนต์</button><a class="btn secondary" href="{{ url_for('index') }}">กลับหน้ารายการ</a></div>
   </form>
 </div>
