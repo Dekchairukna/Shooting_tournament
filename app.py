@@ -3185,6 +3185,39 @@ def create_event_court_user(event_id: int):
     return redirect(url_for("manage_athletes", event_id=event.id))
 
 
+def detach_users_before_delete(user_ids: list[int]) -> None:
+    """ล้างการอ้างอิงถึงบัญชีที่จะลบ (ประวัติยังเก็บชื่อผู้แก้ไว้ใน editor_username)"""
+    if not user_ids:
+        return
+    for log in ScoreEditLog.query.filter(ScoreEditLog.edited_by.in_(user_ids)).all():
+        if not log.editor_username:
+            u = db.session.get(User, log.edited_by)
+            log.editor_username = getattr(u, "username", None)
+        log.edited_by = None
+    ScorecardLock.query.filter(ScorecardLock.user_id.in_(user_ids)).delete(synchronize_session=False)
+    Athlete.query.filter(Athlete.round_two_disabled_by.in_(user_ids)).update(
+        {Athlete.round_two_disabled_by: None}, synchronize_session=False)
+    Event.query.filter(Event.created_by.in_(user_ids)).update({Event.created_by: None}, synchronize_session=False)
+    db.session.flush()
+
+
+def delete_event_dependents(event: Event) -> None:
+    """ลบข้อมูลที่อ้างถึงอีเวนต์/นักกีฬาก่อนลบอีเวนต์ (Postgres บังคับ foreign key)"""
+    athlete_ids = [a.id for a in Athlete.query.filter_by(event_id=event.id).all()]
+    BracketMatch.query.filter_by(event_id=event.id).delete(synchronize_session=False)
+    ResultsApprovedSetting.query.filter_by(event_id=event.id).delete(synchronize_session=False)
+    if athlete_ids:
+        for model in (ScoreEditLog, ScorecardLock, AthletePenalty, TieBreakEntry, ScoreSignature, ScoreEntry):
+            model.query.filter(model.athlete_id.in_(athlete_ids)).delete(synchronize_session=False)
+    court_ids = [u.id for u in User.query.filter_by(role="court", court_event_id=event.id).all()]
+    detach_users_before_delete(court_ids)
+    if court_ids:
+        User.query.filter(User.id.in_(court_ids)).delete(synchronize_session=False)
+    # บัญชีอื่นที่ยังผูกกับอีเวนต์นี้ (ถ้ามี) ให้หลุดการผูก แทนที่จะทำให้ลบไม่ได้
+    User.query.filter_by(court_event_id=event.id).update({User.court_event_id: None}, synchronize_session=False)
+    db.session.flush()
+
+
 @app.route("/events/<int:event_id>/courts/<int:user_id>/delete", methods=["POST"])
 @login_required
 @role_required("superadmin")
@@ -3194,6 +3227,7 @@ def delete_event_court_user(event_id: int, user_id: int):
     if user.role != "court" or user.court_event_id != event.id:
         abort(404)
     public_id = court_public_id(user)
+    detach_users_before_delete([user.id])
     db.session.delete(user)
     db.session.commit()
     flash(f"ลบ {public_id} ของอีเวนต์นี้แล้ว", "info")
@@ -3360,10 +3394,16 @@ def edit_event(event_id: int):
 def delete_event(event_id: int):
     event = Event.query.get_or_404(event_id)
     chain_id = event.chain_id
-    BracketMatch.query.filter_by(event_id=event.id).delete()
-    User.query.filter_by(role="court", court_event_id=event.id).delete(synchronize_session=False)
-    db.session.delete(event)
-    db.session.commit()
+    try:
+        delete_event_dependents(event)
+        db.session.expire(event)
+        db.session.delete(event)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("delete event %s failed", event_id)
+        flash("ลบอีเวนต์ไม่สำเร็จ กรุณาลองใหม่หรือแจ้งผู้ดูแลระบบ", "danger")
+        return redirect(url_for("index"))
     chain = db.session.get(CourtChain, chain_id) if chain_id else None
     if chain is not None:
         apply_chain_lanes(chain)
