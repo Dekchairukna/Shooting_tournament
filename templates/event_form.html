@@ -54,6 +54,16 @@
       </select>
       <small class="muted">ปิดเมื่อรายการไม่ต้องการให้แถวสลับไปมา · อันดับ (Class) ยังแสดงตามปกติ</small>
     </label>
+    <label>สนามแรกของอีเวนต์
+      <input type="number" min="1" name="lane_start" value="{{ event.lane_start if event and event.lane_start else 1 }}" {% if event and event.chain_id %}readonly{% endif %}>
+      <small class="muted">เช่น 3 สนาม เริ่มสนาม 5 = ใช้สนาม 5-7 · ลำดับตีไม่เปลี่ยน</small>
+    </label>
+    <label>ชื่อสนาม
+      <select name="court_letters">
+        <option value="no" {% if not (event and event.court_letters) %}selected{% endif %}>ตัวเลข (1, 2, 3 …)</option>
+        <option value="yes" {% if event and event.court_letters %}selected{% endif %}>ตัวอักษร (1=A, 2=B … 8=H)</option>
+      </select>
+    </label>
     <label>รูปแบบใบบันทึกคะแนน (พิมพ์)
       <select name="scorecard_layout">
         {% for k, v in SCORECARD_LAYOUTS.items() %}

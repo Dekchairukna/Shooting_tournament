@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}คิวสนาม {{ court_no }} · {{ event.name }}{% endblock %}
+{% block title %}คิวสนาม {{ court_name(event, court_no) }} · {{ event.name }}{% endblock %}
 {% block content %}
 <style>
   .cq-wrap{max-width:720px;margin:0 auto;}
@@ -51,7 +51,7 @@
   <div class="cq-head">
     <div>
       <div class="cq-event">{% if chain %}สายคิว: {{ chain.name }}{% else %}{{ event.name }}{% endif %}</div>
-      <h1 class="cq-title">สนาม {{ court_no }} · รอบ {{ round_no }}</h1>
+      <h1 class="cq-title">สนาม {{ court_name(event, court_no) }} · รอบ {{ round_no }}</h1>
     </div>
     <div class="cq-progress"><b>{{ done }} / {{ rows|length }}</b><small>ตีจบแล้ว</small></div>
   </div>
@@ -64,8 +64,8 @@
     {% if current_user.role != 'court' %}
     <select class="cq-court-select" aria-label="เลือกสนาม"
             onchange="location.href='{{ url_for('court_queue', event_id=event.id, round=round_no) }}&court=' + this.value">
-      {% for n in range(1, lane_count + 1) %}
-      <option value="{{ n }}" {% if n == court_no %}selected{% endif %}>สนาม {{ n }}</option>
+      {% for n in lane_numbers %}
+      <option value="{{ n }}" {% if n == court_no %}selected{% endif %}>สนาม {{ court_name(event, n) }}</option>
       {% endfor %}
     </select>
     <a class="cq-chip" href="{{ url_for('event_overview', event_id=event.id, round=round_no) }}">หน้ารวมทุกสนาม</a>

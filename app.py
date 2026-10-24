@@ -323,6 +323,9 @@ class Event(db.Model):
     round_two_manual = db.Column(db.Boolean, nullable=False, default=False)
     # รูปแบบใบบันทึกคะแนนที่พิมพ์ (ดู SCORECARD_LAYOUTS)
     scorecard_layout = db.Column(db.String(20), nullable=False, default="standard")
+    # สนามแรกของอีเวนต์ (เช่น รุ่นหญิงใช้สนาม 5-7 = E-G) และแสดงชื่อสนามเป็นตัวอักษร 1=A
+    lane_start = db.Column(db.Integer, nullable=False, default=1)
+    court_letters = db.Column(db.Boolean, nullable=False, default=False)
     # ต่อคิวสนามข้ามรุ่น: อีเวนต์ในสายเดียวกันใช้สนามชุดเดียวกัน คิวต่อกันตาม chain_position
     chain_id = db.Column(db.Integer, db.ForeignKey("court_chain.id"), nullable=True)
     chain_position = db.Column(db.Integer, nullable=True)
@@ -891,6 +894,10 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('UPDATE "event" SET round_two_manual = false WHERE round_two_manual IS NULL')
             conn.exec_driver_sql("ALTER TABLE \"event\" ADD COLUMN IF NOT EXISTS scorecard_layout VARCHAR(20) DEFAULT 'standard'")
             conn.exec_driver_sql("UPDATE \"event\" SET scorecard_layout = 'standard' WHERE scorecard_layout IS NULL")
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS lane_start INTEGER DEFAULT 1')
+            conn.exec_driver_sql('UPDATE "event" SET lane_start = 1 WHERE lane_start IS NULL')
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS court_letters BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('UPDATE "event" SET court_letters = false WHERE court_letters IS NULL')
         return
 
     # SQLite migration เดิม
@@ -939,6 +946,12 @@ def ensure_schema() -> None:
         if "overview_show_cut_lines" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_show_cut_lines BOOLEAN DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET overview_show_cut_lines = 1 WHERE overview_show_cut_lines IS NULL")
+        if "lane_start" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN lane_start INTEGER DEFAULT 1")
+            conn.exec_driver_sql("UPDATE event SET lane_start = 1 WHERE lane_start IS NULL")
+        if "court_letters" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN court_letters BOOLEAN DEFAULT 0")
+            conn.exec_driver_sql("UPDATE event SET court_letters = 0 WHERE court_letters IS NULL")
         if "scorecard_layout" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN scorecard_layout VARCHAR(20) DEFAULT 'standard'")
             conn.exec_driver_sql("UPDATE event SET scorecard_layout = 'standard' WHERE scorecard_layout IS NULL")
@@ -1701,7 +1714,7 @@ def round2_lane_slot(event: Event, idx: int, total: int, fill: str | None = None
     fill = fill or round_two_fill(event)
     offset = (-int(total or 0)) % lane_count if fill == "back" else 0
     slot = idx - 1 + offset
-    return slot % lane_count + 1, slot // lane_count + 1
+    return event_lane_start(event) + slot % lane_count, slot // lane_count + 1
 
 
 def round2_next_mode_split(event: Event) -> tuple[set[int], set[int]]:
@@ -2826,13 +2839,45 @@ def generate_next_bib_no(event_id: int) -> str:
     return str(count + 1)
 
 
+def event_lane_start(event) -> int:
+    if getattr(event, "chain_id", None):
+        return 1  # สายคิวใช้สนาม 1..N ของสายเสมอ
+    return max(1, int(getattr(event, "lane_start", None) or 1))
+
+
+def event_lane_numbers(event) -> list[int]:
+    start = event_lane_start(event)
+    return list(range(start, start + max(1, int(event.lane_count or 1))))
+
+
+def lane_for_order(event, order: int) -> tuple[int, int]:
+    """(สนาม, ลำดับในสนาม) ของคนลำดับตี order · สนามเริ่มที่ event.lane_start"""
+    lanes = max(1, int(event.lane_count or 1))
+    return event_lane_start(event) + (order - 1) % lanes, (order - 1) // lanes + 1
+
+
+def court_name(event, lane) -> str:
+    """ชื่อสนามที่แสดง: ตัวเลข หรือ ตัวอักษร (1=A, 2=B ...) ถ้าอีเวนต์เปิด court_letters"""
+    if lane in (None, "", "-"):
+        return "-" if lane == "-" else ""
+    try:
+        n = int(lane)
+    except (TypeError, ValueError):
+        return str(lane)
+    if getattr(event, "court_letters", False) and 1 <= n <= 26:
+        return chr(64 + n)
+    return str(n)
+
+
+app.jinja_env.globals["court_name"] = court_name
+
+
 def recalculate_event_orders(event: Event) -> None:
     athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.start_order, Athlete.id).all()
     for idx, athlete in enumerate(athletes, start=1):
         athlete.start_order = idx
         athlete.bib_no = str(idx)
-        athlete.lane_no = ((idx - 1) % event.lane_count) + 1
-        athlete.lane_order = ((idx - 1) // event.lane_count) + 1
+        athlete.lane_no, athlete.lane_order = lane_for_order(event, idx)
     refresh_event_chain(event)
 
 
@@ -2846,11 +2891,9 @@ def chain_events_ordered(chain) -> list:
 
 def assign_event_lanes_standalone(event) -> None:
     """จัดสนามของอีเวนต์เดียวตามลำดับยิงเดิม (ใช้ตอนถอดออกจากสาย)"""
-    lanes = max(1, int(event.lane_count or 1))
     athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.start_order, Athlete.id).all()
     for idx, athlete in enumerate(athletes, start=1):
-        athlete.lane_no = ((idx - 1) % lanes) + 1
-        athlete.lane_order = ((idx - 1) // lanes) + 1
+        athlete.lane_no, athlete.lane_order = lane_for_order(event, idx)
 
 
 def apply_chain_lanes(chain) -> list[dict]:
@@ -3077,7 +3120,8 @@ def sync_event_court_users(event: Event) -> tuple[int, int]:
     }
     created = 0
     removed = 0
-    for court_no in range(1, lane_count + 1):
+    wanted = event_lane_numbers(event)
+    for court_no in wanted:
         internal_username = f"event{event.id}_court{court_no:02d}"
         user = existing.get(court_no)
         if user is None:
@@ -3093,7 +3137,8 @@ def sync_event_court_users(event: Event) -> tuple[int, int]:
         else:
             user.username = internal_username
     for court_no, user in existing.items():
-        if court_no > lane_count:
+        if court_no not in wanted:
+            detach_users_before_delete([user.id])
             db.session.delete(user)
             removed += 1
     return created, removed
@@ -3170,6 +3215,13 @@ def bulk_event_settings():
             changed.append(("overview_sort_by_rank", request.form.get("overview_sort_by_rank") == "yes"))
         if request.form.get("apply_overview_show_cut_lines"):
             changed.append(("overview_show_cut_lines", request.form.get("overview_show_cut_lines") == "yes"))
+        relane = False
+        if request.form.get("apply_lanes"):
+            changed.append(("lane_count", _form_int(request.form.get("lane_count"), 4, 1)))
+            changed.append(("lane_start", _form_int(request.form.get("lane_start"), 1, 1)))
+            relane = True
+        if request.form.get("apply_court_letters"):
+            changed.append(("court_letters", request.form.get("court_letters") == "yes"))
         if request.form.get("apply_scorecard_layout"):
             changed.append(("scorecard_layout", parse_scorecard_layout(request.form)))
         if not changed:
@@ -3180,7 +3232,12 @@ def bulk_event_settings():
         reset_brackets = any(name in qualification_fields for name, _ in changed)
         for event in events:
             for name, value in changed:
+                if name in ("lane_count", "lane_start") and event.chain_id:
+                    continue  # อีเวนต์ในสายคิวใช้จำนวนสนามของสาย
                 setattr(event, name, value)
+            if relane and not event.chain_id:
+                assign_event_lanes_standalone(event)
+                sync_event_court_users(event)
             if reset_brackets:
                 BracketMatch.query.filter_by(event_id=event.id).delete(synchronize_session=False)
         db.session.commit()
@@ -3207,8 +3264,9 @@ def create_event_court_user(event_id: int):
     except ValueError:
         court_no = 0
     password = request.form.get("password", "").strip()
-    if court_no < 1 or court_no > event.lane_count or not password:
-        flash(f"กรุณาระบุเลขสนาม 1-{event.lane_count} และรหัสผ่าน", "warning")
+    if court_no not in event_lane_numbers(event) or not password:
+        lanes = event_lane_numbers(event)
+        flash(f"กรุณาระบุเลขสนาม {lanes[0]}-{lanes[-1]} และรหัสผ่าน", "warning")
         return redirect(url_for("manage_athletes", event_id=event.id))
     if password_problem(password):
         flash(password_problem(password), "warning")
@@ -3384,6 +3442,8 @@ def create_event():
             round_two_cutoff_rank=int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None,
             round_two_mode=parse_round_two_mode(request.form),
             scorecard_layout=parse_scorecard_layout(request.form),
+            lane_start=max(1, request.form.get("lane_start", 1, type=int) or 1),
+            court_letters=request.form.get("court_letters") == "yes",
             overview_sort_by_rank=request.form.get("overview_sort_by_rank", "yes") == "yes",
             next_round_label=request.form["next_round_label"],
             round_two_advancers=int(request.form.get("round_two_advancers") or 4),
@@ -3417,6 +3477,8 @@ def edit_event(event_id: int):
         event.round_two_cutoff_rank = int(request.form["round_two_cutoff_rank"]) if request.form.get("round_two_cutoff_rank") else None
         event.round_two_mode = parse_round_two_mode(request.form)
         event.scorecard_layout = parse_scorecard_layout(request.form)
+        event.lane_start = max(1, request.form.get("lane_start", 1, type=int) or 1)
+        event.court_letters = request.form.get("court_letters") == "yes"
         event.overview_sort_by_rank = request.form.get("overview_sort_by_rank", "yes") == "yes"
         event.next_round_label = request.form["next_round_label"]
         event.round_two_advancers = int(request.form.get("round_two_advancers") or 4)
@@ -3462,8 +3524,7 @@ def manage_athletes(event_id: int):
         name = request.form["name"].strip()
         affiliation = request.form["affiliation"].strip()
         next_order = Athlete.query.filter_by(event_id=event.id).count() + 1
-        lane_no = ((next_order - 1) % event.lane_count) + 1
-        lane_order = ((next_order - 1) // event.lane_count) + 1
+        lane_no, lane_order = lane_for_order(event, next_order)
         athlete = Athlete(
             event_id=event.id,
             bib_no=str(next_order),
@@ -3561,8 +3622,8 @@ def import_athletes_excel(event_id: int):
                 name=name,
                 affiliation=affiliation,
                 start_order=next_order,
-                lane_no=((next_order - 1) % event.lane_count) + 1,
-                lane_order=((next_order - 1) // event.lane_count) + 1,
+                lane_no=lane_for_order(event, next_order)[0],
+                lane_order=lane_for_order(event, next_order)[1],
                 status="waiting",
             )
             db.session.add(athlete)
@@ -3978,8 +4039,8 @@ def bulk_import_events_confirm():
                 name=entry_name,
                 affiliation=(str(entry.get("affiliation") or "").strip() or entry_name)[:255],
                 start_order=order,
-                lane_no=((order - 1) % event.lane_count) + 1,
-                lane_order=((order - 1) // event.lane_count) + 1,
+                lane_no=lane_for_order(event, order)[0],
+                lane_order=lane_for_order(event, order)[1],
                 status="waiting",
             ))
             total_athletes += 1
@@ -4177,6 +4238,8 @@ def round2_plan():
         fills=ROUND_TWO_FILLS,
         applied=applied,
         max_lanes=max([p["lane_count"] for p in plans] or [0]),
+        lane_rows=sorted({n for p in plans for n in event_lane_numbers(p["event"])}),
+        label_event=(plans[0]["event"] if plans else None),
     )
 
 
@@ -4490,7 +4553,51 @@ def event_overview(event_id: int):
     )
 
 
-def official_results_template_stream(event: Event, round_no: int, rows: list[dict]) -> BytesIO | None:
+def fit_sheet_to_a4(ws, first_col: str, last_col: str, first_row: int, last_row: int,
+                    stretch_from: int | None = None, stretch_to: int | None = None, max_row_pt: float = 42.0) -> None:
+    """ตั้งหน้าพิมพ์ A4 แนวนอนให้พอดี 1 หน้า และยืดความสูงแถวให้เต็มหน้ากระดาษ
+
+    Excel ย่อ/ขยายตามความกว้างเสมอ ถ้าตารางเตี้ย หน้าจะเหลือที่ว่างบน-ล่าง
+    จึงขยายความสูงแถว stretch_from..stretch_to ให้สัดส่วนตารางใกล้หน้ากระดาษ (285 × 198 มม.)
+    """
+    from openpyxl.utils import column_index_from_string, get_column_letter
+    from openpyxl.worksheet.properties import PageSetupProperties
+
+    default_w = ws.sheet_format.defaultColWidth or 8.43
+    width_pt = 0.0
+    for idx in range(column_index_from_string(first_col), column_index_from_string(last_col) + 1):
+        dim = ws.column_dimensions.get(get_column_letter(idx))
+        if dim is not None and dim.hidden:
+            continue
+        w = dim.width if dim is not None and dim.width else default_w
+        width_pt += (w * 7 + 5) * 0.75
+    default_h = ws.sheet_format.defaultRowHeight or 15
+    heights = {r: (ws.row_dimensions[r].height or default_h) for r in range(first_row, last_row + 1)}
+    target_h = width_pt * (198.0 / 285.0)
+    current_h = sum(heights.values())
+    if stretch_from is not None and stretch_to is not None and stretch_to >= stretch_from and current_h < target_h:
+        rows = list(range(stretch_from, stretch_to + 1))
+        extra = (target_h - current_h) / len(rows)
+        for r in rows:
+            ws.row_dimensions[r].height = round(min(max_row_pt, heights[r] + extra), 1)
+    ws.print_area = f"${first_col}${first_row}:${last_col}${last_row}"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = 9
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.page_setup.scale = None
+    if ws.sheet_properties.pageSetUpPr is None:
+        ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    else:
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins.left = ws.page_margins.right = 0.25
+    ws.page_margins.top = ws.page_margins.bottom = 0.25
+    ws.page_margins.header = ws.page_margins.footer = 0.1
+    ws.print_options.horizontalCentered = True
+    ws.print_options.verticalCentered = True
+
+
+def official_results_template_stream(event: Event, round_no: int, rows: list[dict], focus: str | None = None) -> BytesIO | None:
     """เติมผลลงในฟอร์ม TIR ต้นฉบับ โดยรักษารูปแบบ โลโก้ และหน้าพิมพ์เดิมทั้งเล่ม"""
     from copy import copy
     from openpyxl.styles import Color
@@ -4611,8 +4718,9 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             text=f"=_xlfn.SORTBY(B{first_row}:AF{ranking_last_row},AF{first_row}:AF{ranking_last_row},1,C{first_row}:C{ranking_last_row},1)",
         )
 
-    last_print_row = max(52, first_row + len(qualification_rows) - 1)
-    sheet.print_area = f"$AJ$2:$BN${last_print_row}"
+    # พิมพ์เฉพาะแถวที่มีนักกีฬา (เดิมพิมพ์ถึงแถว 52 เสมอ ทำให้ตารางลอยกลางหน้า) และยืดให้เต็ม A4
+    last_print_row = max(first_row, first_row + len(qualification_rows) - 1)
+    fit_sheet_to_a4(sheet, "AJ", "BN", 2, last_print_row, stretch_from=first_row, stretch_to=last_print_row)
     sheet.sheet_view.showGridLines = False
 
     # ชีต 2: ผู้ผ่านตรงด้านบน และผู้ตี Repechage/รอบ 2 ด้านล่าง
@@ -4656,6 +4764,11 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             competitor_last_row = 18 + len(competitor_rows[:17]) - 1
             repechage.cell(row_no, 38, f"=RANK(AK{row_no},$AK$18:$AK${competitor_last_row},0)")
         repechage.sheet_view.showGridLines = False
+        repechage.page_setup.fitToWidth = 1
+        repechage.page_setup.fitToHeight = 1
+        repechage.page_setup.scale = None
+        if repechage.sheet_properties.pageSetUpPr is not None:
+            repechage.sheet_properties.pageSetUpPr.fitToPage = True
 
     # ชีต 3: ดึงผู้เล่นและคะแนนจากสาย QF → SF → Final ของระบบ
     if "TIR FINAL " in workbook.sheetnames:
@@ -4716,9 +4829,18 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
                 final_sheet.cell(row_no, index, score)
             final_sheet.cell(row_no, 27, f"=SUM(V{row_no}:Z{row_no + 1})")
         final_sheet.sheet_view.showGridLines = False
+        fit_sheet_to_a4(final_sheet, "B", "AC", 1, 19)
 
     apply_current_theme(workbook)
     workbook.active = workbook.sheetnames.index("TIR QUALIFICATION")
+    if focus == "final" and "TIR FINAL " in workbook.sheetnames:
+        # ไฟล์ QF/Final สำหรับพิมพ์: เปิดมาที่ชีต Final และซ่อนชีตอื่น (สูตรยังคำนวณได้)
+        final_index = workbook.sheetnames.index("TIR FINAL ")
+        workbook.active = final_index
+        for idx, ws_ in enumerate(workbook.worksheets):
+            ws_.sheet_view.tabSelected = idx == final_index
+            if idx != final_index:
+                ws_.sheet_state = "hidden"
     workbook.calculation.calcMode = "auto"
     workbook.calculation.calcOnSave = True
     workbook.calculation.fullCalcOnLoad = True
@@ -4747,12 +4869,13 @@ def event_overview_excel(event_id: int):
         all_rows = build_round_ranking(event, round_no)
     rows = apply_overview_order_mode(event, filter_rows_for_court(all_rows))
 
-    official_stream = official_results_template_stream(event, round_no, rows)
+    focus = "final" if request.args.get("sheet") == "final" else None
+    official_stream = official_results_template_stream(event, round_no, rows, focus=focus)
     if official_stream is not None:
         return send_file(
             official_stream,
             as_attachment=True,
-            download_name=f"event_{event.id}_round_{round_no}_official_results.xlsx",
+            download_name=(f"event_{event.id}_QF_Final.xlsx" if focus else f"event_{event.id}_round_{round_no}_official_results.xlsx"),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
@@ -5029,8 +5152,10 @@ def court_queue(event_id: int):
     if is_court_user():
         court_no = current_user.court_no
     else:
-        court_no = request.args.get("court", 1, type=int) or 1
-        court_no = min(max(court_no, 1), lane_count)
+        lanes = event_lane_numbers(event) if not event.chain_id else list(range(1, lane_count + 1))
+        court_no = request.args.get("court", lanes[0], type=int) or lanes[0]
+        if court_no not in lanes:
+            court_no = lanes[0]
     chain = event.chain if event.chain_id else None
     if chain is not None and round_no == 1:
         # สายคิว: รวมคิวของสนามนี้จากทุกรุ่นในสาย เรียงตามรอบคิวรวม
@@ -5052,6 +5177,7 @@ def court_queue(event_id: int):
         round_no=round_no,
         court_no=court_no,
         lane_count=lane_count,
+        lane_numbers=(event_lane_numbers(event) if not event.chain_id else list(range(1, lane_count + 1))),
         rows=rows,
         done=done,
         theme=event_theme(event.category),

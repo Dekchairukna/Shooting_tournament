@@ -19,7 +19,7 @@
     <div class="s49-line">
       <span class="s49-f s49-level"><b>ระดับ</b> {{ box(level_flags.primary) }} ประถม &nbsp; {{ box(level_flags.lower) }} ม.ต้น &nbsp; {{ box(level_flags.upper) }} ม.ปลาย</span>
       <span class="s49-f s49-sex"><b>ประเภท</b> {{ box(level_flags.male) }} ชาย &nbsp; {{ box(level_flags.female) }} หญิง</span>
-      <span class="s49-f s49-date"><b>วันที่</b> <span class="s49-val s49-short">{{ event_date_th }}</span> <b>สนาม</b> <span class="s49-val s49-short">{{ display_lane_no or athlete.lane_no or '' }}{% if (display_lane_order or athlete.lane_order) %}/{{ display_lane_order or athlete.lane_order }}{% endif %}</span></span>
+      <span class="s49-f s49-date"><b>วันที่</b> <span class="s49-val s49-short">{{ event_date_th }}</span> <b>สนาม</b> <span class="s49-val s49-short">{{ court_name(event, display_lane_no or athlete.lane_no or '') }}{% if (display_lane_order or athlete.lane_order) %}/{{ display_lane_order or athlete.lane_order }}{% endif %}</span></span>
     </div>
   </div>
 

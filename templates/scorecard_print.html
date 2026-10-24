@@ -431,6 +431,7 @@
 
 
 {% if layout_key == 'school49' %}
+  @media print{ @page{ size:A4 landscape; margin:5mm; } }
   .s49-sheet{border:3px solid #000 !important;padding:8px 10px !important;width:285mm;max-width:100%;margin:0 auto 8px;font-family:'Sarabun','Kanit',Tahoma,sans-serif;color:#000;box-sizing:border-box}
   .s49-top{display:flex;align-items:center;gap:10px;margin-bottom:4px}
   .s49-logo-left{height:62px;width:auto}
@@ -480,9 +481,14 @@
   .s49-footer{text-align:center;font-weight:800;font-size:13px;margin-top:4px}
   .active-layout{outline:2px solid #2563eb}
   @media print{
-    .s49-sheet{width:auto;margin:0 !important;border:3px solid #000 !important;padding:6px 8px !important;page-break-after:always;break-after:page}
-    .s49-sheet:last-of-type{page-break-after:auto;break-after:auto}
-    .s49-r1 td,.s49-r2 td{height:29px}
+    /* เต็มหน้า A4 แนวนอนพอดี: สูง 210mm − ขอบกระดาษบน/ล่าง · ส่วนที่เหลือแบ่งให้แถวคะแนน */
+    .s49-sheet{width:auto;height:194mm;margin:0 !important;border:3px solid #000 !important;padding:6px 8px !important;
+      display:flex;flex-direction:column;page-break-after:auto !important;break-after:auto !important;page-break-inside:avoid;overflow:hidden}
+    .s49-sheet ~ .s49-sheet{page-break-before:always;break-before:page}
+    .s49-sheet{justify-content:space-between}
+    .s49-r1 td,.s49-r2 td{height:7.5mm}
+    .s49-signs{flex:0 0 auto}
+    .s49-sign-line{height:24px}
   }
 {% endif %}
 </style>
@@ -532,7 +538,7 @@
         <div class="meta-item"><strong>ลำดับการตี:</strong> {{ display_order or athlete.start_order }}</div>
         <div class="meta-item"><strong>สังกัด:</strong> {{ athlete.affiliation }}</div>
         <div class="meta-item"><strong>ชื่อ:</strong> {{ athlete.name }}</div>
-        <div class="meta-item"><strong>สนาม:</strong> {{ display_lane_no or athlete.lane_no }}/{{ display_lane_order or athlete.lane_order }}</div>
+        <div class="meta-item"><strong>สนาม:</strong> {{ court_name(event, display_lane_no or athlete.lane_no) }}/{{ display_lane_order or athlete.lane_order }}</div>
       </div>
     </div>
     <div class="scorecard-logo-box">

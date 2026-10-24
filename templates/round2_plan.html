@@ -78,9 +78,9 @@
         </tr>
       </thead>
       <tbody>
-        {% for lane in range(1, max_lanes + 1) %}
+        {% for lane in lane_rows %}
         <tr>
-          <td class="lane">{{ lane }}</td>
+          <td class="lane">{{ court_name(label_event, lane) }}</td>
           {% for p in plans %}{% set outer = loop %}
             {% for q in range(1, [p.queues, 1]|max + 1) %}
               {% set c = p.grid.get((lane, q)) %}

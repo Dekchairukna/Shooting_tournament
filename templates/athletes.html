@@ -24,7 +24,7 @@
         <tbody>
         {% for u in court_users %}
           <tr>
-            <td><strong>สนาม {{ u.court_no }}</strong></td>
+            <td><strong>สนาม {{ court_name(event, u.court_no) }}</strong>{% if event.court_letters %} <span class="muted">(court{{ '%02d' % u.court_no }})</span>{% endif %}</td>
             <td><strong>{{ court_public_id(u) }}</strong></td>
             <td>
               {% if u.has_usable_password() %}
@@ -109,7 +109,7 @@
         <td>{{ athlete.bib_no }}</td>
         <td>{{ athlete.name }}{% if athlete.withdrawn %} <span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-weight:800;border-radius:999px;padding:1px 8px;font-size:.8rem;">ถอนตัว</span>{% endif %}</td>
         <td>{{ athlete.affiliation }}</td>
-        <td>{{ athlete.lane_no }}</td>
+        <td>{{ court_name(event, athlete.lane_no) }}</td>
         <td>{{ athlete.lane_order }}</td>
         {% if event.has_round_two %}
         <td style="min-width:210px;">

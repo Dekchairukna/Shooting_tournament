@@ -862,7 +862,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
             <tr class="status-{{ row.status }} {{ 'live-active' if row.status == 'active' and not row.score_complete and not row.approved else '' }} {{ 'visual-approved' if row.approved else ('visual-finished' if row.score_complete else '') }} {{ 'direct-placeholder' if row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder else '' }} {{ 'cut-line-after' if row.cut_line_after else '' }}" data-athlete-id="{{ row.athlete.id }}"
               {% if not (row.is_round2_direct_placeholder is defined and row.is_round2_direct_placeholder) %}onclick="window.location='{{ url_for('scorecard', athlete_id=row.athlete.id, round=round_no) }}'"{% endif %}>
               <td class="start-order" data-cut-label="{{ row.cut_line_label or '' }}">{{ row.display_order or row.athlete.start_order }}</td>
-              <td class="lane-no">{{ row.display_lane_no or row.athlete.lane_no or '-' }}</td>
+              <td class="lane-no">{{ court_name(event, row.display_lane_no or row.athlete.lane_no or '-') }}</td>
               <td class="lane-order">{{ row.display_lane_order or row.athlete.lane_order or '-' }}</td>
               <td class="cell-affiliation">{{ row.athlete.affiliation }}</td>
               <td class="text-left cell-name">{{ row.athlete.name }}</td>
@@ -1007,6 +1007,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
 }
 
 
+  const COURT_LETTERS = {{ 'true' if event.court_letters else 'false' }};
   function statusLabel(item, currentStation) {
     if (item.is_round2_direct_placeholder) return 'เข้ารอบตรง';
     if (item.withdrawn) return 'ถอนตัว';
@@ -1064,7 +1065,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
       const pill = row.querySelector('.status-pill');
 
       if (startOrder) startOrder.textContent = item.display_order ?? item.start_order ?? '-';
-      if (laneNo) laneNo.textContent = item.display_lane_no ?? item.lane_no ?? '-';
+      if (laneNo) { const ln = item.display_lane_no ?? item.lane_no ?? '-'; laneNo.textContent = (COURT_LETTERS && Number(ln) >= 1 && Number(ln) <= 26) ? String.fromCharCode(64 + Number(ln)) : ln; }
       if (laneOrder) laneOrder.textContent = item.display_lane_order ?? item.lane_order ?? '-';
       if (aff) aff.textContent = item.affiliation;
       if (name) name.textContent = item.name;
