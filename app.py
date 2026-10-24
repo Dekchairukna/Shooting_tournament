@@ -2160,6 +2160,16 @@ def exact_cut_ids(rows: list[dict], cutoff_count: int) -> set[int]:
     pending = unresolved_tie_ids(rows, cutoff_count)
     return {row["athlete"].id for row in rows[:cutoff_count] if row["athlete"].id not in pending}
 
+def tiebreak_edit_group_ids(rows: list[dict], row: dict) -> list[int]:
+    """คนที่เคยบันทึก Sudden death ไว้แล้วในกลุ่มคะแนนเดียวกัน (ใช้เปิดหน้าแก้ไข)"""
+    if not row.get("tiebreak_count"):
+        return []
+    key = (row.get("combined_total", row.get("total", 0)), row.get("count_5", 0), row.get("count_3", 0))
+    ids = [r["athlete"].id for r in rows if r.get("tiebreak_count")
+           and (r.get("combined_total", r.get("total", 0)), r.get("count_5", 0), r.get("count_3", 0)) == key]
+    return ids or [row["athlete"].id]
+
+
 def shootoff_group_ids(rows: list[dict], athlete_id: int, round_no: int | None = None) -> list[int]:
     target = next((row for row in rows if row["athlete"].id == athlete_id), None)
     if not target:
@@ -4527,6 +4537,7 @@ def event_overview(event_id: int):
         aid = row["athlete"].id
         row["shoot_off_required"] = aid in shoot_off_ids
         row["shoot_off_group_ids"] = shootoff_group_ids(rows, aid, round_no) if row["shoot_off_required"] else [aid]
+        row["tiebreak_edit_ids"] = tiebreak_edit_group_ids(rows, row)
         if row["shoot_off_required"]:
             row["progress_class"] = "shoot-off-required"
         elif round_no == 1:
@@ -4856,6 +4867,9 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
         fit_sheet_to_a4(final_sheet, "B", "AC", 1, 19, one_page=True)
 
     apply_current_theme(workbook)
+    # ไฟล์ต้นฉบับล็อกชีต (Protect Sheet) ไว้ ทำให้แก้ไขในไฟล์ที่ดาวน์โหลดไม่ได้ · ปลดล็อกทุกชีต
+    for ws_ in workbook.worksheets:
+        ws_.protection.sheet = False
     workbook.active = workbook.sheetnames.index("TIR QUALIFICATION")
     if focus == "final" and "TIR FINAL " in workbook.sheetnames:
         # ไฟล์ QF/Final สำหรับพิมพ์: เปิดมาที่ชีต Final และซ่อนชีตอื่น (สูตรยังคำนวณได้)
@@ -4863,8 +4877,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
         workbook.active = final_index
         for idx, ws_ in enumerate(workbook.worksheets):
             ws_.sheet_view.tabSelected = idx == final_index
-            if idx != final_index:
-                ws_.sheet_state = "hidden"
+            # ไม่ซ่อนชีตอื่น (เดิมซ่อนไว้ ทำให้ดูเหมือนแก้อะไรไม่ได้)
     workbook.calculation.calcMode = "auto"
     workbook.calculation.calcOnSave = True
     workbook.calculation.fullCalcOnLoad = True
@@ -5234,6 +5247,7 @@ def overview_data(event_id: int):
     for row in rows:
         row["shoot_off_required"] = row["athlete"].id in shoot_off_ids
         row["shoot_off_group_ids"] = shootoff_group_ids(rows, row["athlete"].id, round_no) if row["shoot_off_required"] else [row["athlete"].id]
+        row["tiebreak_edit_ids"] = tiebreak_edit_group_ids(rows, row)
         row["cut_line_after"] = False
     apply_overview_cut_lines(event, rows, round_no, round_complete, groups)
     rows = apply_overview_order_mode(event, rows)
@@ -5292,6 +5306,7 @@ def overview_data(event_id: int):
             "progress_class": ("shoot-off-required" if row.get("shoot_off_required") else (("qualified-direct" if aid in groups["direct"] else ("round2-candidate" if aid in groups["round2_candidates"] else "")) if round_no == 1 else ("qualified-round2" if aid in groups["round2_passed"] else ("eliminated" if aid in groups["eliminated"] else "")))),
             "shoot_off_required": row.get("shoot_off_required", False),
             "shoot_off_group_ids": row.get("shoot_off_group_ids", [row["athlete"].id]),
+            "tiebreak_edit_ids": row.get("tiebreak_edit_ids", []),
             "is_round2_direct_placeholder": row.get("is_round2_direct_placeholder", False),
             "round2_has_played": row.get("round2_has_played", False),
             "cut_line_after": row.get("cut_line_after", False),
@@ -5341,7 +5356,7 @@ def overview_stats(event_id: int):
             "total": row.get("combined_total", row.get("total", 0)),
             "count_5": row.get("count_5", 0),
             "count_3": row.get("count_3", 0),
-            "status": ("ต้องตี Shoot-off" if row.get("shoot_off_required") else ""),
+            "status": ("ต้องตี Sudden death" if row.get("shoot_off_required") else ""),
         })
     return jsonify(data)
 
@@ -6113,8 +6128,29 @@ def event_tiebreak(event_id: int):
             athlete_ids.append(int(part))
     athletes = Athlete.query.filter(Athlete.event_id == event.id, Athlete.id.in_(athlete_ids)).order_by(Athlete.start_order, Athlete.id).all() if athlete_ids else []
     if not athletes:
-        flash("กรุณาเลือกนักกีฬาที่ต้องตี Shoot-off อย่างน้อย 2 คน", "warning")
+        flash("กรุณาเลือกนักกีฬาที่ต้องตี Sudden death อย่างน้อย 2 คน", "warning")
         return redirect(url_for("event_overview", event_id=event.id, round=round_no))
+    if request.method == "POST" and request.form.get("action") in ("replace", "clear") and current_user.role != "superadmin":
+        flash("แก้ไข/ล้าง Sudden death ได้เฉพาะ superadmin", "warning")
+        return redirect(url_for("event_overview", event_id=event.id, round=round_no))
+    if request.method == "POST" and current_user.role == "superadmin" \
+            and request.form.get("action") in ("replace", "clear"):
+        # แก้ไข Sudden death ที่คีย์ผิด: ลบของเดิมของกลุ่มนี้ (รอบนี้) แล้วบันทึกใหม่ หรือล้างทิ้ง
+        ids_ = [a.id for a in athletes]
+        for a in athletes:
+            for e in TieBreakEntry.query.filter_by(athlete_id=a.id, round_no=round_no).all():
+                db.session.add(ScoreEditLog(athlete_id=a.id, round_no=round_no, station_no=e.station_no, distance_m=7,
+                                            old_score=e.score or 0, new_score=0, old_red=False, new_red=False,
+                                            old_played=True, new_played=False,
+                                            edited_by=current_user.id, editor_username=current_user.username,
+                                            reason=("แก้ไข Sudden death" if request.form.get("action") == "replace" else "ล้าง Sudden death")))
+        TieBreakEntry.query.filter(TieBreakEntry.athlete_id.in_(ids_), TieBreakEntry.round_no == round_no).delete(synchronize_session=False)
+        db.session.commit()
+        if request.form.get("action") == "clear":
+            clear_request_cache()
+            invalidate_poll_cache(event.id)
+            flash("ล้าง Sudden death ของกลุ่มนี้แล้ว", "success")
+            return redirect(url_for("event_overview", event_id=event.id, round=round_no))
     if request.method == "POST":
         entries_data = []
         for athlete in athletes:
@@ -6149,13 +6185,19 @@ def event_tiebreak(event_id: int):
                 raise
 
         clear_request_cache()
-        flash("บันทึก Shoot-off พร้อมกันแล้ว ถ้ายังเท่ากันให้เลือกกลุ่มเดิมแล้วบันทึกเพิ่ม", "success")
+        invalidate_poll_cache(event.id)
+        flash("บันทึก Sudden death แล้ว" if request.form.get("action") == "replace"
+              else "บันทึก Sudden death พร้อมกันแล้ว ถ้ายังเท่ากันให้เลือกกลุ่มเดิมแล้วบันทึกเพิ่ม", "success")
         return redirect(url_for("event_overview", event_id=event.id, round=round_no))
     existing = {}
+    attempts = {}
     for athlete in athletes:
-        entries = TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).all()
+        entries = TieBreakEntry.query.filter_by(athlete_id=athlete.id, round_no=round_no).order_by(TieBreakEntry.id).all()
         existing[athlete.id] = {station: sum(e.score for e in entries if e.station_no == station) for station in STATIONS}
-    return render_template("tiebreak.html", event=event, athletes=athletes, athlete=athletes[0], round_no=round_no, existing=existing, bulk_mode=True, ids=','.join(str(a.id) for a in athletes))
+        attempts[athlete.id] = len(entries) // len(STATIONS) if entries else 0
+    return render_template("tiebreak.html", event=event, athletes=athletes, athlete=athletes[0], round_no=round_no,
+                           existing=existing, attempts=attempts, has_existing=any(attempts.values()),
+                           bulk_mode=True, ids=','.join(str(a.id) for a in athletes))
 
 
 @app.route("/events/<int:event_id>/bracket")

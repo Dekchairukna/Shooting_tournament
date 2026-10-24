@@ -711,6 +711,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
   #overviewTableBody tr[data-athlete-id] > td{padding-top:9px!important;padding-bottom:9px!important}
 }
   .status-pill.dq{background:#fee2e2 !important;color:#b91c1c !important;border-color:#fca5a5 !important;}
+.shoot-off-action.sd-edit{background:#f1f5f9 !important;color:#334155 !important;border-color:#cbd5e1 !important;font-weight:700 !important;}
 </style>
 
 <div class="overview-page">
@@ -915,7 +916,12 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
                   {% if row.shoot_off_required %}
                     <div class="status-action-wrap">
                       <span class="status-pill {{ row.status }}{% if row.disqualified %} dq{% endif %}">{{ status_text }}</span>
-                      <a class="shoot-off-action" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.shoot_off_group_ids|join(','))) }}" title="กรอกผล Shoot-off">Shoot-off →</a>
+                      <a class="shoot-off-action" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.shoot_off_group_ids|join(','))) }}" title="กรอกผล Sudden death">Sudden death →</a>
+                    </div>
+                  {% elif row.tiebreak_edit_ids and current_user.is_authenticated and current_user.role == 'superadmin' %}
+                    <div class="status-action-wrap">
+                      <span class="status-pill {{ row.status }}{% if row.disqualified %} dq{% endif %}">{{ status_text }}</span>
+                      <a class="shoot-off-action sd-edit" onclick="event.stopPropagation();" href="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=(row.tiebreak_edit_ids|join(','))) }}" title="แก้ผล Sudden death">แก้ Sudden death</a>
                     </div>
                   {% else %}
                     <span class="status-pill {{ row.status }}{% if row.disqualified %} dq{% endif %}">{{ status_text }}</span>
@@ -1007,6 +1013,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
 }
 
 
+  const CAN_EDIT_SD = {{ 'true' if (current_user.is_authenticated and current_user.role == 'superadmin') else 'false' }};
   const COURT_LETTERS = {{ 'true' if event.court_letters else 'false' }};
   function statusLabel(item, currentStation) {
     if (item.is_round2_direct_placeholder) return 'เข้ารอบตรง';
@@ -1080,7 +1087,9 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
         if (item.is_round2_direct_placeholder) {
           statusCell.innerHTML = `<span class="status-pill direct-placeholder-pill">เข้ารอบตรง</span>`;
         } else if (item.shoot_off_required) {
-          statusCell.innerHTML = `<div class="status-action-wrap"><span class="status-pill ${item.status}${item.disqualified ? ' dq' : ''}">${statusLabel(item, currentStation)}</span><a class="shoot-off-action" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}" title="กรอกผล Shoot-off">Shoot-off →</a></div>`;
+          statusCell.innerHTML = `<div class="status-action-wrap"><span class="status-pill ${item.status}${item.disqualified ? ' dq' : ''}">${statusLabel(item, currentStation)}</span><a class="shoot-off-action" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${ids}" title="กรอกผล Sudden death">Sudden death →</a></div>`;
+        } else if (CAN_EDIT_SD && item.tiebreak_edit_ids && item.tiebreak_edit_ids.length) {
+          statusCell.innerHTML = `<div class="status-action-wrap"><span class="status-pill ${item.status}${item.disqualified ? ' dq' : ''}">${statusLabel(item, currentStation)}</span><a class="shoot-off-action sd-edit" onclick="event.stopPropagation();" href="/events/{{ event.id }}/tiebreak?round={{ round_no }}&ids=${item.tiebreak_edit_ids.join(',')}" title="แก้ผล Sudden death">แก้ Sudden death</a></div>`;
         } else {
           statusCell.innerHTML = `<span class="status-pill ${item.status}${item.disqualified ? ' dq' : ''}">${statusLabel(item, currentStation)}</span>`;
         }

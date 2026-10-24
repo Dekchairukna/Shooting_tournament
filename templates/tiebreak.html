@@ -1,10 +1,35 @@
 {% extends 'base.html' %}
 {% block content %}
 <section class="card tiebreak-card">
-  <h1>ตีเที่ยวพิเศษ 7 เมตรทุกสถานี</h1>
+  <h1>Sudden death · ตีเที่ยวพิเศษ 7 เมตรทุกสถานี</h1>
   <p class="muted">รอบ {{ round_no }} · เลือกคะแนนแบบ 0 / 1 / 3 / 5</p>
-  <p class="muted">ต้องบันทึกพร้อมกันทุกคนที่ติด Shoot-off หากยังเท่ากันให้กลับมาเลือกกลุ่มเดิมแล้วบันทึกเพิ่มอีกเที่ยว</p>
+  <p class="muted">ต้องบันทึกพร้อมกันทุกคนที่ติด Sudden death หากยังเท่ากันให้กลับมาเลือกกลุ่มเดิมแล้วบันทึกเพิ่มอีกเที่ยว</p>
 
+  {% if has_existing is defined and has_existing and current_user.role == 'superadmin' %}
+  <form method="post" class="tiebreak-form tb-edit" action="{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=ids) }}">
+    <input type="hidden" name="round" value="{{ round_no }}"><input type="hidden" name="ids" value="{{ ids }}">
+    <h2 style="margin:0;">แก้ไขผล Sudden death ที่บันทึกไว้</h2>
+    <p class="muted" style="margin:0;">ใส่คะแนนรวมที่ถูกต้องของแต่ละสถานี แล้วกด "บันทึกแก้ไข" ระบบจะแทนที่ของเดิมทั้งกลุ่ม (เก็บประวัติไว้)</p>
+    {% for a in athletes %}
+    <div class="tiebreak-athlete-card">
+      <div class="athlete-head"><strong>{{ a.name }}</strong><span>{{ a.affiliation or '-' }} · บันทึกไว้ {{ attempts.get(a.id, 0) }} เที่ยว · รวม {{ existing.get(a.id, {}).values()|sum }}</span></div>
+      <div class="tiebreak-grid">
+        {% for station in [1,2,3,4,5] %}
+        <label>สถานี {{ station }}
+          <input type="number" min="0" max="99" class="score-select" name="tb_{{ a.id }}_{{ station }}" value="{{ existing.get(a.id, {}).get(station, 0) }}">
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <div class="tiebreak-actions">
+      <button class="btn btn-secondary" type="submit" name="action" value="clear" formnovalidate
+              onclick="return confirm('ล้างผล Sudden death ของกลุ่มนี้ทั้งหมด?');" style="background:#fee2e2;color:#b91c1c;border-color:#fca5a5;">ล้างทั้งหมด</button>
+      <button class="btn btn-primary btn-save-tiebreak" type="submit" name="action" value="replace">บันทึกแก้ไข</button>
+    </div>
+  </form>
+  <h2 style="margin:18px 0 0;">ตีเพิ่มอีกเที่ยว (กรณียังเท่ากัน)</h2>
+  {% endif %}
   <form method="post" class="tiebreak-form" action="{% if bulk_mode is defined and bulk_mode %}{{ url_for('event_tiebreak', event_id=event.id, round=round_no, ids=ids) }}{% else %}{{ url_for('tiebreak', athlete_id=athlete.id, round=round_no) }}{% endif %}">
     <input type="hidden" name="round" value="{{ round_no }}">
     {% if bulk_mode is defined and bulk_mode %}<input type="hidden" name="ids" value="{{ ids }}">{% endif %}
@@ -18,7 +43,7 @@
         {% for station in [1,2,3,4,5] %}
         <label>สถานี {{ station }}
           {% if bulk_mode is defined and bulk_mode %}
-            {% set old_score = existing.get(athlete.id, {}).get(station, 0) %}
+            {% set old_score = 0 if (has_existing is defined and has_existing) else existing.get(athlete.id, {}).get(station, 0) %}
             <select name="tb_{{ athlete.id }}_{{ station }}" class="score-select">
           {% else %}
             {% set old_score = existing.get(station, 0) %}
@@ -28,7 +53,7 @@
             <option value="{{ score }}" {% if score == old_score %}selected{% endif %}>{{ score }}</option>
             {% endfor %}
           </select>
-          <small>สะสมเดิม: {{ old_score }}</small>
+          <small>สะสมเดิม: {{ existing.get(athlete.id, {}).get(station, 0) if (bulk_mode is defined and bulk_mode) else old_score }}</small>
         </label>
         {% endfor %}
       </div>
@@ -36,7 +61,7 @@
     {% endfor %}
     <div class="tiebreak-actions">
       <a class="btn btn-secondary" href="{{ url_for('event_overview', event_id=event.id if event else athlete.event_id, round=round_no) }}">← กลับ Overview</a>
-      <button class="btn btn-primary btn-save-tiebreak" type="submit">บันทึกเที่ยวพิเศษพร้อมกัน</button>
+      <button class="btn btn-primary btn-save-tiebreak" type="submit" name="action" value="add">{{ "บันทึกเที่ยวเพิ่ม" if (has_existing is defined and has_existing) else "บันทึกพร้อมกัน" }}</button>
     </div>
   </form>
 </section>
