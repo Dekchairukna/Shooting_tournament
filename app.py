@@ -4554,7 +4554,8 @@ def event_overview(event_id: int):
 
 
 def fit_sheet_to_a4(ws, first_col: str, last_col: str, first_row: int, last_row: int,
-                    stretch_from: int | None = None, stretch_to: int | None = None, max_row_pt: float = 42.0) -> None:
+                    stretch_from: int | None = None, stretch_to: int | None = None, max_row_pt: float = 42.0,
+                    title_rows: str | None = None, one_page: bool = False) -> None:
     """ตั้งหน้าพิมพ์ A4 แนวนอนให้พอดี 1 หน้า และยืดความสูงแถวให้เต็มหน้ากระดาษ
 
     Excel ย่อ/ขยายตามความกว้างเสมอ ถ้าตารางเตี้ย หน้าจะเหลือที่ว่างบน-ล่าง
@@ -4564,17 +4565,21 @@ def fit_sheet_to_a4(ws, first_col: str, last_col: str, first_row: int, last_row:
     from openpyxl.worksheet.properties import PageSetupProperties
 
     default_w = ws.sheet_format.defaultColWidth or 8.43
+    col_width = {}
+    for dim in ws.column_dimensions.values():  # openpyxl รวมคอลัมน์ติดกันที่กว้างเท่ากันไว้เป็นช่วง min..max
+        lo, hi = dim.min or 0, dim.max or 0
+        for i in range(lo, min(hi, 16384) + 1):
+            col_width[i] = (0.0 if dim.hidden else (dim.width or default_w))
     width_pt = 0.0
     for idx in range(column_index_from_string(first_col), column_index_from_string(last_col) + 1):
-        dim = ws.column_dimensions.get(get_column_letter(idx))
-        if dim is not None and dim.hidden:
-            continue
-        w = dim.width if dim is not None and dim.width else default_w
-        width_pt += (w * 7 + 5) * 0.75
+        w = col_width.get(idx, default_w)
+        if w:
+            width_pt += (w * 7 + 5) * 0.75
     default_h = ws.sheet_format.defaultRowHeight or 15
     heights = {r: (ws.row_dimensions[r].height or default_h) for r in range(first_row, last_row + 1)}
     target_h = width_pt * (198.0 / 285.0)
     current_h = sum(heights.values())
+    multi_page = (not one_page) and current_h > target_h * 1.02
     if stretch_from is not None and stretch_to is not None and stretch_to >= stretch_from and current_h < target_h:
         rows = list(range(stretch_from, stretch_to + 1))
         extra = (target_h - current_h) / len(rows)
@@ -4583,18 +4588,27 @@ def fit_sheet_to_a4(ws, first_col: str, last_col: str, first_row: int, last_row:
     ws.print_area = f"${first_col}${first_row}:${last_col}${last_row}"
     ws.page_setup.orientation = "landscape"
     ws.page_setup.paperSize = 9
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
-    ws.page_setup.scale = None
     if ws.sheet_properties.pageSetUpPr is None:
         ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    if multi_page:
+        # ตารางยาวเกิน 1 หน้าที่ขนาดปกติ (ราว 48 คน): ไม่บีบให้ตัวเล็ก
+        # ใช้ % ย่อให้พอดีความกว้าง แล้วขึ้นหน้าใหม่ พร้อมพิมพ์หัวตารางซ้ำทุกหน้า
+        ws.sheet_properties.pageSetUpPr.fitToPage = False
+        ws.page_setup.scale = max(10, min(100, int(285 / 25.4 * 72 / width_pt * 100)))
+        ws.page_setup.fitToWidth = None
+        ws.page_setup.fitToHeight = None
+        if title_rows:
+            ws.print_title_rows = title_rows
     else:
         ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 1
+        ws.page_setup.scale = None
     ws.page_margins.left = ws.page_margins.right = 0.25
     ws.page_margins.top = ws.page_margins.bottom = 0.25
     ws.page_margins.header = ws.page_margins.footer = 0.1
     ws.print_options.horizontalCentered = True
-    ws.print_options.verticalCentered = True
+    ws.print_options.verticalCentered = not multi_page
 
 
 def official_results_template_stream(event: Event, round_no: int, rows: list[dict], focus: str | None = None) -> BytesIO | None:
@@ -4720,7 +4734,8 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
 
     # พิมพ์เฉพาะแถวที่มีนักกีฬา (เดิมพิมพ์ถึงแถว 52 เสมอ ทำให้ตารางลอยกลางหน้า) และยืดให้เต็ม A4
     last_print_row = max(first_row, first_row + len(qualification_rows) - 1)
-    fit_sheet_to_a4(sheet, "AJ", "BN", 2, last_print_row, stretch_from=first_row, stretch_to=last_print_row)
+    fit_sheet_to_a4(sheet, "AJ", "BN", 2, last_print_row, stretch_from=first_row, stretch_to=last_print_row,
+                    title_rows="2:9")
     sheet.sheet_view.showGridLines = False
 
     # ชีต 2: ผู้ผ่านตรงด้านบน และผู้ตี Repechage/รอบ 2 ด้านล่าง
@@ -4791,15 +4806,24 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             order = [0, 7, 3, 4, 2, 5, 1, 6]
             qf_ids = [seeded[index] if index < len(seeded) else None for index in order]
         qf_rows = (5, 6, 9, 10, 13, 14, 17, 18)
-        for row_no, athlete_id in zip(qf_rows, qf_ids):
+        # Seed = ลำดับในรายชื่อผู้เข้ารอบ (1..8) · ถ้าไม่พบใช้ตำแหน่งมาตรฐาน 1/8 4/5 3/6 2/7
+        seed_rank = {row["athlete"].id: idx for idx, row in enumerate(qualifiers, start=1)}
+        standard_seeds = (1, 8, 4, 5, 3, 6, 2, 7)
+        # ช่องตัวอย่างที่ติดมากับไฟล์ฟอร์ม (ไม่ใช่ข้อมูลจริง)
+        for coord in ("N17", "N18"):
+            final_sheet[coord] = None
+        for pos, (row_no, athlete_id) in enumerate(zip(qf_rows, qf_ids)):
             athlete = athlete_map.get(athlete_id)
             if not athlete:
                 continue
             bracket_data = build_bracket_row_data(event, athlete, "QF", seed_map)
-            final_sheet.cell(row_no, 3, bracket_data["seed"])
+            final_sheet.cell(row_no, 3, seed_rank.get(athlete.id, standard_seeds[pos]))
             final_sheet.cell(row_no, 4, athlete.name)
+            final_sheet.cell(row_no, 5, athlete.affiliation or "")
             final_sheet.cell(row_no, 6, bracket_data["r1"])
-            final_sheet.cell(row_no, 7, bracket_data["r1r2"])
+            # REP = รอบ 1 + รอบ 2 เฉพาะรุ่นที่มีรอบ 2 และนักกีฬาคนนั้นตีรอบ 2 จริง
+            played_r2 = bool(event.has_round_two) and athlete_round_status(athlete, 2) != "waiting"
+            final_sheet.cell(row_no, 7, bracket_data["r1r2"] if played_r2 else None)
             for index, score in enumerate(bracket_data["stations"], start=8):
                 final_sheet.cell(row_no, index, score)
             final_sheet.cell(row_no, 13, f"=SUM(H{row_no}:L{row_no})")
@@ -4829,7 +4853,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
                 final_sheet.cell(row_no, index, score)
             final_sheet.cell(row_no, 27, f"=SUM(V{row_no}:Z{row_no + 1})")
         final_sheet.sheet_view.showGridLines = False
-        fit_sheet_to_a4(final_sheet, "B", "AC", 1, 19)
+        fit_sheet_to_a4(final_sheet, "B", "AC", 1, 19, one_page=True)
 
     apply_current_theme(workbook)
     workbook.active = workbook.sheetnames.index("TIR QUALIFICATION")
