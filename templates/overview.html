@@ -755,6 +755,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
           <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">Results Approved</a>
           {% endif %}
           <a class="btn secondary" href="{{ url_for('event_overview_excel', event_id=event.id, round=round_no) }}">📊 Export Results Excel</a>
+          <a class="btn secondary" href="{{ url_for('event_overview_excel', event_id=event.id, round=round_no, static=1) }}" title="ไฟล์ค่าล้วน ไม่มีสูตร แก้ไขได้ทุกช่อง">📄 Excel ไม่มีสูตร</a>
           {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
           <a class="btn secondary" href="{{ url_for('results_approved_settings', event_id=event.id) }}">ตั้งค่า Results</a>
           <a class="btn secondary" href="{{ url_for('scorecards_print_select', event_id=event.id, round=round_no) }}">พิมพ์ Scorecard หลายคน</a>

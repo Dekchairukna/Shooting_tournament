@@ -4622,7 +4622,9 @@ def fit_sheet_to_a4(ws, first_col: str, last_col: str, first_row: int, last_row:
     ws.print_options.verticalCentered = not multi_page
 
 
-def official_results_template_stream(event: Event, round_no: int, rows: list[dict], focus: str | None = None) -> BytesIO | None:
+def official_results_template_stream(event: Event, round_no: int, rows: list[dict], focus: str | None = None,
+                                     static: bool = False) -> BytesIO | None:
+    """static=True: ไฟล์ไม่มีสูตร ทุกช่องเป็นค่าตัวเลข/ข้อความ แก้ไขได้อิสระ"""
     """เติมผลลงในฟอร์ม TIR ต้นฉบับ โดยรักษารูปแบบ โลโก้ และหน้าพิมพ์เดิมทั้งเล่ม"""
     from copy import copy
     from openpyxl.styles import Color
@@ -4716,7 +4718,9 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
         affiliation = athlete.affiliation or ""
         name = athlete.name or ""
         placeholder = bool(result.get("is_round2_direct_placeholder"))
-        sheet.cell(row_no, 2, f"=AF{row_no}")
+        q_rank = result.get("display_rank", result.get("rank"))
+        static_row = [q_rank, affiliation, name]
+        sheet.cell(row_no, 2, q_rank if static else f"=AF{row_no}")
         sheet.cell(row_no, 3, affiliation)
         sheet.cell(row_no, 4, name)
         for station_index, station in enumerate(STATIONS):
@@ -4729,14 +4733,24 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             total_col = start_col + 4
             first_score_col = sheet.cell(row_no, start_col).column_letter
             last_score_col = sheet.cell(row_no, start_col + 3).column_letter
-            sheet.cell(row_no, total_col, f"=SUM({first_score_col}{row_no}:{last_score_col}{row_no})")
+            station_total = sum(v for v in values if isinstance(v, (int, float)))
+            sheet.cell(row_no, total_col, station_total if static else f"=SUM({first_score_col}{row_no}:{last_score_col}{row_no})")
+            static_row += values + [station_total]
         sheet.cell(row_no, 30, None)
-        sheet.cell(row_no, 31, f"=I{row_no}+N{row_no}+S{row_no}+X{row_no}+AC{row_no}")
+        sheet.cell(row_no, 31, result.get("total", 0) if static else f"=I{row_no}+N{row_no}+S{row_no}+X{row_no}+AC{row_no}")
         ranking_last_row = first_row + len(qualification_rows) - 1
-        sheet.cell(row_no, 32, f"=RANK(AE{row_no},$AE${first_row}:$AE${ranking_last_row},0)")
+        sheet.cell(row_no, 32, q_rank if static else f"=RANK(AE{row_no},$AE${first_row}:$AE${ranking_last_row},0)")
+        static_row += [None, result.get("total", 0), q_rank]
+        result["_static_row"] = static_row
 
     # พื้นที่พิมพ์ด้านขวาใช้ SORTBY จากตารางต้นทางเหมือนไฟล์แม่แบบ
-    if qualification_rows:
+    if qualification_rows and static:
+        # ไฟล์ไม่มีสูตร: เขียนตารางที่เรียงอันดับแล้ว (อันดับ → สังกัด) ลงพื้นที่พิมพ์ตรงๆ
+        ordered = sorted(qualification_rows, key=lambda r: (r["_static_row"][0] or 9999, str(r["_static_row"][1])))
+        for offset, result in enumerate(ordered):
+            for col_offset, value in enumerate(result["_static_row"]):
+                sheet.cell(first_row + offset, 36 + col_offset, value)
+    elif qualification_rows:
         ranking_last_row = first_row + len(qualification_rows) - 1
         sheet["AJ10"] = ArrayFormula(
             ref=f"AJ{first_row}:BN{ranking_last_row}",
@@ -4756,6 +4770,8 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
         round_two_rows = build_round_two_overview_rows(event) if event.has_round_two else []
         direct_rows = [row for row in round_two_rows if row.get("is_round2_direct_placeholder")]
         competitor_rows = [row for row in round_two_rows if not row.get("is_round2_direct_placeholder")]
+        r1_rank_map = {r["athlete"].id: r.get("display_rank", r.get("rank")) for r in qualification_rows}
+        r1_total_map = {r["athlete"].id: r.get("total", 0) for r in qualification_rows}
         for row_no in range(3, 7):
             for column in (2, 3, 37, 38):
                 repechage.cell(row_no, column).value = None
@@ -4764,18 +4780,29 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             athlete = result["athlete"]
             repechage.cell(row_no, 2, athlete.affiliation)
             repechage.cell(row_no, 3, athlete.name)
-            repechage.cell(row_no, 37, f'=INDEX(\'TIR QUALIFICATION\'!$BM$10:$BM${max(10, first_row + len(qualification_rows) - 1)},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${max(10, first_row + len(qualification_rows) - 1)},0))')
-            repechage.cell(row_no, 38, f'=INDEX(\'TIR QUALIFICATION\'!$BN$10:$BN${max(10, first_row + len(qualification_rows) - 1)},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${max(10, first_row + len(qualification_rows) - 1)},0))')
+            if static:
+                repechage.cell(row_no, 37, r1_total_map.get(athlete.id, 0))
+                repechage.cell(row_no, 38, r1_rank_map.get(athlete.id, ""))
+            else:
+                repechage.cell(row_no, 37, f'=INDEX(\'TIR QUALIFICATION\'!$BM$10:$BM${max(10, first_row + len(qualification_rows) - 1)},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${max(10, first_row + len(qualification_rows) - 1)},0))')
+                repechage.cell(row_no, 38, f'=INDEX(\'TIR QUALIFICATION\'!$BN$10:$BN${max(10, first_row + len(qualification_rows) - 1)},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${max(10, first_row + len(qualification_rows) - 1)},0))')
         for row_no in range(18, 35):
             for column in range(2, 39):
                 repechage.cell(row_no, column).value = None
+        rep_sums = {}
+        for result in competitor_rows[:17]:
+            st_sum = sum(((result.get("by_station") or {}).get(st, {}) or {}).get("total", 0) for st in STATIONS)
+            rep_sums[result["athlete"].id] = r1_total_map.get(result["athlete"].id, 0) + st_sum
         for offset, result in enumerate(competitor_rows[:17]):
             row_no = 18 + offset
             athlete = result["athlete"]
             repechage.cell(row_no, 2, athlete.affiliation)
             repechage.cell(row_no, 3, athlete.name)
             qualification_last_row = max(10, first_row + len(qualification_rows) - 1)
-            repechage.cell(row_no, 9, f'=INDEX(\'TIR QUALIFICATION\'!$BM$10:$BM${qualification_last_row},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${qualification_last_row},0))')
+            if static:
+                repechage.cell(row_no, 9, r1_total_map.get(athlete.id, 0))
+            else:
+                repechage.cell(row_no, 9, f'=INDEX(\'TIR QUALIFICATION\'!$BM$10:$BM${qualification_last_row},MATCH(C{row_no},\'TIR QUALIFICATION\'!$AL$10:$AL${qualification_last_row},0))')
             for station_index, station in enumerate(STATIONS):
                 station_data = (result.get("by_station") or {}).get(station, {})
                 distances = station_data.get("distances", {})
@@ -4784,11 +4811,18 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
                     repechage.cell(row_no, start_col + distance_index, distances.get(distance, 0))
                 first_score_col = repechage.cell(row_no, start_col).column_letter
                 last_score_col = repechage.cell(row_no, start_col + 3).column_letter
-                repechage.cell(row_no, start_col + 4, f"=SUM({first_score_col}{row_no}:{last_score_col}{row_no})")
-            repechage.cell(row_no, 36, f"=N{row_no}+S{row_no}+X{row_no}+AC{row_no}+AH{row_no}")
-            repechage.cell(row_no, 37, f"=I{row_no}+AJ{row_no}")
+                repechage.cell(row_no, start_col + 4, sum(distances.get(d, 0) for d in DISTANCES) if static
+                               else f"=SUM({first_score_col}{row_no}:{last_score_col}{row_no})")
             competitor_last_row = 18 + len(competitor_rows[:17]) - 1
-            repechage.cell(row_no, 38, f"=RANK(AK{row_no},$AK$18:$AK${competitor_last_row},0)")
+            if static:
+                total_sum = rep_sums[athlete.id]
+                repechage.cell(row_no, 36, total_sum - r1_total_map.get(athlete.id, 0))
+                repechage.cell(row_no, 37, total_sum)
+                repechage.cell(row_no, 38, 1 + sum(1 for v in rep_sums.values() if v > total_sum))
+            else:
+                repechage.cell(row_no, 36, f"=N{row_no}+S{row_no}+X{row_no}+AC{row_no}+AH{row_no}")
+                repechage.cell(row_no, 37, f"=I{row_no}+AJ{row_no}")
+                repechage.cell(row_no, 38, f"=RANK(AK{row_no},$AK$18:$AK${competitor_last_row},0)")
         repechage.sheet_view.showGridLines = False
         repechage.page_setup.fitToWidth = 1
         repechage.page_setup.fitToHeight = 1
@@ -4837,7 +4871,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             final_sheet.cell(row_no, 7, bracket_data["r1r2"] if played_r2 else None)
             for index, score in enumerate(bracket_data["stations"], start=8):
                 final_sheet.cell(row_no, index, score)
-            final_sheet.cell(row_no, 13, f"=SUM(H{row_no}:L{row_no})")
+            final_sheet.cell(row_no, 13, sum(bracket_data["stations"]) if static else f"=SUM(H{row_no}:L{row_no})")
 
         sf_ids = []
         for match in grouped_matches["SF"][:2]:
@@ -4850,7 +4884,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             final_sheet.cell(row_no, 14, athlete.name)
             for index, score in enumerate(bracket_data["stations"], start=15):
                 final_sheet.cell(row_no, index, score)
-            final_sheet.cell(row_no, 20, f"=SUM(O{row_no}:S{row_no})")
+            final_sheet.cell(row_no, 20, sum(bracket_data["stations"]) if static else f"=SUM(O{row_no}:S{row_no})")
 
         final_match = grouped_matches["F"][0] if grouped_matches["F"] else None
         final_ids = [final_match.athlete_a_id, final_match.athlete_b_id] if final_match else []
@@ -4862,7 +4896,7 @@ def official_results_template_stream(event: Event, round_no: int, rows: list[dic
             final_sheet.cell(row_no, 21, athlete.name)
             for index, score in enumerate(bracket_data["stations"], start=22):
                 final_sheet.cell(row_no, index, score)
-            final_sheet.cell(row_no, 27, f"=SUM(V{row_no}:Z{row_no + 1})")
+            final_sheet.cell(row_no, 27, sum(bracket_data["stations"]) if static else f"=SUM(V{row_no}:Z{row_no + 1})")
         final_sheet.sheet_view.showGridLines = False
         fit_sheet_to_a4(final_sheet, "B", "AC", 1, 19, one_page=True)
 
@@ -4907,12 +4941,14 @@ def event_overview_excel(event_id: int):
     rows = apply_overview_order_mode(event, filter_rows_for_court(all_rows))
 
     focus = "final" if request.args.get("sheet") == "final" else None
-    official_stream = official_results_template_stream(event, round_no, rows, focus=focus)
+    static = request.args.get("static") == "1"
+    official_stream = official_results_template_stream(event, round_no, rows, focus=focus, static=static)
     if official_stream is not None:
         return send_file(
             official_stream,
             as_attachment=True,
-            download_name=(f"event_{event.id}_QF_Final.xlsx" if focus else f"event_{event.id}_round_{round_no}_official_results.xlsx"),
+            download_name=(f"event_{event.id}_QF_Final{'_values' if static else ''}.xlsx" if focus
+                           else f"event_{event.id}_round_{round_no}_official_results{'_values' if static else ''}.xlsx"),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 

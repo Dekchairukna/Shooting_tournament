@@ -24,6 +24,7 @@
       <button type="button" class="btn secondary" data-bracket-download onclick="downloadBracketImage()">บันทึกเป็นรูปภาพ</button>
       <button type="button" class="btn secondary" onclick="window.print()">พิมพ์ตาราง</button>
       <a class="btn secondary" href="{{ url_for('event_overview_excel', event_id=event.id, sheet='final') }}">📊 QF / Final Excel (A4)</a>
+      <a class="btn secondary" href="{{ url_for('event_overview_excel', event_id=event.id, sheet='final', static=1) }}">📄 QF / Final ไม่มีสูตร</a>
     </div>
   </div>
 
