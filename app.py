@@ -6278,6 +6278,86 @@ def event_tiebreak(event_id: int):
                            bulk_mode=True, ids=','.join(str(a.id) for a in athletes))
 
 
+@app.route("/events/<int:event_id>/match/<int:match_id>")
+@login_required
+@role_required("admin", "superadmin", "court")
+def match_scoring(event_id: int, match_id: int):
+    """คีย์คะแนนคู่ Knockout 2 คนในหน้าเดียว (บันทึกอัตโนมัติทุกครั้งที่แตะ)"""
+    event = Event.query.get_or_404(event_id)
+    match = BracketMatch.query.filter_by(id=match_id, event_id=event.id).first_or_404()
+    if not match.athlete_a_id or not match.athlete_b_id:
+        flash("คู่นี้ยังไม่ครบ 2 คน", "warning")
+        return redirect(url_for("bracket", event_id=event.id))
+    round_no = bracket_round_to_scorecard_round(match.round_name, event)
+    athletes = [db.session.get(Athlete, match.athlete_a_id), db.session.get(Athlete, match.athlete_b_id)]
+    if is_court_user() and not any(court_can_access_athlete(a, round_no) for a in athletes):
+        flash("บัญชีสนามนี้คีย์ได้เฉพาะคู่ในสนามตัวเอง", "warning")
+        return redirect(url_for("bracket", event_id=event.id))
+    qualifiers = build_combined_qualifiers(event)
+    seed_rank = {row["athlete"].id: idx for idx, row in enumerate(qualifiers, start=1)}
+    players = []
+    for a in athletes:
+        entries = {(e.station_no, e.distance_m): e for e in ScoreEntry.query.filter_by(athlete_id=a.id, round_no=round_no).all()}
+        cells = {}
+        for st in STATIONS:
+            for dm in DISTANCES:
+                e = entries.get((st, dm))
+                cells[f"{st}_{dm}"] = {"score": (e.score if e else 0), "red": bool(e and e.is_red_card),
+                                       "played": bool(e and (e.is_scored or e.is_red_card))}
+        sig = get_round_signature(a.id, round_no)
+        players.append({
+            "id": a.id, "name": a.name, "affiliation": a.affiliation or "", "seed": seed_rank.get(a.id, ""),
+            "cells": cells, "finished": bool(sig and sig.finished_at),
+            "scorecard_url": url_for("scorecard", athlete_id=a.id, round=round_no),
+        })
+    titles = {"R16": "Round of 16", "QF": "QF", "SF": "SF", "F": "Final"}
+    tie = bracket_tie_state(match, round_no) if all(p["finished"] for p in players) else None
+    return render_template(
+        "match_scoring.html", event=event, match=match, round_no=round_no, players=players,
+        title=f"{titles.get(match.round_name, match.round_name)} {match.match_no}",
+        station_names=["ยิงลูกเดี่ยว", "ยิงลูกเหนือลูกเป้า", "ยิงลูกกลางขาว", "ยิงลูกสีขาวเหนือลูกดำ", "ยิงลูกเป้า"],
+        allowed={st: sorted(ALLOWED_SCORES_BY_STATION[st]) for st in STATIONS},
+        winner=db.session.get(Athlete, match.winner_id) if match.winner_id else None,
+        tie=tie,
+    )
+
+
+@app.route("/events/<int:event_id>/match/<int:match_id>/finish", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def match_finish(event_id: int, match_id: int):
+    """จบการตีทั้งคู่ในครั้งเดียว (superadmin / admin ใส่รหัสข้ามลายเซ็น) แล้วตัดสินผู้ชนะ"""
+    event = Event.query.get_or_404(event_id)
+    match = BracketMatch.query.filter_by(id=match_id, event_id=event.id).first_or_404()
+    round_no = bracket_round_to_scorecard_round(match.round_name, event)
+    expected_bypass = os.environ.get("SIGNATURE_BYPASS_CODE", "7929")
+    bypass_ok = current_user.role == "superadmin" or (
+        bool(expected_bypass) and request.form.get("bypass_code", "").strip() == expected_bypass)
+    if not bypass_ok:
+        flash("รหัสข้ามลายเซ็นไม่ถูกต้อง · หรือไปลงลายเซ็นที่ Scorecard รายคน", "danger")
+        return redirect(url_for("match_scoring", event_id=event.id, match_id=match.id))
+    for aid in (match.athlete_a_id, match.athlete_b_id):
+        athlete = db.session.get(Athlete, aid)
+        ensure_round_entries(aid, round_no)
+        sig = ensure_signature(aid, round_no)
+        sig.started_at = sig.started_at or datetime.utcnow()
+        sig.finished_at = sig.finished_at or datetime.utcnow()
+        athlete.status = "finished"
+    db.session.commit()
+    clear_request_cache()
+    sync_match_winner_from_scores(match)
+    maybe_advance_bracket(event)
+    clear_request_cache()
+    invalidate_poll_cache(event.id)
+    tie = bracket_tie_state(match, round_no)
+    if not match.winner_id and tie in ("need_7m", "need_sudden"):
+        flash("คะแนนเท่ากัน · ตีเที่ยวพิเศษ 7 เมตรทุกสถานี" if tie == "need_7m" else "ยังเสมอ · ตี Sudden death", "warning")
+        return redirect(url_for("event_tiebreak", event_id=event.id, round=round_no,
+                                ids=f"{match.athlete_a_id},{match.athlete_b_id}", next="bracket"))
+    flash("จบการตีคู่นี้แล้ว", "success")
+    return redirect(url_for("bracket", event_id=event.id))
+
+
 @app.route("/events/<int:event_id>/bracket")
 def bracket(event_id: int):
     event = Event.query.get_or_404(event_id)

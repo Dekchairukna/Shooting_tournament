@@ -320,6 +320,8 @@
     .match-status.tie{background:#fee2e2;color:#b91c1c;border-color:#fca5a5;}
     .match-tb-link{display:inline-block;background:#dc2626;color:#fff !important;font-weight:900;border-radius:999px;padding:6px 14px;text-decoration:none;font-size:.95rem;}
     .match-tb-link[hidden]{display:none;}
+    .match-key-link{display:inline-block;background:#1d4ed8;color:#fff !important;font-weight:900;border-radius:999px;padding:6px 14px;text-decoration:none;font-size:.95rem;}
+    @media print{.match-key-link{display:none !important;}}
     @media print{.match-tb-link{display:none !important;}}
     .match-status.finished{background:#dcfce7;color:#166534;border-color:#bbf7d0;}
 
@@ -1675,6 +1677,7 @@
   {% macro render_match(item, round_key, title, total_label, show_qual=False, extra_class='') %}
   <div class="match-box {{ extra_class }}" data-bracket-match data-round="{{ round_key }}" data-match-no="{{ item.match.match_no }}">
     <div class="match-head"><div class="match-title">{{ title }}</div><span style="display:inline-flex;gap:6px;align-items:center;">
+      {% if current_user.is_authenticated and current_user.role in ['admin','superadmin','court'] and item.a.athlete and item.b.athlete and not item.winner %}<a class="match-key-link" href="{{ url_for('match_scoring', event_id=event.id, match_id=item.match.id) }}">คีย์คู่นี้</a>{% endif %}
       {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}<a class="match-tb-link" data-ev="{{ event.id }}" {% if item.status.tiebreak_ids %}href="{{ url_for('event_tiebreak', event_id=event.id, round=item.status.round_no, ids=item.status.tiebreak_ids|join(','), next='bracket') }}"{% else %}hidden{% endif %}>{{ 'Sudden death →' if 'Sudden' in item.status.label else 'ตี 7 เมตร →' }}</a>{% endif %}
       <span class="match-status {{ item.status.key }}">{{ item.status.label }}</span></span></div>
     <div class="table-wrap">
