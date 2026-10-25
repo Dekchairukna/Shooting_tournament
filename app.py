@@ -1322,10 +1322,37 @@ def bracket_match_status(event: Event, match: BracketMatch) -> dict:
     if any(status == "active" for status in statuses):
         return {"key": "active", "label": "กำลังแข่งขัน"}
     if all(status == "finished" for status in statuses):
+        tie = bracket_tie_state(match, round_no)
+        if tie == "need_7m":
+            return {"key": "tie", "label": "เสมอ · ตี 7 เมตรทุกสถานี", "tiebreak_ids": athlete_ids, "round_no": round_no}
+        if tie == "need_sudden":
+            return {"key": "tie", "label": "ยังเสมอ · Sudden death", "tiebreak_ids": athlete_ids, "round_no": round_no}
         return {"key": "ready_result", "label": "รอบันทึกผู้ชนะ"}
     if any(status == "finished" for status in statuses):
         return {"key": "active", "label": "กำลังแข่งขัน"}
     return {"key": "waiting", "label": "รอแข่งขัน"}
+
+
+def bracket_tie_state(match, round_no: int) -> str | None:
+    """คู่ Knockout ที่ตีครบแล้วคะแนนเท่ากัน
+
+    need_7m     = ยังไม่ได้ตีเที่ยวพิเศษ 7 เมตรทุกสถานี
+    need_sudden = ตี 7 เมตรแล้ว (จำนวนเที่ยวเท่ากัน) ยังเท่ากัน หรือยังบันทึกไม่ครบทั้งคู่ → Sudden death
+    decided     = ตัดสินได้จากเที่ยวพิเศษ · None = ไม่เสมอ
+    """
+    if not match.athlete_a_id or not match.athlete_b_id:
+        return None
+    total_a = summarize_round(match.athlete_a_id, round_no)["total"]
+    total_b = summarize_round(match.athlete_b_id, round_no)["total"]
+    if total_a != total_b:
+        return None
+    ta = TieBreakEntry.query.filter_by(athlete_id=match.athlete_a_id, round_no=round_no).all()
+    tb = TieBreakEntry.query.filter_by(athlete_id=match.athlete_b_id, round_no=round_no).all()
+    if not ta and not tb:
+        return "need_7m"
+    if len(ta) != len(tb) or sum(e.score for e in ta) == sum(e.score for e in tb):
+        return "need_sudden"
+    return "decided"
 
 
 def ranking_key(item: dict):
@@ -2792,7 +2819,11 @@ def sync_match_winner_from_scores(match: BracketMatch) -> None:
     total_a = summarize_round(match.athlete_a_id, round_no)["total"]
     total_b = summarize_round(match.athlete_b_id, round_no)["total"]
     if total_a == total_b:
-        return
+        # เสมอ: ตัดสินด้วยเที่ยวพิเศษ 7 เมตร / Sudden death เมื่อบันทึกเท่ากันทั้งคู่และคะแนนต่างกัน
+        if bracket_tie_state(match, round_no) != "decided":
+            return
+        total_a = sum(e.score for e in TieBreakEntry.query.filter_by(athlete_id=match.athlete_a_id, round_no=round_no).all())
+        total_b = sum(e.score for e in TieBreakEntry.query.filter_by(athlete_id=match.athlete_b_id, round_no=round_no).all())
     match.winner_id = match.athlete_a_id if total_a > total_b else match.athlete_b_id
     db.session.commit()
 
@@ -6222,8 +6253,19 @@ def event_tiebreak(event_id: int):
 
         clear_request_cache()
         invalidate_poll_cache(event.id)
+        if round_no >= 3:
+            # คู่ Knockout: ตัดสินผู้ชนะจากเที่ยวพิเศษให้อัตโนมัติ แล้วเลื่อนสาย
+            ids_set = {a.id for a in athletes}
+            for m in BracketMatch.query.filter_by(event_id=event.id).all():
+                if {m.athlete_a_id, m.athlete_b_id} == ids_set and not m.winner_id \
+                        and bracket_round_to_scorecard_round(m.round_name, event) == round_no:
+                    sync_match_winner_from_scores(m)
+            maybe_advance_bracket(event)
+            clear_request_cache()
         flash("บันทึก Sudden death แล้ว" if request.form.get("action") == "replace"
-              else "บันทึก Sudden death พร้อมกันแล้ว ถ้ายังเท่ากันให้เลือกกลุ่มเดิมแล้วบันทึกเพิ่ม", "success")
+              else "บันทึกเที่ยวพิเศษแล้ว ถ้ายังเท่ากันให้ตี Sudden death แล้วบันทึกเพิ่ม", "success")
+        if request.form.get("next") == "bracket":
+            return redirect(url_for("bracket", event_id=event.id))
         return redirect(url_for("event_overview", event_id=event.id, round=round_no))
     existing = {}
     attempts = {}

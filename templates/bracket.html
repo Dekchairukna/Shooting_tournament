@@ -317,6 +317,10 @@
     .match-status.waiting{background:#f1f5f9;color:#475569;border-color:#cbd5e1;}
     .match-status.active{background:#ffedd5;color:#9a3412;border-color:#fed7aa;}
     .match-status.ready_result{background:#fef3c7;color:#92400e;border-color:#fde68a;}
+    .match-status.tie{background:#fee2e2;color:#b91c1c;border-color:#fca5a5;}
+    .match-tb-link{display:inline-block;background:#dc2626;color:#fff !important;font-weight:900;border-radius:999px;padding:6px 14px;text-decoration:none;font-size:.95rem;}
+    .match-tb-link[hidden]{display:none;}
+    @media print{.match-tb-link{display:none !important;}}
     .match-status.finished{background:#dcfce7;color:#166534;border-color:#bbf7d0;}
 
     .row-status-pill{
@@ -1670,7 +1674,9 @@
 
   {% macro render_match(item, round_key, title, total_label, show_qual=False, extra_class='') %}
   <div class="match-box {{ extra_class }}" data-bracket-match data-round="{{ round_key }}" data-match-no="{{ item.match.match_no }}">
-    <div class="match-head"><div class="match-title">{{ title }}</div><span class="match-status {{ item.status.key }}">{{ item.status.label }}</span></div>
+    <div class="match-head"><div class="match-title">{{ title }}</div><span style="display:inline-flex;gap:6px;align-items:center;">
+      {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}<a class="match-tb-link" data-ev="{{ event.id }}" {% if item.status.tiebreak_ids %}href="{{ url_for('event_tiebreak', event_id=event.id, round=item.status.round_no, ids=item.status.tiebreak_ids|join(','), next='bracket') }}"{% else %}hidden{% endif %}>{{ 'Sudden death →' if 'Sudden' in item.status.label else 'ตี 7 เมตร →' }}</a>{% endif %}
+      <span class="match-status {{ item.status.key }}">{{ item.status.label }}</span></span></div>
     <div class="table-wrap">
       <table class="match-row {% if not show_qual %}compact-match-row{% endif %}">
         <thead>
@@ -2083,6 +2089,14 @@ function updateBracketGroup(roundKey, items){
     if (statusBadge && item.status) {
       statusBadge.textContent = item.status.label || 'รอแข่งขัน';
       statusBadge.className = `match-status ${item.status.key || 'waiting'}`;
+      const tbLink = statusBadge.parentElement?.querySelector('.match-tb-link');
+      if (tbLink) {
+        if (item.status.tiebreak_ids && item.status.tiebreak_ids.length) {
+          tbLink.href = `/events/${tbLink.dataset.ev}/tiebreak?round=${item.status.round_no}&ids=${item.status.tiebreak_ids.join(',')}&next=bracket`;
+          tbLink.textContent = (item.status.label || '').includes('Sudden') ? 'Sudden death →' : 'ตี 7 เมตร →';
+          tbLink.hidden = false;
+        } else { tbLink.hidden = true; }
+      }
     }
     ["a", "b"].forEach(slot => {
       const row = document.querySelector(
