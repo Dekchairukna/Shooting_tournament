@@ -24,7 +24,7 @@ class ResultsApprovedTests(unittest.TestCase):
                        direct_qualifiers=8, has_round_two=False)
         db.session.add(self.e); db.session.flush()
         self.ath = []
-        scores = [32, 27, 24, 21, 20, 19, 16, 15, 11, 11, 0]
+        scores = [32, 27, 24, 21, 20, 19, 16, 15, 11, 11, 10, 9, 8, 0]
         for i, sc in enumerate(scores, start=1):
             wd = i == len(scores)
             a = Athlete(event_id=self.e.id, bib_no=str(i), name=("SCHOOL%d" % i) if wd else f"นาย A{i}",
@@ -95,7 +95,7 @@ class ResultsApprovedTests(unittest.TestCase):
         self.assertEqual({r for r, _ in ranks[2:4]}, {3})
         self.assertEqual({r for r, _ in ranks[4:8]}, {5})
         self.assertEqual(ranks[8][0], 9); self.assertEqual(ranks[9][0], 9)  # คัดเลือกเท่ากัน = อันดับร่วม
-        self.assertEqual(ranks[-1], ("WD", "SCHOOL11"))
+        self.assertEqual(ranks[-1], ("WD", "SCHOOL14"))
 
         html = self.client().get(f"/events/{self.e.id}/results-approved").get_data(as_text=True)
         self.assertNotIn("SEA GAMES", html)

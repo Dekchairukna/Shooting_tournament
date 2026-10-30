@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Results Approved{% endblock %}
 {% block content %}
+
 <style>
 .results-approved-page{background:#f1f5f9;color:#111;font-family:"Times New Roman",serif;counter-reset:ra-page;}
 .ra-toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 16px;align-items:center;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;}
@@ -10,7 +11,8 @@
 .ra-sheet{width:210mm;min-height:297mm;margin:0 auto 18px;padding:15mm 12mm 16mm;background:#fff;box-shadow:0 8px 30px rgba(15,23,42,.12);page-break-after:always;position:relative;overflow:hidden;counter-increment:ra-page;}
 .ra-sheet.landscape{width:297mm;min-height:210mm;padding:8mm 8mm 12mm;}
 .ra-sheet::after{content:counter(ra-page) " | Page";position:absolute;left:8mm;bottom:5mm;font-size:12px;color:#222;}
-.ra-approved{position:absolute;right:12mm;bottom:14mm;font-size:16px;font-weight:700;letter-spacing:.01em;}
+.ra-sheet{display:flex;flex-direction:column;}
+.ra-approved{margin-top:auto;padding-top:8mm;align-self:flex-end;font-size:16px;font-weight:700;letter-spacing:.01em;}
 .ra-approved.inline{position:static;margin-top:12mm;text-align:right;}
 .ra-logo-row{display:flex;align-items:center;justify-content:center;gap:18mm;margin-bottom:9mm;}
 .ra-logo-row img{max-height:18mm;max-width:38mm;object-fit:contain;}
@@ -46,9 +48,9 @@
 .ra-table.clean th{border-top:1px solid #222;border-bottom:1px solid #222;background:#d9d9d9;}
 .ra-table.clean td{border-bottom:none;}
 .ra-country-table{width:72%;font-size:18px;}
-.ra-country-table th,.ra-country-table td{height:12mm;}
+.ra-country-table th,.ra-country-table td{height:var(--ra-row,12mm);}
 .ra-summary-table{font-size:17px;}
-.ra-summary-table th,.ra-summary-table td{height:12mm;}
+.ra-summary-table th,.ra-summary-table td{height:var(--ra-row,12mm);padding-top:2px;padding-bottom:2px;}
 .ra-station-table{font-size:8.5px;line-height:1.05;table-layout:fixed;margin-top:5mm;}
 .ra-station-table th,.ra-station-table td{padding:2px 2px;}
 .ra-station-table .country-col{width:26mm;}
@@ -144,7 +146,7 @@
     </div>
     <div class="ra-big-event-title">1. {{ event_title }}</div>
     <div class="ra-date-center">{{ date_line }}</div>
-    <table class="ra-table ra-country-table">
+    <table class="ra-table ra-country-table" style="--ra-row:{{ [12, [5.5, 130 / (entry_countries|length + 1)]|max]|min }}mm">
       <thead><tr><th>NO.</th><th class="left">{{ country_label }}</th></tr></thead>
       <tbody>
       {% for r in entry_countries %}<tr><td>{{ r.no }}</td><td class="left">{{ r.country }}</td></tr>{% endfor %}
@@ -177,10 +179,10 @@
   <section class="ra-sheet">
     <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
     <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
-    <div class="ra-date-center" style="margin-top:52mm;">{{ date_line }}</div>
+    <div class="ra-date-center" style="margin-top:40mm;margin-bottom:8mm;">{{ date_line }}</div>
     <div class="ra-section-left">{{ event_title }}</div>
     <div class="ra-section-left" style="margin-top:0;">QUALIFICATION ROUND 1</div>
-    <table class="ra-table ra-summary-table">
+    <table class="ra-table ra-summary-table" style="--ra-row:{{ [12, [5.5, 125 / (qf1_rows|length + 1)]|max]|min }}mm">
       <thead><tr><th>NO.</th><th class="left">{{ country_label }}</th><th>LANE</th><th>POINTS</th><th>RANK<br>(QF1)</th></tr></thead>
       <tbody>
       {% for r in qf1_rows %}<tr><td>{{ r.no }}</td><td class="left">{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.points }}</td><td>{{ r.rank }}</td></tr>{% endfor %}
@@ -234,10 +236,10 @@
   <section class="ra-sheet">
     <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
     <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
-    <div class="ra-date-center" style="margin-top:52mm;">{{ date_line }}</div>
+    <div class="ra-date-center" style="margin-top:40mm;margin-bottom:8mm;">{{ date_line }}</div>
     <div class="ra-section-left">{{ event_title }}</div>
     <div class="ra-section-left" style="margin-top:0;">QUALIFICATION ROUND 2</div>
-    <table class="ra-table ra-summary-table">
+    <table class="ra-table ra-summary-table" style="--ra-row:{{ [12, [5.5, 115 / (qf2_rows|length + 2)]|max]|min }}mm">
       <thead><tr><th>RANK<br>(QF1)</th><th class="left">{{ country_label }}</th><th>LANE</th><th colspan="3">POINTS</th><th>RANK<br>(QF2)</th></tr><tr><th></th><th></th><th></th><th>R1</th><th>R2</th><th>TOTAL</th><th></th></tr></thead>
       <tbody>
       {% for r in qf2_rows %}<tr><td>{{ r.qf1_rank }}</td><td class="left">{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.r1 }}</td><td>{{ r.r2 }}</td><td class="ra-total">{{ r.total }}</td><td>{{ r.qf2_rank }}</td></tr>{% endfor %}
