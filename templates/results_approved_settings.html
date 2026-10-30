@@ -12,7 +12,7 @@
       <input name="competition_title" value="{{ setting.competition_title or event.name }}">
     </label>
     <label>บรรทัดประเทศ/เจ้าภาพ
-      <input name="host_line" value="{{ setting.host_line or event.location }}">
+      <input name="host_line" value="{{ '' if (setting.host_line or '')|upper == 'THAILAND : THE KINGDOM OF THAILAND' else (setting.host_line or event.location or '') }}">
     </label>
     <label>วันที่บนเอกสาร
       <input name="date_line" value="{{ setting.date_line or event.competition_date }}">

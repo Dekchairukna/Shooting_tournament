@@ -6555,8 +6555,8 @@ def _ra_date_text(event: Event) -> str:
 def _ra_default_setting(event: Event) -> SimpleNamespace:
     return SimpleNamespace(
         event_id=event.id,
-        competition_title=(event.name or "33rd SEA GAMES THAILAND 2025").upper(),
-        host_line=(event.location or "THAILAND : THE KINGDOM OF THAILAND").upper(),
+        competition_title=(event.name or "PÉTANQUE SHOOTING").upper(),
+        host_line=(event.location or "").upper(),
         date_line=_ra_date_text(event),
         location_line=(event.location or "").upper(),
         country_label="COUNTRY",
@@ -7110,7 +7110,9 @@ def build_results_approved_context(event: Event) -> dict:
         "setting": setting,
         "use_split_names": use_split_names,
         "competition_title": _ra_setting_text(setting, "competition_title", event.name).upper(),
-        "host_line": _ra_setting_text(setting, "host_line", event.location).upper(),
+        # ค่าเริ่มต้นเก่าแบบซีเกมส์ที่เคยบันทึกไว้ ถือว่าไม่ได้ตั้ง
+        "host_line": ("" if _ra_setting_text(setting, "host_line", "").upper() == "THAILAND : THE KINGDOM OF THAILAND"
+                      else _ra_setting_text(setting, "host_line", event.location or "")).upper(),
         "date_line": _ra_setting_text(setting, "date_line", _ra_date_text(event)).upper(),
         "location_line": _ra_setting_text(setting, "location_line", event.location).upper(),
         "country_label": country_label,
@@ -7445,7 +7447,7 @@ def _ra_docx_match_table(doc, ctx, match_rows, with_rank=True):
         rows = []
         for side in ("a", "b"):
             rows.append([r["match_no"], r["lane"]] + ([r[f"rank_{side}"]] if with_rank else []) + [r[f"country_{side}"], r[f"name_{side}"], r.get(f"points_{side}_text") or r[f"points_{side}"]])
-        widths = [1.6, 1.4] + ([1.4] if with_rank else []) + [3.6, 4.6, 3.0]
+        widths = [1.7, 1.4, 1.4, 4.4, 4.6, 2.5] if with_rank else [1.7, 1.4, 5.6, 4.8, 2.5]
         table = _ra_docx_table(doc, headers, rows, widths_cm=widths, left_cols={len(headers) - 3, len(headers) - 2}, font_size=10)
         # ช่อง MATCH/LANE รวมสองแถวเป็นช่องเดียว และทำตัวหนาฝั่งผู้ชนะ
         for c in (0, 1):
@@ -7558,12 +7560,6 @@ def make_results_approved_docx(event: Event) -> BytesIO:
     if not ctx["athletes"]:
         out = BytesIO(); doc.save(out); out.seek(0)
         return out
-
-    # ---------- ประเทศที่ส่งเข้าแข่ง ----------
-    new_page()
-    paged_table([(event_title, 16), (date_line, 11)], ["NO.", ctx["country_label"]],
-                [[r["no"], r["country"]] for r in ctx["entry_countries"]],
-                per_page=32, widths_cm=[2.0, 8.0], left_cols={1}, font_size=11)
 
     # ---------- รายชื่อ (ชื่อเต็มตามที่ลงทะเบียน ไม่ตัดแยกนามสกุลเอง เพราะชื่อไทย/ต่างชาติเรียงไม่เหมือนกัน) ----------
     new_page()

@@ -98,7 +98,7 @@
     <img class="main-logo" src="{{ url_for('static', filename=logos.cover_main) }}" alt="logo">
     <div class="title-xl">{% for line in cover_title.replace('\\n', '\n').split('\n') %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
     <div class="date">{{ date_line }}</div>
-    <div class="host">{{ host_line }}</div>
+    {% if host_line %}<div class="host">{{ host_line }}</div>{% endif %}
     <div class="title-xxl">PÉTANQUE</div>
     <div class="bottom-logos">
       <img src="{{ url_for('static', filename=logos.cover_bottom_1) }}" alt="Logo 1">
@@ -138,23 +138,6 @@
   </section>
   {% endif %}
 
-  <section class="ra-sheet">
-    <div class="ra-logo-row">
-      <img src="{{ url_for('static', filename=logos.header_1) }}" alt="Header Logo 1">
-      <img src="{{ url_for('static', filename=logos.header_2) }}" alt="Header Logo 2">
-      <img src="{{ url_for('static', filename=logos.header_3) }}" alt="Header Logo 3">
-      <img src="{{ url_for('static', filename=logos.header_4) }}" alt="Header Logo 4">
-    </div>
-    <div class="ra-big-event-title">1. {{ event_title }}</div>
-    <div class="ra-date-center">{{ date_line }}</div>
-    <table class="ra-table ra-country-table" style="--ra-row:{{ [12, [5.5, 130 / (entry_countries|length + 1)]|max]|min }}mm">
-      <thead><tr><th>NO.</th><th class="left">{{ country_label }}</th></tr></thead>
-      <tbody>
-      {% for r in entry_countries %}<tr><td>{{ r.no }}</td><td class="left">{{ r.country }}</td></tr>{% endfor %}
-      </tbody>
-    </table>
-    <div class="ra-approved">{{ approved_text }}</div>
-  </section>
 
   <section class="ra-sheet">
     <div class="ra-logo-row">
