@@ -1,6 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
 <section id="bracketExportArea" class="card knockout-page">
+  <div class="bk-theme-header">
+    {% if site_theme.logo_url %}<img class="bk-theme-logo" src="{{ site_theme.logo_url }}" alt="{{ site_theme.short_name }}">{% endif %}
+    <div class="bk-theme-copy">
+      {% if site_theme.export_kicker %}<div class="bk-theme-kicker">{{ site_theme.export_kicker }}</div>{% endif %}
+      <div class="bk-theme-title">{{ site_theme.export_title or site_theme.title }}</div>
+      <div class="bk-theme-meta">{{ event.name }} · {{ event.event_group }} · {{ event.category }} · Knockout</div>
+    </div>
+    {% if site_theme.partners_url %}<img class="bk-theme-partners" src="{{ site_theme.partners_url }}" alt="Official partner logos">{% endif %}
+  </div>
   <div class="page-top">
     <div class="title-wrap">
       <p class="eyebrow">Tournament</p>
@@ -1793,6 +1802,57 @@
       </div>
     </div>
   </div></div>
+  <div class="bk-theme-footer">
+    <div class="bk-theme-footer-main">{{ site_theme.footer_tagline }}</div>
+    <div class="bk-theme-footer-event">{{ site_theme.footer_event or 'Petanque Shooting' }}</div>
+  </div>
+  <style>
+    /* ===== หัว/สีตามธีม (เหมือนหน้า Overview) ===== */
+    #bracketExportArea .bk-theme-header,#bracketExportArea .bk-theme-footer{display:none!important;}
+    #bracketExportArea.exporting-bracket .bk-theme-header{display:grid!important;}
+    #bracketExportArea.exporting-bracket .bk-theme-footer{display:flex!important;}
+    @media print{ #bracketExportArea .bk-theme-header{display:grid!important;} #bracketExportArea .bk-theme-footer{display:flex!important;}}
+    #bracketExportArea .bk-theme-header{
+      display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:18px;
+      margin:-4px -4px 14px;padding:16px 22px 26px;border-radius:18px 18px 0 0;color:#fff;
+      background:linear-gradient(115deg,var(--th-primary),var(--th-primary-light) 60%,var(--th-primary-dark));
+      border-bottom:5px solid var(--th-accent);position:relative;overflow:hidden;
+    }
+    #bracketExportArea .bk-theme-header:after{content:'';position:absolute;left:-3%;right:-3%;bottom:-17px;height:30px;
+      background:var(--th-cream,#fff);border-radius:50% 50% 0 0/100% 100% 0 0;}
+    #bracketExportArea .bk-theme-logo{width:110px;height:92px;object-fit:cover;border-radius:18px;border:2px solid rgba(255,255,255,.85);background:#fff;}
+    #bracketExportArea .bk-theme-copy{position:relative;z-index:1;min-width:0;}
+    #bracketExportArea .bk-theme-kicker{font-size:14px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;opacity:.95;}
+    #bracketExportArea .bk-theme-title{font-size:30px;line-height:1.05;font-weight:900;margin:3px 0 5px;}
+    #bracketExportArea .bk-theme-meta{font-size:14px;font-weight:800;letter-spacing:.03em;}
+    #bracketExportArea .bk-theme-partners{max-width:460px;width:100%;border-radius:14px;position:relative;z-index:1;}
+    #bracketExportArea .bk-theme-footer{justify-content:space-between;align-items:center;gap:18px;margin:14px -4px -4px;
+      padding:12px 22px;border-radius:0 0 18px 18px;color:#fff;font-weight:900;
+      background:linear-gradient(90deg,var(--th-primary),var(--th-primary-light) 58%,var(--th-accent));}
+    #bracketExportArea .bk-theme-footer-main{font-size:14px;letter-spacing:.14em;white-space:pre;}
+    #bracketExportArea .bk-theme-footer-event{font-size:13px;white-space:nowrap;}
+    @media(max-width:760px){
+      #bracketExportArea .bk-theme-header{grid-template-columns:auto 1fr;padding:12px 14px 22px;}
+      #bracketExportArea .bk-theme-partners{display:none;}
+      #bracketExportArea .bk-theme-logo{width:64px;height:54px;border-radius:12px;}
+      #bracketExportArea .bk-theme-title{font-size:20px;}
+      #bracketExportArea .bk-theme-meta{font-size:11px;}
+    }
+    #bracketExportArea .round-col .round-title{
+      background:linear-gradient(90deg,var(--th-primary),var(--th-primary-light))!important;
+      color:#fff!important;border-color:transparent!important;
+    }
+    #bracketExportArea .round-col.final .round-title{
+      background:linear-gradient(90deg,var(--th-primary-dark),var(--th-accent))!important;
+    }
+    #bracketExportArea .match-box{border-color:rgba(var(--th-primary-rgb),.28)!important;}
+    #bracketExportArea .match-title{color:var(--th-primary)!important;}
+    #bracketExportArea .match-row thead th{
+      background:rgba(var(--th-primary-rgb),.09)!important;color:var(--th-primary-dark)!important;
+    }
+    #bracketExportArea .match-row tr.winner-row td{background:rgba(var(--th-primary-rgb),.12)!important;color:var(--th-primary-dark)!important;}
+    #bracketExportArea .bracket-board .connector,#bracketExportArea .bracket-board [class*="line"]{border-color:rgba(var(--th-primary-rgb),.45)!important;}
+  </style>
 </section>
 {% endblock %}
 
