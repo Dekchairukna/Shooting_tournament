@@ -106,5 +106,27 @@ class BracketTieTests(unittest.TestCase):
         self.assertIn("คีย์คู่นี้", c.get(f"/events/{self.e.id}/bracket").get_data(as_text=True))
 
 
+    def test_finish_tie_jumps_to_tiebreak(self):
+        boss = User(username="boss2", role="superadmin", password_hash="!UNSET!"); db.session.add(boss); db.session.commit()
+        self.admin = boss
+        c = self.client()
+        g.pop("shooting_request_cache", None)
+        c.get(f"/events/{self.e.id}/bracket")
+        m = BracketMatch.query.filter_by(event_id=self.e.id, round_name="QF", match_no=2).one()
+        for aid in (m.athlete_a_id, m.athlete_b_id):
+            for st in range(1, 6):
+                for d in (6, 7, 8, 9):
+                    c.post(f"/api/scorecard/{aid}/autosave", json={"round_no": 3, "station_no": st, "distance_m": d,
+                           "score": "3" if d == 6 else "0", "red": False, "played": True, "page_token": f"t{aid}"})
+        g.pop("shooting_request_cache", None)
+        c.post(f"/athletes/{m.athlete_a_id}/scorecard?round=3", data={})
+        g.pop("shooting_request_cache", None)
+        r = c.post(f"/athletes/{m.athlete_b_id}/scorecard?round=3", data={})
+        self.assertIn("/tiebreak", r.location)  # จบจาก Scorecard รายคน: คนที่สองจบแล้วเสมอ → เด้งไปเที่ยวพิเศษ
+        g.pop("shooting_request_cache", None)
+        r = c.get(f"/events/{self.e.id}/match/{m.id}")
+        self.assertEqual(r.status_code, 302); self.assertIn("/tiebreak", r.location)
+
+
 if __name__ == "__main__":
     unittest.main()

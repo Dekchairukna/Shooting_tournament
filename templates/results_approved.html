@@ -18,6 +18,11 @@
 .ra-left-logo{position:absolute;left:12mm;top:16mm;width:33mm;}
 .ra-cover{text-align:center;}
 .ra-cover .main-logo{width:52mm;margin:12mm auto 9mm;display:block;}
+.ra-match-table tr.ra-win td{font-weight:800;}
+.ra-ko-compact .ra-date-center{margin-top:36mm !important;margin-bottom:6mm;}
+.ra-ko-compact .ra-section-left{margin:6mm 0 3mm;}
+.ra-ko-compact .ra-match-table{margin:2mm auto 5mm;font-size:15px;}
+.ra-note{font-size:11px;margin-top:3mm;color:#333;}
 .ra-cover .title-xl{font-size:28px;font-weight:900;line-height:1.35;margin:7mm 0;}
 .ra-cover .title-xxl{font-size:34px;font-weight:900;line-height:1.25;margin:18mm 0 8mm;}
 .ra-cover .date{font-size:18px;font-weight:700;margin:10mm 0;}
@@ -65,7 +70,9 @@
 @media print{
   @page{size:A4 portrait;margin:0;}
   body{background:#fff!important;}
-  .ra-toolbar,.navbar-custom,.flashes{display:none!important;}
+  .ra-toolbar,.navbar-custom,.flashes,.championship-hero,footer{display:none!important;}
+  .ra-sheet{min-height:0;height:297mm;}
+  .ra-sheet.landscape{height:210mm;}
   .container-main{padding:0!important;margin:0!important;max-width:none!important;}
   .ra-sheet{box-shadow:none;margin:0;page-break-after:always;}
   .ra-sheet.landscape{page:ra-landscape;}
@@ -81,12 +88,12 @@
     {% endif %}
     <a class="ra-btn primary" href="{{ url_for('results_approved_docx', event_id=event.id) }}">ดาวน์โหลด DOCX</a>
     <button class="ra-btn" onclick="window.print()">พิมพ์ / Save PDF</button>
-    <span class="text-muted">SEA Games Style: {{ event_title }}</span>
+    <span class="text-muted">{{ event_title }}</span>
   </div>
 
   <section class="ra-sheet ra-cover">
     <img class="main-logo" src="{{ url_for('static', filename=logos.cover_main) }}" alt="logo">
-    <div class="title-xl">SEA GAMES<br>THAILAND</div>
+    <div class="title-xl">{% for line in cover_title.replace('\\n', '\n').split('\n') %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
     <div class="date">{{ date_line }}</div>
     <div class="host">{{ host_line }}</div>
     <div class="title-xxl">PÉTANQUE</div>
@@ -99,7 +106,7 @@
     <div style="font-size:14px;font-weight:800;">APPROVED</div>
   </section>
 
-  {% if setting.show_official_pages %}
+  {% if setting.show_official_pages and has_officials %}
   <section class="ra-sheet">
     <div class="ra-logo-row">
       <img src="{{ url_for('static', filename=logos.header_1) }}" alt="Header Logo 1">
@@ -108,21 +115,23 @@
       <img src="{{ url_for('static', filename=logos.header_4) }}" alt="Header Logo 4">
     </div>
     <div class="ra-head"><div class="competition">{{ competition_title }}</div></div>
+    {% if setting.president_name %}
     <div class="ra-official-title">{{ setting.president_title }}</div>
-    <div class="ra-official-name">{{ setting.president_name or ' ' }}</div>
+    <div class="ra-official-name">{{ setting.president_name }}</div>
+    {% endif %}
+    {% if setting.technical_name %}
     <div class="ra-official-title">{{ setting.technical_title }}</div>
-    <div class="ra-official-name">{{ setting.technical_name or ' ' }}</div>
+    <div class="ra-official-name">{{ setting.technical_name }}</div>
+    {% endif %}
+    {% if umpire_rows %}
     <div class="ra-official-title" style="font-size:24px;margin-top:8mm">UMPIRE</div>
     <table class="ra-table" style="font-size:15px;">
       <thead><tr><th style="width:14%">NO</th><th>FAMILY NAME - GIVEN NAME</th><th style="width:28%">FEDERATION</th></tr></thead>
       <tbody>
-      {% if umpire_rows %}
         {% for r in umpire_rows %}<tr><td>{{ r.no }}</td><td class="left">{{ r.name }}</td><td>{{ r.federation }}</td></tr>{% endfor %}
-      {% else %}
-        {% for i in range(1,9) %}<tr><td>{{ i }}</td><td class="left">&nbsp;</td><td>&nbsp;</td></tr>{% endfor %}
-      {% endif %}
       </tbody>
     </table>
+    {% endif %}
   </section>
   {% endif %}
 
@@ -281,29 +290,26 @@
   </section>
   {% endif %}
 
-  {% if semifinal_rows or final_rows or other_ko_rows %}
-  <section class="ra-sheet">
+  {% for title, rows in ko_sections %}
+  {% set n_matches = rows|selectattr('athlete_a')|selectattr('athlete_b')|list|length %}
+  <section class="ra-sheet{% if n_matches > 2 %} ra-ko-compact{% endif %}">
     <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
     <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
     <div class="ra-date-center" style="margin-top:48mm;">{{ date_line }}</div>
     <div class="ra-section-left">{{ event_title }}</div>
-    {% for r in semifinal_rows %}
-      {% if loop.first %}<div class="ra-section-left" style="margin-top:0;">SEMIFINAL ROUND</div>{% endif %}
-      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th><th>RANK</th><th>{{ country_label }}</th><th>POINTS</th></tr></thead><tbody>
-        <tr><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td><td>{{ r.rank_a }}</td><td>{{ r.country_a }}</td><td>{{ r.points_a }}</td></tr>
-        <tr><td>{{ r.rank_b }}</td><td>{{ r.country_b }}</td><td>{{ r.points_b }}</td></tr>
+    <div class="ra-section-left" style="margin-top:0;">{{ title }}</div>
+    {% set with_rank = title != 'FINAL ROUND' %}
+    {% for r in rows if r.athlete_a and r.athlete_b %}
+      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th>{% if with_rank %}<th>RANK</th>{% endif %}<th>{{ country_label }}</th><th>NAME</th><th>POINTS</th></tr></thead><tbody>
+        <tr class="{% if r.winner_side == 'a' %}ra-win{% endif %}"><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td>{% if with_rank %}<td>{{ r.rank_a }}</td>{% endif %}<td>{{ r.country_a }}</td><td class="left">{{ r.name_a }}</td><td>{{ r.points_a_text }}</td></tr>
+        <tr class="{% if r.winner_side == 'b' %}ra-win{% endif %}">{% if with_rank %}<td>{{ r.rank_b }}</td>{% endif %}<td>{{ r.country_b }}</td><td class="left">{{ r.name_b }}</td><td>{{ r.points_b_text }}</td></tr>
       </tbody></table>
     {% endfor %}
-    {% for r in final_rows %}
-      {% if loop.first %}<div class="ra-section-left" style="margin-top:8mm;">FINAL ROUND</div>{% endif %}
-      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th><th>{{ country_label }}</th><th>POINTS</th></tr></thead><tbody>
-        <tr><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td><td>{{ r.country_a }}</td><td>{{ r.points_a }}</td></tr>
-        <tr><td>{{ r.country_b }}</td><td>{{ r.points_b }}</td></tr>
-      </tbody></table>
-    {% endfor %}
+    <div class="ra-note">ตัวหนา = ผู้ชนะ{% if rows|selectattr('has_tiebreak')|list %} · ผลเสมอหลังครบ 5 สถานี ตัดสินด้วยเที่ยวพิเศษ: 7M = ตี 7 เมตรทุกสถานี, SD = Sudden death{% endif %}</div>
     <div class="ra-approved">{{ approved_text }}</div>
   </section>
-  {% endif %}
+  {% endfor %}
+
 
   <section class="ra-sheet">
     <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
@@ -316,10 +322,30 @@
     <table class="ra-table ra-medal-table clean">
       <thead><tr><th>MEDAL</th><th>{{ country_label }}</th>{% if use_split_names %}<th>FAMILY NAME</th><th>GIVEN NAME</th>{% else %}<th>NAME</th>{% endif %}</tr></thead>
       <tbody>
-      {% for r in medal_rows %}<tr><td><b>{{ r.medal }}</b></td><td>{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ (r.athlete.name or '')|upper }}</td>{% endif %}</tr>{% endfor %}
+      {% for r in medal_rows %}<tr><td><b>{{ r.medal }}</b></td><td>{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ r.name }}</td>{% endif %}</tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>
   </section>
+
+  {% if final_ranking_rows %}
+  <section class="ra-sheet">
+    <img class="ra-left-logo" src="{{ url_for('static', filename=logos.side) }}" alt="Side Logo">
+    <div class="ra-top-right">{{ competition_title }}<br>{{ date_line }}<br>PÉTANQUE</div>
+    <div class="ra-head" style="margin-top:38mm;">
+      <h1>FINAL RANKING</h1>
+      <h2>{{ event_title }}</h2>
+      <h3>{{ date_line }}</h3>
+    </div>
+    <table class="ra-table clean">
+      <thead><tr><th>RANK</th><th>MEDAL</th><th>{{ country_label }}</th><th>NAME</th></tr></thead>
+      <tbody>
+      {% for r in final_ranking_rows %}<tr><td><b>{{ r.rank }}</b></td><td>{{ r.medal }}</td><td>{{ r.country }}</td><td class="left">{{ r.name }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <div class="ra-note">WD = ถอนตัว (Withdrawn) · DQ = ตัดออกจากการแข่งขัน (Disqualified)</div>
+    <div class="ra-approved">{{ approved_text }}</div>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

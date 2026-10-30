@@ -2,9 +2,12 @@
 {% block title %}ตั้งค่า Results Approved{% endblock %}
 {% block content %}
 <section class="card narrow" style="max-width:960px;margin:auto;">
-  <h1>ตั้งค่า Results Approved SEA Games Style</h1>
+  <h1>ตั้งค่า Results Approved</h1>
   <p class="muted">ตั้งค่าข้อความหัวเอกสารและรายชื่อกรรมการสำหรับ {{ event.name }}</p>
   <form method="post" class="form-grid form-wide" enctype="multipart/form-data">
+    <label>ข้อความใหญ่บนปก (เว้นว่าง = ใช้ชื่องานหน้าเครื่องหมาย ·)
+      <input name="cover_title" value="{{ setting.cover_title or '' }}" placeholder="เช่น คำมอกหลวงเกมส์">
+    </label>
     <label>ชื่อการแข่งขัน / Competition Title
       <input name="competition_title" value="{{ setting.competition_title or event.name }}">
     </label>

@@ -593,6 +593,7 @@ class ResultsApprovedSetting(db.Model):
     umpires_text = db.Column(db.Text, nullable=True)
     approved_text = db.Column(db.String(255), nullable=False, default="……………………………APPROVED")
     show_official_pages = db.Column(db.Boolean, nullable=False, default=True)
+    cover_title = db.Column(db.String(255), nullable=True)
     # single = คอลัมน์ NAME เดียว (ค่าเริ่มต้น), first = คำแรกเป็นนามสกุล, last = คำสุดท้ายเป็นนามสกุล
     name_format = db.Column(db.String(10), nullable=False, default="single")
     cover_main_logo_path = db.Column(db.String(255), nullable=True)
@@ -861,6 +862,7 @@ def ensure_schema() -> None:
                 "header_logo_4_path": "VARCHAR(255)",
                 "side_logo_path": "VARCHAR(255)",
                 "name_format": "VARCHAR(10)",
+                "cover_title": "VARCHAR(255)",
             }
             for col, col_type in ra_logo_columns.items():
                 conn.exec_driver_sql(f'ALTER TABLE "results_approved_setting" ADD COLUMN IF NOT EXISTS {col} {col_type}')
@@ -1007,6 +1009,7 @@ def ensure_schema() -> None:
             "header_logo_4_path": "VARCHAR(255)",
             "side_logo_path": "VARCHAR(255)",
             "name_format": "VARCHAR(10) DEFAULT 'single'",
+            "cover_title": "VARCHAR(255)",
         }
         for col, col_type in ra_logo_columns.items():
             if col not in ra_columns:
@@ -5735,6 +5738,16 @@ def scorecard(athlete_id: int):
                 if match:
                     sync_match_winner_from_scores(match)
                     maybe_advance_bracket(event)
+                    clear_request_cache()
+                    tie = None if match.winner_id else bracket_tie_state(match, round_no)
+                    both_done = all(
+                        (get_round_signature(aid, round_no) and get_round_signature(aid, round_no).finished_at)
+                        for aid in (match.athlete_a_id, match.athlete_b_id) if aid)
+                    if both_done and tie in ("need_7m", "need_sudden"):
+                        # คะแนนเท่ากัน: เด้งไปหน้าเที่ยวพิเศษทันที
+                        flash("คะแนนเท่ากัน · ตีเที่ยวพิเศษ 7 เมตรทุกสถานี" if tie == "need_7m" else "ยังเสมอ · ตี Sudden death", "warning")
+                        return redirect(url_for("event_tiebreak", event_id=event.id, round=round_no,
+                                                ids=f"{match.athlete_a_id},{match.athlete_b_id}", next="bracket"))
 
                 flash("จบการตีเรียบร้อย", "success")
                 return redirect(url_for("bracket", event_id=event.id))
@@ -6184,7 +6197,7 @@ def tiebreak(athlete_id: int):
 
 @app.route("/events/<int:event_id>/tiebreak", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "superadmin")
+@role_required("admin", "superadmin", "court")
 def event_tiebreak(event_id: int):
     event = Event.query.get_or_404(event_id)
     round_no = int(request.values.get("round", request.args.get("round", 1)) or 1)
@@ -6194,6 +6207,10 @@ def event_tiebreak(event_id: int):
         if part.isdigit():
             athlete_ids.append(int(part))
     athletes = Athlete.query.filter(Athlete.event_id == event.id, Athlete.id.in_(athlete_ids)).order_by(Athlete.start_order, Athlete.id).all() if athlete_ids else []
+    if is_court_user() and not (round_no >= 3 and athletes and any(court_can_access_athlete(a, round_no) for a in athletes)):
+        # กรรมการสนามกรอกเที่ยวพิเศษได้เฉพาะคู่ Knockout ในสนามตัวเอง
+        flash("บัญชีสนามกรอกเที่ยวพิเศษได้เฉพาะคู่ Knockout ในสนามตัวเอง", "warning")
+        return redirect(url_for("bracket", event_id=event.id))
     if not athletes:
         flash("กรุณาเลือกนักกีฬาที่ต้องตี Sudden death อย่างน้อย 2 คน", "warning")
         return redirect(url_for("event_overview", event_id=event.id, round=round_no))
@@ -6312,6 +6329,9 @@ def match_scoring(event_id: int, match_id: int):
         })
     titles = {"R16": "Round of 16", "QF": "QF", "SF": "SF", "F": "Final"}
     tie = bracket_tie_state(match, round_no) if all(p["finished"] for p in players) else None
+    if not match.winner_id and tie in ("need_7m", "need_sudden"):
+        return redirect(url_for("event_tiebreak", event_id=event.id, round=round_no,
+                                ids=f"{match.athlete_a_id},{match.athlete_b_id}", next="bracket"))
     return render_template(
         "match_scoring.html", event=event, match=match, round_no=round_no, players=players,
         title=f"{titles.get(match.round_name, match.round_name)} {match.match_no}",
@@ -6455,8 +6475,74 @@ def _ra_text(value, default="") -> str:
 
 
 def _ra_event_title(event: Event) -> str:
-    raw = " ".join([event.event_group or "", event.category or "", event.name or ""]).strip()
-    return (raw or event.name or "PÉTANQUE SHOOTING").upper()
+    """ชื่อรายการบนเอกสาร: เติมรุ่น/เพศข้างหน้าเฉพาะเมื่อชื่ออีเวนต์ยังไม่มีคำนั้น (กันชื่อซ้ำซ้อน)"""
+    name = (event.name or "").strip()
+    lowered = name.lower()
+    prefix = [p.strip() for p in (event.event_group or "", event.category or "") if p and p.strip() and p.strip().lower() not in lowered]
+    raw = " ".join(prefix + [name]).strip()
+    return (raw or "PÉTANQUE SHOOTING").upper()
+
+
+def _ra_cover_title(setting, event: Event) -> str:
+    """ข้อความใหญ่บนปก: ใช้ค่าที่ตั้งไว้ ถ้าไม่ได้ตั้ง ใช้ชื่องานส่วนหน้าเครื่องหมาย · (เช่น คำมอกหลวงเกมส์)"""
+    value = (getattr(setting, "cover_title", None) or "").strip()
+    if value:
+        return value
+    name = (event.name or "").strip()
+    for sep in ("·", "•", "|"):
+        if sep in name:
+            head = name.split(sep, 1)[0].strip()
+            if head:
+                return head
+    return name or "PÉTANQUE SHOOTING"
+
+
+def _ra_person_name(athlete) -> str:
+    """ชื่อนักกีฬา (ถ้าลงทะเบียนเป็นชื่อสังกัดแทนชื่อคน ถือว่ายังไม่มีชื่อ)"""
+    if not athlete:
+        return ""
+    name = (athlete.name or "").strip()
+    if not name or name.lower() == (athlete.affiliation or "").strip().lower():
+        return ""
+    return name.upper()
+
+
+def _ra_status_mark(athlete, summary: dict | None = None) -> str:
+    """WD = ถอนตัว, DQ = ตัดออกจากการแข่งขัน, ว่าง = ปกติ"""
+    if athlete and bool(getattr(athlete, "withdrawn", False)):
+        return "WD"
+    if summary and summary.get("withdrawn"):
+        return "WD"
+    if summary and summary.get("disqualified"):
+        return "DQ"
+    return ""
+
+
+def _ra_tiebreak_parts(athlete_id: int | None, round_no: int) -> dict:
+    """คะแนนเที่ยวพิเศษของนักกีฬาในรอบหนึ่ง: m7 = เที่ยว 7 เมตรทุกสถานี (เที่ยวแรก), sd = Sudden death แต่ละเที่ยว"""
+    if not athlete_id:
+        return {"m7": None, "sd": []}
+    entries = TieBreakEntry.query.filter_by(athlete_id=athlete_id, round_no=round_no).order_by(TieBreakEntry.id.asc()).all()
+    if not entries:
+        return {"m7": None, "sd": []}
+    by_station: dict[int, list[int]] = {}
+    for e in entries:
+        by_station.setdefault(e.station_no, []).append(int(e.score or 0))
+    attempts = max(len(v) for v in by_station.values())
+    totals = [sum(v[i] for v in by_station.values() if i < len(v)) for i in range(attempts)]
+    return {"m7": totals[0], "sd": totals[1:]}
+
+
+def _ra_points_text(points, tb: dict) -> str:
+    text = str(points)
+    extra = []
+    if tb.get("m7") is not None:
+        extra.append(f"7M {tb['m7']}")
+    for i, v in enumerate(tb.get("sd") or [], start=1):
+        extra.append(f"SD{i if len(tb['sd']) > 1 else ''} {v}")
+    if extra:
+        text += " (" + " · ".join(extra) + ")"
+    return text
 
 
 def _ra_date_text(event: Event) -> str:
@@ -6481,6 +6567,7 @@ def _ra_default_setting(event: Event) -> SimpleNamespace:
         umpires_text="",
         approved_text="……………………………APPROVED",
         show_official_pages=True,
+        cover_title=None,
         cover_main_logo_path=None,
         cover_bottom_logo_1_path=None,
         cover_bottom_logo_2_path=None,
@@ -6792,6 +6879,73 @@ def _ra_build_medal_rows(event: Event, bracket_matches: list[BracketMatch], fall
     return fallback
 
 
+def _ra_final_ranking_rows(event: Event, bracket_matches: list, round1_ranking: list[dict], qualifiers: list[dict] | None) -> list[dict]:
+    """อันดับสุดท้ายทั้งรายการ: ชนะเลิศ 1, รองฯ 2, แพ้รองฯ ร่วม 3, แพ้ QF ร่วม 5, แพ้ R16 ร่วม 9
+    คนที่ไม่ผ่านรอบคัดเลือกเรียงตามผลคัดเลือกต่อจากนั้น ส่วนถอนตัว/DQ อยู่ท้ายสุด"""
+    final = next((m for m in bracket_matches if m.round_name == "F"), None)
+    if not final or not final.winner_id:
+        return []
+    placed: dict[int, int] = {}
+    placed[final.winner_id] = 1
+    silver = _ra_loser(final)
+    if silver:
+        placed[silver.id] = 2
+    shared_rank = {"SF": 3, "QF": 5, "R16": 9}
+    for round_name in ("SF", "QF", "R16"):
+        for m in bracket_matches:
+            if m.round_name != round_name:
+                continue
+            loser = _ra_loser(m)
+            if loser and loser.id not in placed:
+                placed[loser.id] = shared_rank[round_name]
+    for m in bracket_matches:
+        for aid in (m.athlete_a_id, m.athlete_b_id):
+            if aid and aid not in placed:
+                placed[aid] = shared_rank.get(m.round_name, len(placed) + 1)
+
+    order = []
+    seen = set()
+    qual_rank: dict[int, str] = {}
+    for row in list(qualifiers or []) + list(round1_ranking or []):
+        athlete = row.get("athlete") if isinstance(row, dict) else None
+        if athlete and athlete.id not in seen:
+            seen.add(athlete.id)
+            order.append(athlete)
+            qual_rank[athlete.id] = _ra_athlete_rank(row)
+    for athlete in sorted(event.athletes, key=lambda a: (a.start_order or 999999, a.id)):
+        if athlete.id not in seen:
+            seen.add(athlete.id)
+            order.append(athlete)
+
+    rows = []
+    medal_by_rank = {1: "GOLD", 2: "SILVER", 3: "BRONZE"}
+    for athlete in sorted((a for a in order if a.id in placed), key=lambda a: (placed[a.id], order.index(a))):
+        rank = placed[athlete.id]
+        rows.append({"rank": rank, "medal": medal_by_rank.get(rank, ""), "athlete": athlete})
+    next_rank = len(rows) + 1
+    tail = []
+    prev_q, prev_rank = None, None
+    for athlete in order:
+        if athlete.id in placed:
+            continue
+        mark = _ra_status_mark(athlete, summarize_round(athlete.id, 1))
+        if mark:
+            tail.append({"rank": mark, "medal": "", "athlete": athlete})
+            continue
+        q = qual_rank.get(athlete.id) or None
+        # คะแนนคัดเลือกเท่ากันจนแยกไม่ได้ (อันดับคัดเลือกเดียวกัน) = อันดับร่วม
+        rank = prev_rank if (q and q == prev_q) else next_rank
+        rows.append({"rank": rank, "medal": "", "athlete": athlete})
+        prev_q, prev_rank = q, rank
+        next_rank += 1
+    rows.extend(tail)
+    for r in rows:
+        a = r["athlete"]
+        r["country"] = (a.affiliation or "").upper()
+        r["name"] = _ra_person_name(a)
+    return rows
+
+
 def build_results_approved_context(event: Event) -> dict:
     """เตรียมข้อมูลรายงาน Results Approved SEA Games style จากข้อมูลจริงในระบบ"""
     preload_event_score_data(event)
@@ -6823,27 +6977,30 @@ def build_results_approved_context(event: Event) -> dict:
             "country": (athlete.affiliation or "").upper(),
             "family_name": family,
             "given_name": given,
-            "name": (athlete.name or "").upper(),
+            "name": _ra_person_name(athlete) or ("WITHDRAWN / ถอนตัว" if _ra_status_mark(athlete) == "WD" else ""),
         })
         row = round1_by_id.get(athlete.id)
         summary = summarize_round(athlete.id, 1)
-        rank = _ra_athlete_rank(row)
+        mark = _ra_status_mark(athlete, summary)
+        rank = mark or _ra_athlete_rank(row)
         qf1_rows.append({
             "no": athlete.start_order,
             "country": (athlete.affiliation or "").upper(),
-            "name": (athlete.name or "").upper(),
-            "lane": athlete.lane_no,
-            "points": summary.get("total", 0),
+            "name": _ra_person_name(athlete),
+            "lane": court_name(event, athlete.lane_no),
+            "points": mark or summary.get("total", 0),
             "rank": rank,
+            "mark": mark,
         })
         qf1_detail_rows.append({
             "rank": rank,
             "country": (athlete.affiliation or "").upper(),
-            "name": (athlete.name or "").upper(),
+            "name": _ra_person_name(athlete),
             "station_groups": _ra_station_groups(summary),
             "stations": _ra_station_cells(summary),
             "distance_cells": _ra_distance_cells(summary),
-            "total": summary.get("total", 0),
+            "total": mark or summary.get("total", 0),
+            "mark": mark,
         })
 
     qf2_rows = []
@@ -6894,24 +7051,36 @@ def build_results_approved_context(event: Event) -> dict:
             seed_map[athlete.id] = idx
 
     bracket_rows = []
+    lane_count = max(event.lane_count or 1, 1)
     for match in bracket_matches:
         athlete_a = Athlete.query.get(match.athlete_a_id) if match.athlete_a_id else None
         athlete_b = Athlete.query.get(match.athlete_b_id) if match.athlete_b_id else None
+        ko_round_no = bracket_round_to_scorecard_round(match.round_name, event)
+        points_a = _ra_match_score(event, match, match.athlete_a_id)
+        points_b = _ra_match_score(event, match, match.athlete_b_id)
+        tb_a = _ra_tiebreak_parts(match.athlete_a_id, ko_round_no)
+        tb_b = _ra_tiebreak_parts(match.athlete_b_id, ko_round_no)
         bracket_rows.append({
             "round_name": match.round_name,
             "round_label": {"R16": "ROUND OF 16", "QF": "QUARTERFINAL ROUND", "SF": "SEMIFINAL ROUND", "F": "FINAL ROUND"}.get(match.round_name, match.round_name),
             "match_no": match.match_no,
-            "lane": match.match_no,
+            "lane": court_name(event, ((match.match_no - 1) % lane_count) + 1),
             "athlete_a": athlete_a,
             "athlete_b": athlete_b,
             "rank_a": seed_map.get(match.athlete_a_id, ""),
             "rank_b": seed_map.get(match.athlete_b_id, ""),
             "country_a": (athlete_a.affiliation if athlete_a else "").upper(),
             "country_b": (athlete_b.affiliation if athlete_b else "").upper(),
-            "name_a": (athlete_a.name if athlete_a else "").upper(),
-            "name_b": (athlete_b.name if athlete_b else "").upper(),
-            "points_a": _ra_match_score(event, match, match.athlete_a_id),
-            "points_b": _ra_match_score(event, match, match.athlete_b_id),
+            "name_a": _ra_person_name(athlete_a),
+            "name_b": _ra_person_name(athlete_b),
+            "points_a": points_a,
+            "points_b": points_b,
+            "tb_a": tb_a,
+            "tb_b": tb_b,
+            "points_a_text": _ra_points_text(points_a, tb_a) if athlete_a else "",
+            "points_b_text": _ra_points_text(points_b, tb_b) if athlete_b else "",
+            "has_tiebreak": tb_a["m7"] is not None or tb_b["m7"] is not None,
+            "winner_side": ("a" if athlete_a and match.winner_id == athlete_a.id else ("b" if athlete_b and match.winner_id == athlete_b.id else "")),
             "winner_id": match.winner_id,
         })
 
@@ -6924,9 +7093,12 @@ def build_results_approved_context(event: Event) -> dict:
             "medal": r["medal"],
             "athlete": athlete,
             "country": (athlete.affiliation or "").upper(),
+            "name": _ra_person_name(athlete),
             "family_name": family,
             "given_name": given,
         })
+
+    final_ranking_rows = _ra_final_ranking_rows(event, bracket_matches, round1_ranking, fallback_qualifiers)
 
     # ชื่อนักกีฬาในระบบเก็บเป็นช่องเดียว จะแยก FAMILY / GIVEN ได้ก็ต่อเมื่อชื่อมีมากกว่า 1 คำ
     # ถ้าทั้งอีเวนต์ไม่มีชื่อที่แยกได้ (เช่น ลงทะเบียนเป็นชื่อประเทศ/ชื่อเดียว) ให้ใช้คอลัมน์ NAME เดียว
@@ -6955,6 +7127,14 @@ def build_results_approved_context(event: Event) -> dict:
         "qf2_rows": qf2_rows,
         "qf2_detail_rows": qf2_detail_rows,
         "bracket_rows": bracket_rows,
+        "final_ranking_rows": final_ranking_rows,
+        "cover_title": _ra_cover_title(setting, event),
+        "has_officials": bool(_ra_setting_text(setting, "president_name", "") or _ra_setting_text(setting, "technical_name", "") or _ra_umpire_rows(setting)),
+        "ko_sections": [
+            (title, [r for r in bracket_rows if r["round_name"] == key])
+            for key, title in (("R16", "ROUND OF 16"), ("QF", "QUARTERFINAL ROUND"), ("SF", "SEMIFINAL ROUND"), ("F", "FINAL ROUND"))
+            if any(r["round_name"] == key and r["athlete_a"] and r["athlete_b"] for r in bracket_rows)
+        ],
         "semifinal_rows": [r for r in bracket_rows if r["round_name"] == "SF"],
         "final_rows": [r for r in bracket_rows if r["round_name"] == "F"],
         "other_ko_rows": [r for r in bracket_rows if r["round_name"] not in {"SF", "F"}],
@@ -7034,7 +7214,7 @@ def _ra_docx_add_table(doc, headers, rows, align_left_cols: set[int] | None = No
 
 
 def _ra_has_any_score(rows: list[dict], key: str = "points") -> bool:
-    return any(int(r.get(key) or 0) > 0 for r in rows)
+    return any(isinstance(r.get(key), int) and r.get(key) > 0 for r in rows)
 
 
 def _ra_setup_section(section, landscape: bool = False):
@@ -7264,8 +7444,8 @@ def _ra_docx_match_table(doc, ctx, match_rows, with_rank=True):
         headers = ["MATCH", "LANE"] + (["RANK"] if with_rank else []) + [ctx["country_label"], "NAME", "POINTS"]
         rows = []
         for side in ("a", "b"):
-            rows.append([r["match_no"], r["lane"]] + ([r[f"rank_{side}"]] if with_rank else []) + [r[f"country_{side}"], r[f"name_{side}"], r[f"points_{side}"]])
-        widths = [2.0, 1.6] + ([1.6] if with_rank else []) + [3.6, 5.0, 1.9]
+            rows.append([r["match_no"], r["lane"]] + ([r[f"rank_{side}"]] if with_rank else []) + [r[f"country_{side}"], r[f"name_{side}"], r.get(f"points_{side}_text") or r[f"points_{side}"]])
+        widths = [1.6, 1.4] + ([1.4] if with_rank else []) + [3.6, 4.6, 3.0]
         table = _ra_docx_table(doc, headers, rows, widths_cm=widths, left_cols={len(headers) - 3, len(headers) - 2}, font_size=10)
         # ช่อง MATCH/LANE รวมสองแถวเป็นช่องเดียว และทำตัวหนาฝั่งผู้ชนะ
         for c in (0, 1):
@@ -7348,7 +7528,8 @@ def make_results_approved_docx(event: Event) -> BytesIO:
     # ---------- ปก (ใช้ข้อความจากหน้าตั้งค่า ไม่ฝังคำว่า SEA GAMES ตายตัว) ----------
     doc.add_paragraph().paragraph_format.space_after = Pt(40)
     _ra_docx_add_center_image(doc, logos.get("cover_main"), width_inches=1.6)
-    _ra_docx_page_title(doc, [(ctx["competition_title"], 20), (date_line, 12), (ctx["host_line"], 12)])
+    _ra_docx_page_title(doc, [(line, 22) for line in ctx["cover_title"].replace("\\n", "\n").split("\n") if line.strip()]
+                        + [(ctx["competition_title"], 13), (date_line, 12), (ctx["host_line"], 12)])
     doc.add_paragraph().paragraph_format.space_after = Pt(24)
     _ra_docx_add_title(doc, "PÉTANQUE", 26)
     _ra_docx_add_title(doc, event_title, 14)
@@ -7446,6 +7627,10 @@ def make_results_approved_docx(event: Event) -> BytesIO:
             run.bold = True
             run.font.size = Pt(12)
             _ra_docx_match_table(doc, ctx, rows, with_rank=title != "FINAL ROUND")
+            if any(r.get("has_tiebreak") for r in rows):
+                note = doc.add_paragraph()
+                nr = note.add_run("ผลเสมอหลังครบ 5 สถานี ตัดสินด้วยเที่ยวพิเศษ · 7M = ตี 7 เมตรทุกสถานี · SD = Sudden death")
+                nr.font.size = Pt(8)
         _ra_docx_approved_block(doc, approved)
 
     # ---------- ผลอันดับ/เหรียญ: เฉพาะเมื่อรอบชิงมีผู้ชนะแล้วจริง (ไม่เดาจากอันดับรอบคัดเลือก) ----------
@@ -7459,9 +7644,17 @@ def make_results_approved_docx(event: Event) -> BytesIO:
                            widths_cm=[2.8, 4.0, 4.4, 4.4], left_cols={1, 2, 3}, font_size=11, row_height_cm=1.1)
         else:
             _ra_docx_table(doc, ["MEDAL", ctx["country_label"], "NAME"],
-                           [[r["medal"], r["country"], (r["athlete"].name or "").upper()] for r in ctx["medal_rows"]],
+                           [[r["medal"], r["country"], r["name"]] for r in ctx["medal_rows"]],
                            widths_cm=[3.0, 4.6, 8.0], left_cols={1, 2}, font_size=11, row_height_cm=1.1)
         _ra_docx_approved_block(doc, approved)
+
+    # ---------- อันดับสุดท้ายทั้งรายการ ----------
+    if final_done and ctx["final_ranking_rows"]:
+        new_page()
+        paged_table([("FINAL RANKING", 16), (event_title, 13), (date_line, 10)],
+                    ["RANK", "MEDAL", ctx["country_label"], "NAME"],
+                    [[r["rank"], r["medal"], r["country"], r["name"]] for r in ctx["final_ranking_rows"]],
+                    per_page=32, widths_cm=[1.6, 2.4, 5.0, 7.0], left_cols={2, 3}, font_size=10)
 
     out = BytesIO()
     doc.save(out)
@@ -7490,6 +7683,7 @@ def results_approved_settings(event_id: int):
         setting.umpires_text = request.form.get("umpires_text", "").strip()
         setting.approved_text = request.form.get("approved_text", "").strip() or "……………………………APPROVED"
         setting.show_official_pages = request.form.get("show_official_pages") == "yes"
+        setting.cover_title = request.form.get("cover_title", "").strip() or None
         for field_name, attr in RESULTS_APPROVED_LOGO_FIELDS.items():
             if request.form.get(f"clear_{field_name}") == "yes":
                 setattr(setting, attr, None)

@@ -71,6 +71,8 @@
     <div class="tabs" id="tabs">{% for st in [1,2,3,4,5] %}<button type="button" data-st="{{ st }}">สถานี {{ st }}</button>{% endfor %}</div>
     <div class="stn" style="margin-top:12px;"><h2 id="stnTitle"></h2><small>แตะคะแนนของแต่ละระยะ · บันทึกอัตโนมัติทุกครั้งที่แตะ</small></div>
     <div id="lockWarn" class="warn" hidden></div>
+    <div id="tieWarn" class="warn" hidden style="background:#fef3c7;border-color:#fde68a;color:#92400e;font-size:1.1rem;text-align:center;">
+      ตีครบ 5 สถานีแล้วคะแนนเท่ากัน · กด <b>จบการตีทั้งคู่</b> ด้านล่าง ระบบจะพาไปหน้าตีเที่ยวพิเศษ 7 เมตรทันที</div>
     <div class="grid" id="grid">
       <div></div><div class="h">{{ players[0].name }}</div><div class="h hb">{{ players[1].name }}</div>
     </div>
@@ -130,6 +132,8 @@
       b.classList.toggle('on', st === cur);
       b.classList.toggle('done', st !== cur && stationDone(st));
     });
+    const allDone = [1,2,3,4,5].every(stationDone);
+    document.getElementById('tieWarn').hidden = !(allDone && t[0] === t[1]);
     const pill = document.getElementById('livePill');
     if (pill) pill.textContent = 'กำลังแข่งขัน · สถานี ' + cur;
   }
