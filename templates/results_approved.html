@@ -64,7 +64,8 @@
 .ra-qualified-box td{border:1px solid #222;padding:4px 6px;text-align:center;}
 .ra-qualified-box .label{font-size:18px;font-weight:900;color:#8b0069;}
 .ra-section-left{font-size:23px;font-weight:900;margin:18mm 0 5mm;}
-.ra-match-table{width:95%;margin:5mm auto 11mm;font-size:17px;}
+.ra-match-table{width:95%;table-layout:fixed;margin:5mm auto 11mm;font-size:17px;}
+.ra-match-table td{overflow-wrap:anywhere;}
 .ra-medal-table{font-size:17px;margin-top:15mm;}
 .ra-medal-table td{height:22mm;border-left:none;border-right:none;}
 .ra-medal-table th{border-left:none;border-right:none;}
@@ -302,7 +303,10 @@
     <div class="ra-section-left" style="margin-top:0;">{{ title }}</div>
     {% set with_rank = title != 'FINAL ROUND' %}
     {% for r in rows if r.athlete_a and r.athlete_b %}
-      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th>{% if with_rank %}<th>RANK</th>{% endif %}<th class="left">{{ country_label }}</th><th class="left">NAME</th><th>POINTS</th></tr></thead><tbody>
+      <table class="ra-table ra-match-table">
+        {% if with_rank %}<colgroup><col style="width:11%"><col style="width:9%"><col style="width:9%"><col style="width:29%"><col style="width:29%"><col style="width:13%"></colgroup>
+        {% else %}<colgroup><col style="width:11%"><col style="width:9%"><col style="width:34%"><col style="width:33%"><col style="width:13%"></colgroup>{% endif %}
+        <thead><tr><th>MATCH</th><th>LANE</th>{% if with_rank %}<th>RANK</th>{% endif %}<th class="left">{{ country_label }}</th><th class="left">NAME</th><th>POINTS</th></tr></thead><tbody>
         <tr class="{% if r.winner_side == 'a' %}ra-win{% endif %}"><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td>{% if with_rank %}<td>{{ r.rank_a }}</td>{% endif %}<td class="left">{{ r.country_a }}</td><td class="left">{{ r.name_a }}</td><td>{{ r.points_a_text }}</td></tr>
         <tr class="{% if r.winner_side == 'b' %}ra-win{% endif %}">{% if with_rank %}<td>{{ r.rank_b }}</td>{% endif %}<td class="left">{{ r.country_b }}</td><td class="left">{{ r.name_b }}</td><td>{{ r.points_b_text }}</td></tr>
       </tbody></table>
