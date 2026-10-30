@@ -114,6 +114,28 @@ class ResultsApprovedTests(unittest.TestCase):
         for needle in ("QUARTERFINAL ROUND", "11 (7M 3)", "FINAL RANKING", "คำมอกหลวงเกมส์", "WD"):
             self.assertIn(needle, text)
 
+    def test_apply_to_sibling_events(self):
+        other = Event(name="คำมอกหลวงเกมส์ · กีฬาเปตอง Shooting ม.ปลาย หญิง", event_group="ม.ปลาย", category="หญิง",
+                      competition_date=date(2026, 10, 24), location="", lane_count=6)
+        stranger = Event(name="ภูพานเกมส์ · Shooting", event_group="x", category="ชาย", competition_date=date(2026, 10, 24), location="", lane_count=6)
+        db.session.add_all([other, stranger]); db.session.commit()
+        c = self.client()
+        page = c.get(f"/events/{self.e.id}/results-approved/settings").get_data(as_text=True)
+        self.assertIn("apply_siblings", page)
+        token = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
+        title = 'กีฬาสาธิตสามัคคี ครั้งที่ 49 "คำมอกหลวงเกมส์"'
+        r = c.post(f"/events/{self.e.id}/results-approved/settings", data={
+            "csrf_token": token, "competition_title": title, "date_line": "24 OCTOBER 2026", "country_label": "SCHOOL",
+            "apply_siblings": "yes", "show_official_pages": "yes", "name_format": "single"})
+        self.assertEqual(r.status_code, 302)
+        from app import ResultsApprovedSetting
+        got = {s.event_id: s.competition_title for s in ResultsApprovedSetting.query.all()}
+        self.assertEqual(got.get(self.e.id), title)
+        self.assertEqual(got.get(other.id), title)
+        self.assertNotIn(stranger.id, got)
+        with app.test_request_context():
+            self.assertIn(title, build_results_approved_context(other)["competition_title"])
+
 
 if __name__ == "__main__":
     unittest.main()

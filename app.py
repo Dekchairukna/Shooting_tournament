@@ -7670,6 +7670,21 @@ def make_results_approved_docx(event: Event) -> BytesIO:
     return out
 
 
+def _ra_sibling_events(event: Event) -> list:
+    """อีเวนต์ในงานเดียวกัน = ชื่อขึ้นต้นเหมือนกันก่อนเครื่องหมาย · (เช่น คำมอกหลวงเกมส์ · ...)"""
+    name = (event.name or "").strip()
+    head = ""
+    for sep in ("·", "•", "|"):
+        if sep in name:
+            head = name.split(sep, 1)[0].strip()
+            break
+    if not head:
+        return []
+    others = Event.query.filter(Event.id != event.id).order_by(Event.id).all()
+    return [e for e in others if (e.name or "").strip().startswith(head) and any(sep in (e.name or "") for sep in ("·", "•", "|"))
+            and (e.name or "").split(next(sep for sep in ("·", "•", "|") if sep in e.name), 1)[0].strip() == head]
+
+
 @app.route("/events/<int:event_id>/results-approved/settings", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "superadmin")
@@ -7698,8 +7713,18 @@ def results_approved_settings(event_id: int):
             saved_logo = _ra_save_uploaded_logo(event.id, field_name)
             if saved_logo:
                 setattr(setting, attr, saved_logo)
+        applied = 0
+        if request.form.get("apply_siblings") == "yes":
+            shared = ["cover_title", "competition_title", "host_line", "location_line", "country_label", "approved_text",
+                      "president_title", "president_name", "technical_title", "technical_name", "umpires_text",
+                      "show_official_pages", "name_format"]
+            for other in _ra_sibling_events(event):
+                other_setting = get_results_approved_setting(other, create=True)
+                for attr in shared:
+                    setattr(other_setting, attr, getattr(setting, attr))
+                applied += 1
         db.session.commit()
-        flash("บันทึกตั้งค่า Results Approved แล้ว", "success")
+        flash("บันทึกตั้งค่า Results Approved แล้ว" + (f" (ใช้กับอีกอีเวนต์ในงานเดียวกัน {applied} รายการ)" if applied else ""), "success")
         return redirect(url_for("results_approved", event_id=event.id))
     logo_field_labels = [
         ("cover_main_logo", "โลโก้หลักบนปก"),
@@ -7716,6 +7741,7 @@ def results_approved_settings(event_id: int):
         "results_approved_settings.html",
         event=event,
         setting=setting,
+        sibling_events=_ra_sibling_events(event),
         logos=_ra_logo_map(setting),
         logo_field_labels=logo_field_labels,
     )

@@ -87,6 +87,13 @@
     <label style="grid-column:1/-1;">รายชื่อกรรมการ Umpire <small class="muted">ใส่บรรทัดละ 1 คน รูปแบบ: ชื่อ | สังกัด เช่น MR. SOMCHAI JAIDEE | ABSC</small>
       <textarea name="umpires_text" rows="10" placeholder="MR. JEAN-LUC FUENTES (HEAD) | F.I.P.J.P&#10;MR. SOMCHAI JAIDEE | THAILAND">{{ setting.umpires_text or '' }}</textarea>
     </label>
+    {% if sibling_events %}
+    <label style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-start;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:10px 12px;">
+      <input type="checkbox" name="apply_siblings" value="yes" checked style="width:auto;margin-top:3px;">
+      <span>ใช้ <b>ข้อความใหญ่บนปก / ชื่อการแข่งขัน (หัวเอกสาร) / บรรทัดเจ้าภาพ / สถานที่ / หัวคอลัมน์ / ข้อความ APPROVED / กรรมการ</b> กับอีเวนต์อื่นในงานเดียวกันด้วย ({{ sibling_events|length }} อีเวนต์:
+        {% for ev in sibling_events %}{{ ev.event_group }} {{ ev.category }}{% if not loop.last %}, {% endif %}{% endfor %})</span>
+    </label>
+    {% endif %}
     <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;">
       <button class="btn" type="submit">บันทึกตั้งค่า</button>
       <a class="btn secondary" href="{{ url_for('results_approved', event_id=event.id) }}">กลับ Results Approved</a>
