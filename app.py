@@ -7370,7 +7370,7 @@ def _ra_docx_table(doc, headers, rows, widths_cm=None, left_cols=None, font_size
     hdr = table.rows[0]
     mark_row(hdr, is_header=True)
     for i, h in enumerate(headers):
-        _ra_docx_set_cell_text(hdr.cells[i], h, bold=True, size_pt=font_size)
+        _ra_docx_set_cell_text(hdr.cells[i], h, bold=True, size_pt=font_size, **({"align": "left"} if i in left_cols else {}))
         _ra_docx_shade(hdr.cells[i], header_fill)
         hdr.cells[i].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     for values in rows:
@@ -7563,7 +7563,7 @@ def make_results_approved_docx(event: Event) -> BytesIO:
     new_page()
     paged_table([(event_title, 16), (date_line, 11)], ["NO.", ctx["country_label"]],
                 [[r["no"], r["country"]] for r in ctx["entry_countries"]],
-                per_page=32, widths_cm=[2.0, 8.0], font_size=11)
+                per_page=32, widths_cm=[2.0, 8.0], left_cols={1}, font_size=11)
 
     # ---------- รายชื่อ (ชื่อเต็มตามที่ลงทะเบียน ไม่ตัดแยกนามสกุลเอง เพราะชื่อไทย/ต่างชาติเรียงไม่เหมือนกัน) ----------
     new_page()

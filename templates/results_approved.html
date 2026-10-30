@@ -41,7 +41,7 @@
 .ra-table{width:100%;border-collapse:collapse;margin:6mm auto 0;font-size:15px;}
 .ra-table th,.ra-table td{border:1px solid #222;padding:6px 7px;vertical-align:middle;text-align:center;}
 .ra-table th{background:#d9d9d9;font-weight:900;}
-.ra-table td.left,.ra-table th.left{text-align:left;}
+.ra-table td.left,.ra-table th.left{text-align:left;padding-left:4mm;}
 .ra-table.clean th,.ra-table.clean td{border-left:none;border-right:none;border-top:none;padding:9px 8px;}
 .ra-table.clean th{border-top:1px solid #222;border-bottom:1px solid #222;background:#d9d9d9;}
 .ra-table.clean td{border-bottom:none;}
@@ -145,9 +145,9 @@
     <div class="ra-big-event-title">1. {{ event_title }}</div>
     <div class="ra-date-center">{{ date_line }}</div>
     <table class="ra-table ra-country-table">
-      <thead><tr><th>NO.</th><th>{{ country_label }}</th></tr></thead>
+      <thead><tr><th>NO.</th><th class="left">{{ country_label }}</th></tr></thead>
       <tbody>
-      {% for r in entry_countries %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td></tr>{% endfor %}
+      {% for r in entry_countries %}<tr><td>{{ r.no }}</td><td class="left">{{ r.country }}</td></tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>
@@ -166,9 +166,9 @@
     </div>
     <table class="ra-table clean">
       {# ไม่มีชื่อที่แยกนามสกุลได้ในอีเวนต์นี้ ก็ไม่ต้องมีคอลัมน์ว่าง #}
-      <thead><tr><th>NO.</th><th>{{ country_label }}</th>{% if use_split_names %}<th>FAMILY NAME</th><th>GIVEN NAME</th>{% else %}<th>NAME</th>{% endif %}</tr></thead>
+      <thead><tr><th>NO.</th><th class="left">{{ country_label }}</th>{% if use_split_names %}<th>FAMILY NAME</th><th>GIVEN NAME</th>{% else %}<th class="left">NAME</th>{% endif %}</tr></thead>
       <tbody>
-      {% for r in name_rows %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ r.name }}</td>{% endif %}</tr>{% endfor %}
+      {% for r in name_rows %}<tr><td>{{ r.no }}</td><td class="left">{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ r.name }}</td>{% endif %}</tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>
@@ -181,9 +181,9 @@
     <div class="ra-section-left">{{ event_title }}</div>
     <div class="ra-section-left" style="margin-top:0;">QUALIFICATION ROUND 1</div>
     <table class="ra-table ra-summary-table">
-      <thead><tr><th>NO.</th><th>{{ country_label }}</th><th>LANE</th><th>POINTS</th><th>RANK<br>(QF1)</th></tr></thead>
+      <thead><tr><th>NO.</th><th class="left">{{ country_label }}</th><th>LANE</th><th>POINTS</th><th>RANK<br>(QF1)</th></tr></thead>
       <tbody>
-      {% for r in qf1_rows %}<tr><td>{{ r.no }}</td><td>{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.points }}</td><td>{{ r.rank }}</td></tr>{% endfor %}
+      {% for r in qf1_rows %}<tr><td>{{ r.no }}</td><td class="left">{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.points }}</td><td>{{ r.rank }}</td></tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>
@@ -238,9 +238,9 @@
     <div class="ra-section-left">{{ event_title }}</div>
     <div class="ra-section-left" style="margin-top:0;">QUALIFICATION ROUND 2</div>
     <table class="ra-table ra-summary-table">
-      <thead><tr><th>RANK<br>(QF1)</th><th>{{ country_label }}</th><th>LANE</th><th colspan="3">POINTS</th><th>RANK<br>(QF2)</th></tr><tr><th></th><th></th><th></th><th>R1</th><th>R2</th><th>TOTAL</th><th></th></tr></thead>
+      <thead><tr><th>RANK<br>(QF1)</th><th class="left">{{ country_label }}</th><th>LANE</th><th colspan="3">POINTS</th><th>RANK<br>(QF2)</th></tr><tr><th></th><th></th><th></th><th>R1</th><th>R2</th><th>TOTAL</th><th></th></tr></thead>
       <tbody>
-      {% for r in qf2_rows %}<tr><td>{{ r.qf1_rank }}</td><td>{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.r1 }}</td><td>{{ r.r2 }}</td><td class="ra-total">{{ r.total }}</td><td>{{ r.qf2_rank }}</td></tr>{% endfor %}
+      {% for r in qf2_rows %}<tr><td>{{ r.qf1_rank }}</td><td class="left">{{ r.country }}</td><td>{{ r.lane }}</td><td>{{ r.r1 }}</td><td>{{ r.r2 }}</td><td class="ra-total">{{ r.total }}</td><td>{{ r.qf2_rank }}</td></tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>
@@ -261,7 +261,7 @@
     {% if direct_rows %}
       <table class="ra-qualified-box">
         <tr><td colspan="4" class="label">Qualified to 1/2 final</td></tr>
-        {% for r in direct_rows %}<tr><td>{{ r.athlete.affiliation|upper }}</td><td class="left">{{ r.athlete.name|upper }}</td><td>{{ r.round1_total }}</td><td>{{ r.round1_rank }}</td></tr>{% endfor %}
+        {% for r in direct_rows %}<tr><td class="left">{{ r.athlete.affiliation|upper }}</td><td class="left">{{ r.athlete.name|upper }}</td><td>{{ r.round1_total }}</td><td>{{ r.round1_rank }}</td></tr>{% endfor %}
       </table>
     {% endif %}
     <table class="ra-table ra-station-table">
@@ -300,9 +300,9 @@
     <div class="ra-section-left" style="margin-top:0;">{{ title }}</div>
     {% set with_rank = title != 'FINAL ROUND' %}
     {% for r in rows if r.athlete_a and r.athlete_b %}
-      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th>{% if with_rank %}<th>RANK</th>{% endif %}<th>{{ country_label }}</th><th>NAME</th><th>POINTS</th></tr></thead><tbody>
-        <tr class="{% if r.winner_side == 'a' %}ra-win{% endif %}"><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td>{% if with_rank %}<td>{{ r.rank_a }}</td>{% endif %}<td>{{ r.country_a }}</td><td class="left">{{ r.name_a }}</td><td>{{ r.points_a_text }}</td></tr>
-        <tr class="{% if r.winner_side == 'b' %}ra-win{% endif %}">{% if with_rank %}<td>{{ r.rank_b }}</td>{% endif %}<td>{{ r.country_b }}</td><td class="left">{{ r.name_b }}</td><td>{{ r.points_b_text }}</td></tr>
+      <table class="ra-table ra-match-table"><thead><tr><th>MATCH</th><th>LANE</th>{% if with_rank %}<th>RANK</th>{% endif %}<th class="left">{{ country_label }}</th><th class="left">NAME</th><th>POINTS</th></tr></thead><tbody>
+        <tr class="{% if r.winner_side == 'a' %}ra-win{% endif %}"><td rowspan="2">{{ r.match_no }}</td><td rowspan="2">{{ r.lane }}</td>{% if with_rank %}<td>{{ r.rank_a }}</td>{% endif %}<td class="left">{{ r.country_a }}</td><td class="left">{{ r.name_a }}</td><td>{{ r.points_a_text }}</td></tr>
+        <tr class="{% if r.winner_side == 'b' %}ra-win{% endif %}">{% if with_rank %}<td>{{ r.rank_b }}</td>{% endif %}<td class="left">{{ r.country_b }}</td><td class="left">{{ r.name_b }}</td><td>{{ r.points_b_text }}</td></tr>
       </tbody></table>
     {% endfor %}
     <div class="ra-note">ตัวหนา = ผู้ชนะ{% if rows|selectattr('has_tiebreak')|list %} · ผลเสมอหลังครบ 5 สถานี ตัดสินด้วยเที่ยวพิเศษ: 7M = ตี 7 เมตรทุกสถานี, SD = Sudden death{% endif %}</div>
@@ -320,9 +320,9 @@
       <h3>{{ date_line }}</h3>
     </div>
     <table class="ra-table ra-medal-table clean">
-      <thead><tr><th>MEDAL</th><th>{{ country_label }}</th>{% if use_split_names %}<th>FAMILY NAME</th><th>GIVEN NAME</th>{% else %}<th>NAME</th>{% endif %}</tr></thead>
+      <thead><tr><th>MEDAL</th><th class="left">{{ country_label }}</th>{% if use_split_names %}<th>FAMILY NAME</th><th>GIVEN NAME</th>{% else %}<th class="left">NAME</th>{% endif %}</tr></thead>
       <tbody>
-      {% for r in medal_rows %}<tr><td><b>{{ r.medal }}</b></td><td>{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ r.name }}</td>{% endif %}</tr>{% endfor %}
+      {% for r in medal_rows %}<tr><td><b>{{ r.medal }}</b></td><td class="left">{{ r.country }}</td>{% if use_split_names %}<td class="left">{{ r.family_name }}</td><td class="left">{{ r.given_name }}</td>{% else %}<td class="left">{{ r.name }}</td>{% endif %}</tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-approved">{{ approved_text }}</div>
@@ -338,9 +338,9 @@
       <h3>{{ date_line }}</h3>
     </div>
     <table class="ra-table clean">
-      <thead><tr><th>RANK</th><th>MEDAL</th><th>{{ country_label }}</th><th>NAME</th></tr></thead>
+      <thead><tr><th>RANK</th><th>MEDAL</th><th class="left">{{ country_label }}</th><th class="left">NAME</th></tr></thead>
       <tbody>
-      {% for r in final_ranking_rows %}<tr><td><b>{{ r.rank }}</b></td><td>{{ r.medal }}</td><td>{{ r.country }}</td><td class="left">{{ r.name }}</td></tr>{% endfor %}
+      {% for r in final_ranking_rows %}<tr><td><b>{{ r.rank }}</b></td><td>{{ r.medal }}</td><td class="left">{{ r.country }}</td><td class="left">{{ r.name }}</td></tr>{% endfor %}
       </tbody>
     </table>
     <div class="ra-note">WD = ถอนตัว (Withdrawn) · DQ = ตัดออกจากการแข่งขัน (Disqualified)</div>
