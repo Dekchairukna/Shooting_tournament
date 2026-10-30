@@ -2900,6 +2900,17 @@ def lane_for_order(event, order: int) -> tuple[int, int]:
     return event_lane_start(event) + (order - 1) % lanes, (order - 1) // lanes + 1
 
 
+def event_file_stem(event, suffix: str = "") -> str:
+    """ชื่อไฟล์จากชื่ออีเวนต์ (ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้) เช่น คำมอกหลวงเกมส์ - กีฬาเปตอง Shooting ม.ปลาย ชาย"""
+    import re as _re
+    name = (getattr(event, "name", "") or f"event_{getattr(event, 'id', '')}").strip()
+    name = name.replace("·", "-").replace("•", "-")
+    name = _re.sub(r'[\\/:*?"<>|\r\n\t]+', " ", name)
+    name = _re.sub(r"\s+", " ", name).strip(" .-") or f"event_{getattr(event, 'id', '')}"
+    stem = f"{name} - {suffix}" if suffix else name
+    return stem[:150]
+
+
 def court_name(event, lane) -> str:
     """ชื่อสนามที่แสดง: ตัวเลข หรือ ตัวอักษร (1=A, 2=B ...) ถ้าอีเวนต์เปิด court_letters"""
     if lane in (None, "", "-"):
@@ -2914,6 +2925,7 @@ def court_name(event, lane) -> str:
 
 
 app.jinja_env.globals["court_name"] = court_name
+app.jinja_env.globals["event_file_stem"] = event_file_stem
 
 
 def recalculate_event_orders(event: Event) -> None:
@@ -4981,8 +4993,8 @@ def event_overview_excel(event_id: int):
         return send_file(
             official_stream,
             as_attachment=True,
-            download_name=(f"event_{event.id}_QF_Final{'_values' if static else ''}.xlsx" if focus
-                           else f"event_{event.id}_round_{round_no}_official_results{'_values' if static else ''}.xlsx"),
+            download_name=(event_file_stem(event, "QF Final" + (" (ไม่มีสูตร)" if static else "")) + ".xlsx" if focus
+                           else event_file_stem(event, f"Round {round_no}" + (" (ไม่มีสูตร)" if static else "")) + ".xlsx"),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
@@ -5183,7 +5195,7 @@ def event_overview_excel(event_id: int):
     return send_file(
         stream,
         as_attachment=True,
-        download_name=f"event_{event.id}_round_{round_no}_results.xlsx",
+        download_name=event_file_stem(event, f"Round {round_no}") + ".xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -6431,7 +6443,7 @@ def bracket_excel(event_id: int):
     for idx, row in enumerate(qualifiers, start=1):
         ws.append([idx, row["athlete"].name, row["athlete"].affiliation, row.get("round1_total", row["total"]), row.get("round2_total", ""), row["total"]])
     stream = BytesIO(); wb.save(stream); stream.seek(0)
-    return send_file(stream, as_attachment=True, download_name=f"event_{event.id}_bracket.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(stream, as_attachment=True, download_name=event_file_stem(event, "Bracket") + ".xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @app.route("/events/<int:event_id>/bracket_data")
 @shared_poll_cache
@@ -7726,7 +7738,7 @@ def results_approved_docx(event_id: int):
     except ModuleNotFoundError:
         flash("ยังไม่ได้ติดตั้ง python-docx ให้รัน: python -m pip install -r requirements.txt", "warning")
         return redirect(url_for("results_approved", event_id=event.id))
-    filename = f"results_approved_event_{event.id}.docx"
+    filename = event_file_stem(event, "Results Approved") + ".docx"
     return send_file(
         stream,
         as_attachment=True,

@@ -106,6 +106,7 @@ class ResultsApprovedTests(unittest.TestCase):
         self.assertNotIn("UMPIRE", html)  # ยังไม่กรอกกรรมการ ไม่พิมพ์หน้าว่าง
         r = self.client().get(f"/events/{self.e.id}/results-approved.docx")
         self.assertEqual(r.status_code, 200)
+        self.assertIn("filename*=UTF-8''%E0%B8%84%E0%B8%B3", r.headers["Content-Disposition"])  # ชื่อไฟล์ = ชื่ออีเวนต์
         from docx import Document
         from io import BytesIO
         doc = Document(BytesIO(r.data))

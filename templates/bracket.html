@@ -2062,7 +2062,7 @@ function downloadBracketImage(){
     logging: false
   })).then(canvas => {
     const a = document.createElement('a');
-    a.download = `shooting-bracket-{{ event.id }}.png`;
+    a.download = {{ (event_file_stem(event, 'Bracket') ~ '.png')|tojson }};
     a.href = canvas.toDataURL('image/png');
     a.click();
   }).catch(() => {
