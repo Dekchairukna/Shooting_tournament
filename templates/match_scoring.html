@@ -59,7 +59,7 @@
       {% for p in players %}
       {% if loop.index == 2 %}<div class="vs">VS</div>{% endif %}
       <div class="side {{ 'b' if loop.index == 2 }}" id="side{{ loop.index0 }}">
-        <b>{{ p.name }}</b><span>{{ p.affiliation }}{% if p.seed %} · Seed {{ p.seed }}{% endif %}{% if p.finished %} · ตีจบแล้ว{% endif %}</span>
+        <b>{{ p.name }}</b><span><span class="aff-flag">{{ p.affiliation }}</span>{% if p.seed %} · Seed {{ p.seed }}{% endif %}{% if p.finished %} · ตีจบแล้ว{% endif %}</span>
         <div class="big" id="tot{{ loop.index0 }}">0</div>
         <div class="sts" id="sts{{ loop.index0 }}">{% for st in [1,2,3,4,5] %}<i data-st="{{ st }}">-</i>{% endfor %}</div>
       </div>

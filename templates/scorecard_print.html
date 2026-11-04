@@ -536,7 +536,7 @@
 
       <div class="athlete-meta">
         <div class="meta-item"><strong>ลำดับการตี:</strong> {{ display_order or athlete.start_order }}</div>
-        <div class="meta-item"><strong>สังกัด:</strong> {{ athlete.affiliation }}</div>
+        <div class="meta-item"><strong>สังกัด:</strong> <span class="aff-flag">{{ athlete.affiliation }}</span></div>
         <div class="meta-item"><strong>ชื่อ:</strong> {{ athlete.name }}</div>
         <div class="meta-item"><strong>สนาม:</strong> {{ court_name(event, display_lane_no or athlete.lane_no) }}/{{ display_lane_order or athlete.lane_order }}</div>
       </div>

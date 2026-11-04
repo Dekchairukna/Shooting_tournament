@@ -12,7 +12,7 @@
     <p class="muted" style="margin:0;">ใส่คะแนนรวมที่ถูกต้องของแต่ละสถานี แล้วกด "บันทึกแก้ไข" ระบบจะแทนที่ของเดิมทั้งกลุ่ม (เก็บประวัติไว้)</p>
     {% for a in athletes %}
     <div class="tiebreak-athlete-card">
-      <div class="athlete-head"><strong>{{ a.name }}</strong><span>{{ a.affiliation or '-' }} · บันทึกไว้ {{ attempts.get(a.id, 0) }} เที่ยว · รวม {{ existing.get(a.id, {}).values()|sum }}</span></div>
+      <div class="athlete-head"><strong>{{ a.name }}</strong><span><span class="aff-flag">{{ a.affiliation or '-' }}</span> · บันทึกไว้ {{ attempts.get(a.id, 0) }} เที่ยว · รวม {{ existing.get(a.id, {}).values()|sum }}</span></div>
       <div class="tiebreak-grid">
         {% for station in [1,2,3,4,5] %}
         <label>สถานี {{ station }}
@@ -38,7 +38,7 @@
     {% set stn = ['ยิงลูกเดี่ยว','ยิงลูกเหนือลูกเป้า','ยิงลูกกลางขาว','ยิงลูกสีขาวเหนือลูกดำ','ยิงลูกเป้า'] %}
     <div class="tbx" style="--n: {{ athletes|length }};">
       <div class="tbx-row tbx-head"><div></div>
-        {% for a in athletes %}<div class="tbx-p"><b>{{ a.name }}</b><span>{{ a.affiliation or '-' }}{% if has_existing is defined and has_existing %} · เที่ยวก่อนรวม {{ existing.get(a.id, {}).values()|sum }}{% endif %}</span></div>{% endfor %}
+        {% for a in athletes %}<div class="tbx-p"><b>{{ a.name }}</b><span><span class="aff-flag">{{ a.affiliation or '-' }}</span>{% if has_existing is defined and has_existing %} · เที่ยวก่อนรวม {{ existing.get(a.id, {}).values()|sum }}{% endif %}</span></div>{% endfor %}
       </div>
       {% for station in [1,2,3,4,5] %}
       <div class="tbx-row">
@@ -62,7 +62,7 @@
     <div class="tiebreak-athlete-card">
       <div class="athlete-head">
         <strong>{{ athlete.name }}</strong>
-        <span>{{ athlete.affiliation or '-' }}</span>
+        <span><span class="aff-flag">{{ athlete.affiliation or '-' }}</span></span>
       </div>
       <div class="tiebreak-grid">
         {% for station in [1,2,3,4,5] %}

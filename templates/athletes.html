@@ -108,7 +108,7 @@
         <td>{{ athlete.start_order }}</td>
         <td>{{ athlete.bib_no }}</td>
         <td>{{ athlete.name }}{% if athlete.withdrawn %} <span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-weight:800;border-radius:999px;padding:1px 8px;font-size:.8rem;">ถอนตัว</span>{% endif %}</td>
-        <td>{{ athlete.affiliation }}</td>
+        <td><span class="aff-flag">{{ athlete.affiliation }}</span></td>
         <td>{{ court_name(event, athlete.lane_no) }}</td>
         <td>{{ athlete.lane_order }}</td>
         {% if event.has_round_two %}

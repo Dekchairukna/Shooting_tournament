@@ -82,7 +82,7 @@
         {% if row.is_next %}<span class="cq-next-label">{{ 'กำลังตี' if row.status == 'active' else 'คนถัดไป' }}</span>{% endif %}
         {% if chain and row.event %}<div class="cq-cat" style="--cat:{{ ['#2563eb','#db2777','#16a34a','#ea580c','#7c3aed','#0891b2','#ca8a04','#dc2626','#4f46e5','#059669'][((row.event.chain_position or 1) - 1) % 10] }}">{{ row.event.name }}</div>{% endif %}
         <div class="cq-name">{{ a.name }}</div>
-        <div class="cq-aff">{{ a.affiliation }}{% if a.bib_no %} · #{{ a.bib_no }}{% endif %}</div>
+        <div class="cq-aff"><span class="aff-flag">{{ a.affiliation }}</span>{% if a.bib_no %} · #{{ a.bib_no }}{% endif %}</div>
         <span class="cq-status">
           {% if row.approved %}รับรองผลแล้ว{% elif row.status == 'finished' %}ตีจบแล้ว{% elif row.status == 'active' %}กำลังตี{% else %}รอคิว{% endif %}
         </span>

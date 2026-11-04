@@ -65,7 +65,7 @@
           {% for lane in r.lanes %}
           <div class="lane">
             <h4>สนาม {{ lane.lane_no }}</h4>
-            <ol>{% for a in lane.athletes %}<li>{{ a.name }} <small>· {{ a.affiliation }}</small></li>{% endfor %}</ol>
+            <ol>{% for a in lane.athletes %}<li>{{ a.name }} <small>· <span class="aff-flag">{{ a.affiliation }}</span></small></li>{% endfor %}</ol>
           </div>
           {% endfor %}
         </div>

@@ -456,7 +456,7 @@
       {% if stats.top_score %}
       <div class="highlight-box">
         <h3>คะแนนสูงสุดในระบบ</h3>
-        <p><strong>{{ stats.top_score.athlete.name }}</strong> — {{ stats.top_score.athlete.affiliation }}</p>
+        <p><strong>{{ stats.top_score.athlete.name }}</strong> — <span class="aff-flag">{{ stats.top_score.athlete.affiliation }}</span></p>
         <p>{{ stats.top_score.total }} คะแนน</p>
       </div>
       {% endif %}
@@ -478,7 +478,7 @@
           <tbody>
             {% for row in stats.top_affiliations %}
             <tr>
-              <td>{{ row.athlete.affiliation }}</td>
+              <td><span class="aff-flag">{{ row.athlete.affiliation }}</span></td>
               <td>{{ row.athlete.name }}</td>
               <td>{{ row.total }}</td>
             </tr>
@@ -505,6 +505,10 @@
       <div>
         <h2>รายการแข่งขัน</h2>
         <div class="muted">เลือกดูหน้ารวม สถิติ และจัดการนักกีฬาได้จากตารางนี้</div>
+        {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] and hidden_count %}
+        <div class="muted" style="margin-top:4px;">🙈 ซ่อนไว้ {{ hidden_count }} อีเวนต์ ·
+          {% if show_hidden %}<a href="{{ url_for('index') }}">ซ่อนจากรายการ</a>{% else %}<a href="{{ url_for('index', show_hidden=1) }}">แสดงที่ซ่อนไว้</a>{% endif %}</div>
+        {% endif %}
       </div>
 
       {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
@@ -525,6 +529,9 @@
           {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
           <button class="btn secondary" type="button" data-selection-action="round2">🗂 ผังเข้ารอบ 2</button>
           <button class="btn" type="button" data-selection-action="settings">⚙️ ตั้งค่าร่วมกัน</button>
+          <button class="btn secondary" type="button" data-visibility-action="only">👁 แสดงเฉพาะที่เลือก</button>
+          <button class="btn secondary" type="button" data-visibility-action="hide">🙈 ซ่อนที่เลือก</button>
+          <button class="btn secondary" type="button" data-visibility-action="show">↩ เลิกซ่อนที่เลือก</button>
           {% endif %}
         </div>
       </div>
@@ -549,7 +556,7 @@
             </td>
             <td>
               <div class="mobile-label">ชื่องาน</div>
-              <strong>{{ event.name }}</strong>
+              <strong>{{ event.name }}</strong>{% if event.is_hidden %} <span class="badge" style="background:#e5e7eb;color:#374151;border-radius:999px;padding:2px 8px;font-size:12px;">🙈 ซ่อนอยู่</span>{% endif %}
             </td>
             <td>
               <div class="mobile-label">รุ่น</div>
@@ -576,6 +583,13 @@
                 {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
                 <a class="btn secondary" href="{{ url_for('manage_athletes', event_id=event.id) }}">นักกีฬา</a>
                 <a class="btn secondary" href="{{ url_for('edit_event', event_id=event.id) }}">แก้ไข</a>
+                <form method="post" action="{{ url_for('set_events_visibility') }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="ids" value="{{ event.id }}">
+                  <input type="hidden" name="action" value="{{ 'show' if event.is_hidden else 'hide' }}">
+                  <input type="hidden" name="next" value="{{ request.full_path }}">
+                  <button class="btn secondary" type="submit">{{ 'แสดง' if event.is_hidden else 'ซ่อน' }}</button>
+                </form>
                 <form method="post" action="{{ url_for('delete_event', event_id=event.id) }}" onsubmit="return confirm('ลบอีเวนต์นี้?');">
                   <button class="btn danger" type="submit">ลบ</button>
                 </form>
@@ -618,6 +632,22 @@
       settings: {{ url_for('bulk_event_settings')|tojson }}
     };
     location.href = routes[button.dataset.selectionAction] + '?ids=' + encodeURIComponent(picked.join(','));
+  }));
+  document.querySelectorAll('[data-visibility-action]').forEach(button => button.addEventListener('click', () => {
+    const picked = ids();
+    if (!picked.length) return;
+    const action = button.dataset.visibilityAction;
+    if (action === 'only' && !confirm('แสดงเฉพาะ ' + picked.length + ' อีเวนต์ที่เลือก และซ่อนอีเวนต์อื่นทั้งหมด?')) return;
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = {{ url_for('set_events_visibility')|tojson }};
+    const add = (n, v) => { const i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; form.appendChild(i); };
+    add('csrf_token', {{ csrf_token()|tojson }});
+    add('ids', picked.join(','));
+    add('action', action);
+    add('next', location.pathname + location.search);
+    document.body.appendChild(form);
+    form.submit();
   }));
 })();
 </script>

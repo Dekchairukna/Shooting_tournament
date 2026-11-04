@@ -88,7 +88,7 @@
                 {% if c %}
                   {% set a = c.row.athlete %}{% set st = c.row.status %}
                   <div class="nm">{{ a.name }}{% if st in ['active','finished'] %}<span class="st {{ st }}">{{ 'กำลังตี' if st == 'active' else 'ตีแล้ว' }}</span>{% endif %}</div>
-                  <div class="sub">#{{ c.order }}{% if a.affiliation and a.affiliation != a.name %} · {{ a.affiliation }}{% endif %} · R1 {{ c.row.round1_total }}</div>
+                  <div class="sub">#{{ c.order }}{% if a.affiliation and a.affiliation != a.name %} · <span class="aff-flag">{{ a.affiliation }}</span>{% endif %} · R1 {{ c.row.round1_total }}</div>
                 {% endif %}
               </td>
             {% endfor %}

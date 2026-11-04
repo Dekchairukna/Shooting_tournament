@@ -317,6 +317,8 @@ class Event(db.Model):
     overview_sort_by_rank = db.Column(db.Boolean, nullable=False, default=True)
     # หน้ารวม: แสดงเส้นตัด (QUARTERFINALS / QUALIFIED FOR ROUND 2) หรือไม่
     overview_show_cut_lines = db.Column(db.Boolean, nullable=False, default=True)
+    # ซ่อนจากรายการแข่งขันหน้าแรก/API สาธารณะ (ลิงก์ตรงยังเปิดได้)
+    is_hidden = db.Column(db.Boolean, nullable=False, default=False)
     # ลงสนามรอบ 2: "front" = เติมจากสนาม 1 · "back" = ช่องว่างไว้ต้นคิวแรก (คิวท้ายเต็ม)
     round_two_fill = db.Column(db.String(10), nullable=False, default="front")
     # True = ผู้จัดคลิกเลือกทีมเข้ารอบ 2 เอง (แทนการคัดอัตโนมัติ)
@@ -880,6 +882,8 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('UPDATE "event" SET overview_sort_by_rank = true WHERE overview_sort_by_rank IS NULL')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS overview_show_cut_lines BOOLEAN DEFAULT true')
             conn.exec_driver_sql('UPDATE "event" SET overview_show_cut_lines = true WHERE overview_show_cut_lines IS NULL')
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT false')
+            conn.exec_driver_sql('UPDATE "event" SET is_hidden = false WHERE is_hidden IS NULL')
             conn.exec_driver_sql("ALTER TABLE \"event\" ADD COLUMN IF NOT EXISTS round_two_fill VARCHAR(10) DEFAULT 'front'")
             conn.exec_driver_sql("UPDATE \"event\" SET round_two_fill = 'front' WHERE round_two_fill IS NULL")
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS chain_id INTEGER')
@@ -948,6 +952,9 @@ def ensure_schema() -> None:
         if "overview_show_cut_lines" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN overview_show_cut_lines BOOLEAN DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET overview_show_cut_lines = 1 WHERE overview_show_cut_lines IS NULL")
+        if "is_hidden" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN is_hidden BOOLEAN DEFAULT 0")
+            conn.exec_driver_sql("UPDATE event SET is_hidden = 0 WHERE is_hidden IS NULL")
         if "lane_start" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN lane_start INTEGER DEFAULT 1")
             conn.exec_driver_sql("UPDATE event SET lane_start = 1 WHERE lane_start IS NULL")
@@ -2927,6 +2934,11 @@ def court_name(event, lane) -> str:
 app.jinja_env.globals["court_name"] = court_name
 app.jinja_env.globals["event_file_stem"] = event_file_stem
 
+from nations import client_index as _nation_client_index, flag_file as nation_flag_file, nation_code  # noqa: E402
+_NATION_FLAG_INDEX = _nation_client_index()
+app.jinja_env.globals["nation_flag_index"] = lambda: _NATION_FLAG_INDEX
+app.jinja_env.globals["nation_flag_file"] = nation_flag_file
+
 
 def recalculate_event_orders(event: Event) -> None:
     athletes = Athlete.query.filter_by(event_id=event.id).order_by(Athlete.start_order, Athlete.id).all()
@@ -3055,13 +3067,16 @@ def dashboard_stats() -> dict:
     เดิมคำนวณ Ranking เต็มของทุกอีเวนต์ทุกครั้งที่เปิดหน้าแรก (หลายร้อย query)
     ทำให้หน้าแรกช้ามากบน Railway ที่ฐานข้อมูลอยู่คนละเครื่อง ผลลัพธ์เหมือนเดิม
     """
-    events_count = Event.query.count()
-    athletes_count = Athlete.query.count()
+    # นับเฉพาะอีเวนต์ที่ไม่ได้ซ่อน
+    visible_ids = [e.id for e in Event.query.filter(db.or_(Event.is_hidden.is_(False), Event.is_hidden.is_(None))).all()]
+    events_count = len(visible_ids)
+    athletes_count = Athlete.query.filter(Athlete.event_id.in_(visible_ids)).count() if visible_ids else 0
     totals = (
         db.session.query(
             Athlete.id, Athlete.name, Athlete.affiliation,
             func.coalesce(func.sum(ScoreEntry.score), 0).label("total"),
         )
+        .filter(Athlete.event_id.in_(visible_ids or [-1]))
         .outerjoin(ScoreEntry, (ScoreEntry.athlete_id == Athlete.id) & (ScoreEntry.round_no == 1))
         .group_by(Athlete.id, Athlete.name, Athlete.affiliation)
         .all()
@@ -3205,8 +3220,36 @@ def index():
     if is_court_user():
         return redirect(url_for("court_queue", event_id=current_user.court_event_id, round=1))
     stats = dashboard_stats()
-    events = Event.query.order_by(Event.competition_date.desc(), Event.id.desc()).all()
-    return render_template("index.html", events=events, stats=stats)
+    all_events = Event.query.order_by(Event.competition_date.desc(), Event.id.desc()).all()
+    is_admin = current_user.is_authenticated and current_user.role in {"admin", "superadmin"}
+    show_hidden = is_admin and request.args.get("show_hidden") == "1"
+    hidden_count = sum(1 for e in all_events if e.is_hidden)
+    events = all_events if show_hidden else [e for e in all_events if not e.is_hidden]
+    return render_template("index.html", events=events, stats=stats, show_hidden=show_hidden, hidden_count=hidden_count)
+
+
+@app.route("/events/visibility", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def set_events_visibility():
+    """ซ่อน/แสดงอีเวนต์ในรายการหน้าแรก (เลือกได้หลายอีเวนต์)"""
+    ids = _parse_id_list(request.form.get("ids"))
+    action = request.form.get("action")
+    if action not in {"hide", "show", "only"} or not ids:
+        flash("กรุณาเลือกอีเวนต์", "warning")
+        return redirect(url_for("index"))
+    if action == "only":
+        # แสดงเฉพาะที่เลือก ที่เหลือซ่อนทั้งหมด
+        for ev in Event.query.all():
+            ev.is_hidden = ev.id not in ids
+    else:
+        for ev in Event.query.filter(Event.id.in_(ids)).all():
+            ev.is_hidden = action == "hide"
+    db.session.commit()
+    label = {"hide": "ซ่อน", "show": "แสดง", "only": "แสดงเฉพาะที่เลือก"}[action]
+    flash(f"{label}แล้ว ({len(ids)} อีเวนต์)", "success")
+    nxt = request.form.get("next") or ""
+    return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("index"))
 
 
 def selected_events(raw_ids: str | None) -> list[Event]:
@@ -7843,7 +7886,7 @@ def _lr_athlete_payload(event, athlete, rank=None, official_ranks=None):
 
 @app.route('/api/public/shooting/events')
 def api_public_shooting_events():
-    events = Event.query.order_by(Event.created_at.desc(), Event.id.desc()).all()
+    events = [e for e in Event.query.order_by(Event.created_at.desc(), Event.id.desc()).all() if not e.is_hidden]
     return jsonify({"ok": True, "source": "shooting", "events": [_lr_shooting_event_payload(e) for e in events]})
 
 
