@@ -37,7 +37,7 @@
 
   <section class="card">
     <h2><span class="step">A</span>นำเข้าจากไฟล์ใบสมัคร (.xls / .xlsx)</h2>
-    <p class="muted">ไฟล์ที่มีหัวข้อแต่ละประเภท เช่น <em>“ประเภทชู้ตติ้งชาย รุ่นอายุ 12 ปี”</em> ตามด้วยตาราง <em>ที่ · ชื่ออปท. · อำเภอ · จังหวัด</em> ระบบจะแยกเป็น 1 อีเวนต์ต่อ 1 หัวข้อ และให้ตรวจสอบก่อนสร้างจริง</p>
+    <p class="muted">ไฟล์ที่มีหัวข้อแต่ละประเภท เช่น <em translate="no">“ประเภทชู้ตติ้งชาย รุ่นอายุ 12 ปี”</em> ตามด้วยตาราง <em>ที่ · ชื่ออปท. · อำเภอ · จังหวัด</em> ระบบจะแยกเป็น 1 อีเวนต์ต่อ 1 หัวข้อ และให้ตรวจสอบก่อนสร้างจริง</p>
     <form method="post" action="{{ url_for('bulk_import_events') }}" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="import-grid">
