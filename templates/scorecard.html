@@ -1028,6 +1028,44 @@
     }
   }
 
+
+  /* ===== รูปแบบการคีย์: ตาราง หรือ ปุ่มแตะ (แบบหน้าคีย์คู่รอบน็อค) ===== */
+  .entry-mode-switch{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px;}
+  .entry-mode-label{font-weight:900;color:#334155;}
+  .entry-mode-btn{border:2px solid #cbd5e1;background:#fff;border-radius:999px;padding:8px 14px;font-weight:900;color:#334155;cursor:pointer;}
+  .entry-mode-btn.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;}
+  #scorecardForm.tap-mode .scorecard-table-wrap{position:absolute!important;left:-100000px!important;top:0;width:1400px;}
+  #scorecardForm.tap-mode .station-stepper{display:none!important;}
+  .tap-entry{background:#fff;border-radius:18px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.07);margin-bottom:12px;display:grid;gap:10px;}
+  .tap-head{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#eff6ff;border-radius:14px;padding:10px 14px;}
+  .tap-name{font-weight:900;font-size:1.15rem;}
+  .tap-aff{color:#64748b;font-size:.9rem;}
+  .tap-total-box{text-align:right;}
+  .tap-total-box small{color:#64748b;font-weight:800;}
+  .tap-total{font-size:2.6rem;font-weight:1000;line-height:1;}
+  .tap-sts{display:flex;gap:6px;}
+  .tap-sts i{flex:1;font-style:normal;text-align:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:3px 0;font-weight:900;}
+  .tap-sts i.cur{border-color:#1d4ed8;color:#1d4ed8;}
+  .tap-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;}
+  .tap-tabs button{padding:11px 4px;border-radius:12px;border:2px solid #e2e8f0;background:#fff;font-weight:900;color:#334155;font-size:1rem;cursor:pointer;}
+  .tap-tabs button.done{background:#dcfce7;border-color:#86efac;color:#166534;}
+  .tap-tabs button.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;}
+  .tap-stn h3{margin:0;font-size:1.2rem;}
+  .tap-stn small{color:#64748b;}
+  .tap-grid{display:grid;grid-template-columns:72px 1fr;gap:8px 12px;align-items:center;}
+  .tap-dist{font-weight:1000;font-size:1.25rem;text-align:center;background:#f1f5f9;border-radius:12px;padding:12px 0;}
+  .tap-seg{display:flex;gap:6px;flex-wrap:wrap;}
+  .tap-seg button{min-width:58px;height:54px;border-radius:12px;border:2px solid #cbd5e1;background:#fff;font-size:1.4rem;font-weight:900;color:#334155;cursor:pointer;}
+  .tap-seg button.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;}
+  .tap-seg button.on.z{background:#64748b;border-color:#64748b;}
+  .tap-seg button.red{min-width:auto;padding:0 12px;font-size:.95rem;color:#b91c1c;border-color:#fecaca;}
+  .tap-seg button.red.on{background:#dc2626;border-color:#dc2626;color:#fff;}
+  .tap-seg button:disabled{opacity:.35;cursor:not-allowed;}
+  .tap-seg.saving{opacity:.6;pointer-events:none;}
+  .tap-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .tap-st-sum{font-weight:900;font-size:1.05rem;text-align:center;flex:1;}
+  @media (max-width:560px){.tap-grid{grid-template-columns:52px 1fr}.tap-seg button{min-width:48px;height:50px}.tap-total{font-size:2.1rem}}
+  @media print{.entry-mode-switch,.tap-entry{display:none!important}#scorecardForm.tap-mode .scorecard-table-wrap{position:static!important;left:auto!important;width:auto}}
 </style>
 <section class="card scorecard-theme-{{ theme }}">
   <div class="section-head responsive-head">
@@ -1097,6 +1135,29 @@
       <button type="button" class="btn" id="scorecardTakeOverBtn">รับช่วงคีย์ต่อ</button>
     </div>
     <div id="autosaveStatus" class="autosave-status" role="status" aria-live="polite">พร้อมบันทึก</div>
+    <div class="entry-mode-switch" id="entryModeSwitch">
+      <span class="entry-mode-label">รูปแบบการคีย์</span>
+      <button type="button" class="entry-mode-btn" data-entry-mode="table">📋 ตาราง (แบบเดิม)</button>
+      <button type="button" class="entry-mode-btn" data-entry-mode="tap">👆 ปุ่มแตะ (แบบรอบน็อค)</button>
+    </div>
+    <div class="tap-entry" id="tapEntry" hidden>
+      <div class="tap-head">
+        <div>
+          <div class="tap-name">{{ athlete.name }}</div>
+          <div class="tap-aff"><span class="aff-flag">{{ athlete.affiliation }}</span> · {{ round_labels[round_no-1] }}</div>
+        </div>
+        <div class="tap-total-box"><small>รวมรอบนี้</small><div class="tap-total" id="tapRoundTotal">0</div></div>
+      </div>
+      <div class="tap-sts" id="tapStationTotals">{% for st in [1,2,3,4,5] %}<i data-st="{{ st }}">-</i>{% endfor %}</div>
+      <div class="tap-tabs" id="tapTabs">{% for st in [1,2,3,4,5] %}<button type="button" data-st="{{ st }}">สถานี {{ st }}</button>{% endfor %}</div>
+      <div class="tap-stn"><h3 id="tapStationTitle"></h3><small>แตะคะแนนของแต่ละระยะ · บันทึกอัตโนมัติทุกครั้งที่แตะ</small></div>
+      <div class="tap-grid" id="tapGrid"></div>
+      <div class="tap-foot">
+        <button type="button" class="btn secondary" id="tapPrev">← ก่อนหน้า</button>
+        <span class="tap-st-sum" id="tapStationSum"></span>
+        <button type="button" class="btn" id="tapNext">สถานีถัดไป →</button>
+      </div>
+    </div>
     <div class="station-stepper" id="stationStepper" aria-label="เลือกสถานีสำหรับหน้าจอแนวตั้ง">
       <span class="station-stepper-label">กรอกทีละสถานี</span>
       {% for station in [1,2,3,4,5] %}
@@ -2183,5 +2244,131 @@
       navigator.sendBeacon && navigator.sendBeacon(lockUrl, fd);
     });
   })();
+</script>
+
+<script>
+/* คีย์แบบปุ่มแตะ: ใช้ช่องในตารางเดิมเป็นที่เก็บค่า แล้วเรียก autosaveCell ตัวเดิม
+   (ล็อกใบคีย์, ลายเซ็นผู้แก้ไข, ใบแดงครบ 2 ใบ ทำงานเหมือนคีย์ในตารางทุกอย่าง) */
+(function () {
+  const form = document.getElementById('scorecardForm');
+  const panel = document.getElementById('tapEntry');
+  if (!form || !panel) return;
+  const ROUND = String(form.dataset.round || '{{ round_no }}');
+  const DIST = [6, 7, 8, 9];
+  const NAMES = ['ยิงลูกเดี่ยว', 'ยิงลูกเหนือเป้า', 'ยิงลูกกลางขวาง', 'ยิงลูกขาวเหนือลูกดำ', 'ยิงลูกเป้า'];
+  const sel = (cls, st, d) => document.querySelector(`.${cls}[data-round="${ROUND}"][data-station="${st}"][data-distance="${d}"]`);
+  const cell = (st, d) => ({ score: sel('auto-score', st, d), played: sel('played-check', st, d), red: sel('red-check', st, d) });
+  if (!cell(1, 6).score) {  // รอบนี้คีย์ไม่ได้ (ดูอย่างเดียว) ไม่ต้องมีปุ่มแตะ
+    document.getElementById('entryModeSwitch').hidden = true;
+    return;
+  }
+  const tr = t => (window.translateI18nText ? window.translateI18nText(t) : t);
+  let cur = 1;
+
+  function stPlayed(st) { return DIST.filter(d => cell(st, d).played?.checked).length; }
+  function stTotal(st) {
+    return DIST.reduce((sum, d) => {
+      const c = cell(st, d);
+      return sum + (c.played?.checked && !c.red?.checked ? Number(c.score.value || 0) : 0);
+    }, 0);
+  }
+  function firstOpenStation() { for (let st = 1; st <= 5; st++) if (stPlayed(st) < 4) return st; return 5; }
+
+  function render() {
+    document.getElementById('tapStationTitle').textContent = tr('สถานี ' + cur) + ' · ' + tr(NAMES[cur - 1]);
+    const grid = document.getElementById('tapGrid');
+    grid.innerHTML = '';
+    DIST.forEach(d => {
+      const c = cell(cur, d);
+      const lab = document.createElement('div'); lab.className = 'tap-dist'; lab.textContent = d + 'M';
+      const seg = document.createElement('div'); seg.className = 'tap-seg';
+      const locked = c.score.disabled && !c.red?.checked;   // ใบแดงครบแล้ว ช่องที่ยังไม่ตีถูกปิด
+      [...c.score.options].map(o => o.value).filter(v => v !== '').forEach(v => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = v;
+        if (c.played?.checked && !c.red?.checked && c.score.value === v) b.className = 'on' + (v === '0' ? ' z' : '');
+        b.disabled = locked;
+        b.onclick = () => tapScore(cur, d, v, seg);
+        seg.appendChild(b);
+      });
+      if (c.red) {
+        const r = document.createElement('button'); r.type = 'button'; r.className = 'red' + (c.red.checked ? ' on' : '');
+        r.textContent = tr('ใบแดง'); r.disabled = c.red.disabled;
+        r.onclick = () => tapRed(cur, d, seg);
+        seg.appendChild(r);
+      }
+      grid.appendChild(lab); grid.appendChild(seg);
+    });
+    let round = 0;
+    document.querySelectorAll('#tapStationTotals i').forEach(i => {
+      const st = +i.dataset.st, t = stTotal(st); round += t;
+      i.textContent = stPlayed(st) ? t : '-';
+      i.classList.toggle('cur', st === cur);
+    });
+    document.getElementById('tapRoundTotal').textContent = round;
+    document.querySelectorAll('#tapTabs button').forEach(b => {
+      const st = +b.dataset.st;
+      b.classList.toggle('on', st === cur);
+      b.classList.toggle('done', st !== cur && stPlayed(st) === 4);
+    });
+    document.getElementById('tapStationSum').textContent = tr('รวม') + ' ' + stTotal(cur) + (stPlayed(cur) < 4 ? ' ' + tr('(ยังไม่ครบ)') : '');
+    document.getElementById('tapPrev').disabled = cur === 1;
+    const next = document.getElementById('tapNext');
+    next.disabled = cur === 5;
+    next.textContent = cur === 5 ? tr('สถานีสุดท้าย') : tr('สถานี ' + (cur + 1)) + ' →';
+  }
+
+  async function save(c, seg) {
+    seg.classList.add('saving');
+    try { if (typeof autosaveCell === 'function') await autosaveCell(c.score); }
+    finally { seg.classList.remove('saving'); render(); }
+  }
+  function tapScore(st, d, v, seg) {
+    const c = cell(st, d);
+    const wasDone = stPlayed(st) === 4;
+    if (c.red?.checked) { c.red.checked = false; c.score.disabled = false; }
+    c.score.value = v;
+    if (c.played) c.played.checked = true;
+    save(c, seg).then(() => {
+      // ครบ 4 ระยะแล้วไปสถานีถัดไปเอง
+      if (!wasDone && stPlayed(st) === 4 && st === cur && cur < 5) { cur++; render(); }
+    });
+  }
+  function tapRed(st, d, seg) {
+    const c = cell(st, d);
+    c.red.checked = !c.red.checked;
+    if (c.red.checked) { c.score.value = '0'; if (c.played) c.played.checked = true; }
+    c.score.disabled = c.red.checked;
+    save(c, seg);
+  }
+
+  document.querySelectorAll('#tapTabs button').forEach(b => b.onclick = () => { cur = +b.dataset.st; render(); });
+  document.getElementById('tapPrev').onclick = () => { if (cur > 1) { cur--; render(); } };
+  document.getElementById('tapNext').onclick = () => { if (cur < 5) { cur++; render(); } };
+  // คีย์ในตารางแล้วสลับมาดูปุ่มแตะ ให้ตรงกันเสมอ
+  form.addEventListener('change', () => { if (!panel.hidden) render(); });
+
+  function setMode(mode) {
+    const tap = mode === 'tap';
+    form.classList.toggle('tap-mode', tap);
+    panel.hidden = !tap;
+    document.querySelectorAll('.entry-mode-btn').forEach(b => b.classList.toggle('on', b.dataset.entryMode === mode));
+    try { localStorage.setItem('scorecard-entry-mode', mode); } catch (e) {}
+    if (tap) { cur = firstOpenStation(); render(); }
+  }
+  document.querySelectorAll('.entry-mode-btn').forEach(b => b.onclick = () => setMode(b.dataset.entryMode));
+  // บันทึกเป็น JPG ต้องเห็นตาราง: สลับกลับชั่วคราวระหว่างสร้างภาพ
+  if (typeof window.downloadScorecardJpg === 'function') {
+    const originalJpg = window.downloadScorecardJpg;
+    window.downloadScorecardJpg = async function () {
+      const wasTap = form.classList.contains('tap-mode');
+      form.classList.remove('tap-mode');
+      try { return await originalJpg.apply(this, arguments); }
+      finally { if (wasTap) form.classList.add('tap-mode'); }
+    };
+  }
+  let saved = 'table';
+  try { saved = localStorage.getItem('scorecard-entry-mode') || 'table'; } catch (e) {}
+  setMode(saved === 'tap' ? 'tap' : 'table');
+})();
 </script>
 {% endblock %}

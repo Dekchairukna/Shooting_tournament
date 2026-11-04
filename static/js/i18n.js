@@ -433,6 +433,12 @@
   /* เพิ่มคำแปลหน้าใหม่ (Results Approved, ซ่อนอีเวนต์, ผังรอบ 2, คีย์คู่, ธีม ฯลฯ) — ใส่เฉพาะคำที่ยังไม่มี */
   const EXTRA_TRANSLATIONS = {
  "en": {
+  "รูปแบบการคีย์": "Entry layout",
+  "📋 ตาราง (แบบเดิม)": "📋 Table (classic)",
+  "👆 ปุ่มแตะ (แบบรอบน็อค)": "👆 Tap buttons (knockout style)",
+  "รวมรอบนี้": "Round total",
+  "สถานีสุดท้าย": "Last station",
+  "สถานีถัดไป →": "Next station →",
   "ปิดการเรียงสดแล้ว · แถวอยู่ตามลำดับการตี": "Live sorting off · rows follow shooting order",
   "กรุณาระบุเหตุผลในการล้างการคีย์": "Please give a reason for clearing the entries",
   "กรุณาเพิ่มอย่างน้อย 1 อีเวนต์": "Please add at least 1 event",
@@ -855,6 +861,12 @@
   "ซ่อนจากรายการ": "Hide from list"
  },
  "fr": {
+  "รูปแบบการคีย์": "Mode de saisie",
+  "📋 ตาราง (แบบเดิม)": "📋 Tableau (classique)",
+  "👆 ปุ่มแตะ (แบบรอบน็อค)": "👆 Boutons tactiles (style KO)",
+  "รวมรอบนี้": "Total du tour",
+  "สถานีสุดท้าย": "Dernier atelier",
+  "สถานีถัดไป →": "Atelier suivant →",
   "กรุณาเลือกนักกีฬาที่ต้องตี Sudden death อย่างน้อย 2 คน": "Sélectionnez au moins 2 athlètes pour la mort subite",
   "กรุณาเลือกนักกีฬาอย่างน้อย 1 คน": "Sélectionnez au moins 1 athlète",
   "คุณไม่มีสิทธิ์ทำรายการนี้": "Vous n’avez pas le droit d’effectuer cette action",
@@ -1298,6 +1310,12 @@
   "ซ่อนจากรายการ": "Masquer de la liste"
  },
  "zh": {
+  "รูปแบบการคีย์": "录入方式",
+  "📋 ตาราง (แบบเดิม)": "📋 表格（原版）",
+  "👆 ปุ่มแตะ (แบบรอบน็อค)": "👆 点按按钮（淘汰赛样式）",
+  "รวมรอบนี้": "本轮合计",
+  "สถานีสุดท้าย": "最后一站",
+  "สถานีถัดไป →": "下一站 →",
   "กรุณาเลือกนักกีฬาที่ต้องตี Sudden death อย่างน้อย 2 คน": "请至少选择 2 名进行突然死亡的运动员",
   "กรุณาเลือกนักกีฬาอย่างน้อย 1 คน": "请至少选择 1 名运动员",
   "คุณไม่มีสิทธิ์ทำรายการนี้": "您无权执行此操作",
