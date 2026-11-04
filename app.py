@@ -7765,7 +7765,7 @@ def results_approved_settings(event_id: int):
                 other_setting = get_results_approved_setting(other, create=True)
                 for attr in shared:
                     setattr(other_setting, attr, getattr(setting, attr))
-                applied += 1
+            applied += 1
         db.session.commit()
         flash("บันทึกตั้งค่า Results Approved แล้ว" + (f" (ใช้กับอีกอีเวนต์ในงานเดียวกัน {applied} รายการ)" if applied else ""), "success")
         return redirect(url_for("results_approved", event_id=event.id))
