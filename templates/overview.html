@@ -668,6 +668,41 @@ body.display-mode .overview-card{border-radius:0;box-shadow:none;border:0;}
 body.display-mode .title-box h1{font-size:2rem;}
 body.display-mode .title-box .muted{font-size:1rem;}
 body.display-mode #overviewTableWrap{font-size:1.1rem;}
+/* โหมดจอแสดงผล: พอดีจอ / เลื่อนอัตโนมัติ / หยุดนิ่ง */
+body.display-mode.dm-fit{overflow:hidden;}
+body.display-mode.dm-fit .container-main{transform-origin:0 0;}
+body.display-mode.dm-fit .qualification-scroll{overflow:visible;}
+.dm-panel{position:fixed;right:14px;bottom:14px;z-index:2000;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;border-radius:14px;background:rgba(15,23,42,.88);color:#fff;font:600 14px/1.2 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);transition:opacity .3s;}
+.dm-panel.dm-hide{opacity:0;pointer-events:none;}
+.dm-panel button{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:9px;padding:6px 10px;font:inherit;cursor:pointer;min-height:36px;}
+.dm-panel button.on{background:#f97316;border-color:#f97316;}
+.dm-panel .dm-zoom{min-width:48px;text-align:center;}
+.dm-panel .dm-sep{width:1px;height:24px;background:rgba(255,255,255,.3);margin:0 2px;}
+@media print{.dm-panel{display:none!important;}}
+/* ตัวใหญ่: ซ่อนคะแนนรายระยะ 6–9 ม. เหลือผลรวมแต่ละ Atelier */
+body.dm-compact .qualification-table .score-col,
+body.dm-compact .qualification-table .col-lane-order,
+body.dm-compact .qualification-table .lane-order,
+body.dm-compact .qualification-table .station-progress-mini{display:none!important;}
+body.dm-compact .qualification-table thead tr:has(> .station-image-cell){display:none;}
+body.dm-compact .qualification-table thead tr:has(> .score-col) .score-total-col{display:none;}
+body.dm-compact .qualification-table .score-total-col,
+body.dm-compact .qualification-table .col-total,
+body.dm-compact .qualification-table td{font-size:1.25em;}
+body.dm-compact .qualification-table .cell-name,
+body.dm-compact .qualification-table .cell-affiliation{white-space:nowrap;}
+/* แบ่ง 2 ฝั่ง: ตารางซ้ายครึ่งแรก ขวาครึ่งหลัง */
+.dm-split{display:grid;grid-template-columns:repeat(2,minmax(min-content,1fr));gap:14px;align-items:start;}
+body.display-mode .dm-split > .qualification-scroll,
+body.display-mode.dm-fit .qualification-scroll,
+body.display-mode.dm-fit .qualification-wrap{overflow:visible!important;}
+/* จอแสดงผล: ใช้ขนาดตัวอักษรคงที่ทุกอุปกรณ์ แล้วให้ "พอดีจอ" ย่อขยายทั้งหน้า */
+body.display-mode.dm-compact .qualification-table{font-size:15px!important;}
+body.display-mode.dm-compact .qualification-table td{font-size:18px!important;}
+.dm-split-on .qualification-scroll:not(.dm-clone) #overviewTableBody tr.dm-second{display:none;}
+body.dm-compact .qualification-table thead th:not(.col-order):not(.col-lane){font-size:15px!important;}
+body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!important;line-height:1.2!important;padding:3px 10px!important;max-width:none;}
+.dm-clone tbody tr:not(.dm-second){display:none;}
 
 /* ===== ไฮไลต์คะแนน 5 / 3 เฉพาะคนที่ตีเสร็จแล้ว (ตีครบ + APPROVED) =====
    ดูได้ทันทีว่าแต่ละคนได้ 5 กี่ครั้ง 3 กี่ครั้ง · ช่อง 1/0/Total ไม่เปลี่ยน */
@@ -1197,6 +1232,7 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
       const data = await response.json();
       updateOverviewRows(data);
       lastOverviewEtag = etag;
+      if (window.__displayRefit) window.__displayRefit();
     } catch (err) {
       console.error(err);
     } finally {
@@ -1209,10 +1245,137 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
   }, 1500);
   refreshOverviewData();
 
-  // โหมดจอแสดงผล: เลื่อนตารางลงช้า ๆ ถึงท้ายแล้วพัก แล้วกลับขึ้นบน วนไปเรื่อย ๆ
+  // โหมดจอแสดงผล: เลือกได้ 3 แบบ (จำค่าไว้ในเครื่อง, กำหนดผ่าน URL ได้ ?view=fit|scroll|static&zoom=120)
+  //  - fit    พอดีจอ: ย่อ/ขยายทั้งหน้าให้เห็นครบทุกคน ไม่ต้องเลื่อน
+  //  - scroll เลื่อนอัตโนมัติ: เลื่อนลงช้า ๆ ถึงท้ายแล้วพัก แล้วกลับขึ้นบน
+  //  - static หยุดนิ่ง: ไม่เลื่อน ปรับขนาดตัวอักษรเองได้
+  //  ตัวใหญ่ (?big=1) ซ่อนคะแนนรายระยะ · แบ่ง 2 ฝั่ง (?split=1) ซ้ายครึ่งแรก ขวาครึ่งหลัง
   if (document.body.classList.contains('display-mode')) {
+    const qs = new URLSearchParams(location.search);
+    const store = {
+      get(k, d) { try { return localStorage.getItem('overviewDisplay.' + k) || d; } catch (e) { return d; } },
+      set(k, v) { try { localStorage.setItem('overviewDisplay.' + k, v); } catch (e) {} },
+    };
+    const MODES = ['fit', 'scroll', 'static'];
+    let mode = MODES.includes(qs.get('view')) ? qs.get('view') : store.get('mode', 'fit');
+    if (!MODES.includes(mode)) mode = 'fit';
+    let zoom = parseInt(qs.get('zoom') || store.get('zoom', '100'), 10);
+    if (!(zoom >= 50 && zoom <= 250)) zoom = 100;
+    const main = document.querySelector('.container-main') || document.body;
+    let compact = (qs.get('big') || store.get('big', '1')) === '1';
+    let split = (qs.get('split') || store.get('split', '1')) === '1';
+    const origTable = document.querySelector('#overviewTableWrap .qualification-table');
+    const origScroll = origTable ? origTable.closest('.qualification-scroll') : null;
+    let splitBox = null, cloneScroll = null;
+
+    // ตัวใหญ่: หัว Atelier เหลือ 1 ช่อง (เก็บ colspan เดิมไว้คืนตอนปิด)
+    function applyCompact() {
+      document.body.classList.toggle('dm-compact', compact);
+      document.querySelectorAll('#overviewTableWrap .atelier-head').forEach(th => {
+        if (!th.dataset.origColspan) th.dataset.origColspan = th.getAttribute('colspan') || '1';
+        th.setAttribute('colspan', compact ? '1' : th.dataset.origColspan);
+      });
+    }
+    // แบ่ง 2 ฝั่ง: คัดลอกตารางไปฝั่งขวา แสดงครึ่งหลัง (คัดลอกใหม่ทุกครั้งที่คะแนนอัปเดต)
+    function buildSplit() {
+      if (!origScroll) return;
+      if (cloneScroll) { cloneScroll.remove(); cloneScroll = null; }
+      const rows = Array.from(origTable.querySelectorAll('tbody tr[data-athlete-id]'));
+      const on = split && rows.length > 12;
+      document.body.classList.toggle('dm-split-on', on);
+      if (!on) {
+        rows.forEach(r => r.classList.remove('dm-second'));
+        if (splitBox) { splitBox.replaceWith(origScroll); splitBox = null; }
+        return;
+      }
+      if (!splitBox) {
+        splitBox = document.createElement('div');
+        splitBox.className = 'dm-split';
+        origScroll.replaceWith(splitBox);
+        splitBox.appendChild(origScroll);
+      }
+      const half = Math.ceil(rows.length / 2);
+      rows.forEach((r, i) => r.classList.toggle('dm-second', i >= half));
+      cloneScroll = origScroll.cloneNode(true);
+      cloneScroll.classList.add('dm-clone');
+      cloneScroll.setAttribute('aria-hidden', 'true');
+      // คง id ของ tbody ไว้ให้สไตล์เหมือนตารางซ้าย (getElementById ยังเจอตารางจริงก่อน)
+      cloneScroll.querySelectorAll('[id]').forEach(el => { if (el.tagName !== 'TBODY') el.removeAttribute('id'); });
+      splitBox.appendChild(cloneScroll);
+    }
+
+    function fitToScreen() {
+      const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+      let scale = 1;
+      // ปรับความกว้างตามสเกล แล้ววัดใหม่ 3 รอบ เพราะความสูงเปลี่ยนตามความกว้าง
+      for (let i = 0; i < 3; i++) {
+        main.style.setProperty('width', (vw / scale) + 'px', 'important');
+        // วัดขอบขวาสุดของทุกตาราง (ตารางอาจล้นกรอบเมื่อแบ่ง 2 ฝั่ง)
+        const mainLeft = main.getBoundingClientRect().left;
+        let w = main.scrollWidth;
+        main.querySelectorAll('#overviewTableWrap table').forEach(t => {
+          w = Math.max(w, (t.getBoundingClientRect().right - mainLeft) / scale + 16);
+        });
+        const h = main.scrollHeight;
+        if (!w || !h) break;
+        scale = Math.max(0.25, Math.min(vw / w, vh / h, 2.5));
+      }
+      main.style.setProperty('width', (vw / scale) + 'px', 'important');
+      main.style.transform = 'scale(' + scale + ')';
+    }
+    function applyMode() {
+      document.body.classList.toggle('dm-fit', mode === 'fit');
+      main.style.transform = ''; main.style.removeProperty('width'); main.style.zoom = '';
+      applyCompact(); buildSplit();
+      if (mode === 'fit') { window.scrollTo(0, 0); fitToScreen(); }
+      else main.style.zoom = zoom / 100;
+      renderPanel();
+    }
+    let refitTimer = null;
+    window.__displayRefit = () => {
+      clearTimeout(refitTimer);
+      refitTimer = setTimeout(() => { buildSplit(); if (mode === 'fit') fitToScreen(); }, 120);
+    };
+    window.addEventListener('resize', window.__displayRefit);
+    setInterval(() => { if (mode === 'fit') fitToScreen(); }, 5000);
+
+    // แผงควบคุม: ขึ้นเมื่อขยับเมาส์/แตะจอ แล้วซ่อนเองใน 4 วินาที
+    const panel = document.createElement('div');
+    panel.className = 'dm-panel dm-hide';
+    panel.setAttribute('translate', 'no');
+    document.body.appendChild(panel);
+    function renderPanel() {
+      const b = (m, label) => '<button type="button" data-mode="' + m + '" class="' + (mode === m ? 'on' : '') + '">' + label + '</button>';
+      panel.innerHTML = b('fit', 'พอดีจอ') + b('scroll', 'เลื่อนอัตโนมัติ') + b('static', 'หยุดนิ่ง')
+        + (mode === 'fit' ? '' : '<span class="dm-sep"></span><button type="button" data-zoom="-10">A−</button><span class="dm-zoom">' + zoom + '%</span><button type="button" data-zoom="10">A+</button>')
+        + '<span class="dm-sep"></span><button type="button" data-toggle="big" class="' + (compact ? 'on' : '') + '">ตัวใหญ่</button>'
+        + '<button type="button" data-toggle="split" class="' + (split ? 'on' : '') + '">แบ่ง 2 ฝั่ง</button>'
+        + '<span class="dm-sep"></span><button type="button" data-fs="1">เต็มจอ</button>';
+    }
+    panel.addEventListener('click', (e) => {
+      const t = e.target.closest('button'); if (!t) return;
+      if (t.dataset.mode) { mode = t.dataset.mode; store.set('mode', mode); applyMode(); }
+      else if (t.dataset.toggle === 'big') { compact = !compact; store.set('big', compact ? '1' : '0'); applyMode(); }
+      else if (t.dataset.toggle === 'split') { split = !split; store.set('split', split ? '1' : '0'); applyMode(); }
+      else if (t.dataset.zoom) { zoom = Math.max(50, Math.min(250, zoom + parseInt(t.dataset.zoom, 10))); store.set('zoom', String(zoom)); applyMode(); }
+      else if (t.dataset.fs) {
+        if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
+        else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {});
+      }
+    });
+    let hideTimer = null;
+    function showPanel() {
+      panel.classList.remove('dm-hide');
+      clearTimeout(hideTimer); hideTimer = setTimeout(() => panel.classList.add('dm-hide'), 4000);
+    }
+    ['mousemove', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, showPanel, { passive: true }));
+
+    applyMode();
+    showPanel();
+
     let pauseUntil = Date.now() + 6000;
     setInterval(() => {
+      if (mode !== 'scroll') return;
       if (Date.now() < pauseUntil) return;
       const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
       if (atBottom) {
