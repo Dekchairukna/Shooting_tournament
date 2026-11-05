@@ -452,8 +452,15 @@
   .s49-date .s49-short:first-of-type{flex-basis:140px}
   .s49-short.s49-tiny{flex-basis:50px}
   /* ใบนานาชาติ: จัดช่องข้อมูลให้ตรงแนวกันทั้ง 2 บรรทัด */
-  .s49-intl .s49-line{display:grid;grid-template-columns:16% 46% 38%;gap:0 14px}
+  .s49-intl .s49-line{display:grid;grid-template-columns:minmax(0,16fr) minmax(0,46fr) minmax(0,38fr);gap:0 14px}
   .s49-intl .s49-f{min-width:0}
+  .s49-intl .s49-box{flex:0 0 auto}
+  /* ใบนานาชาติ: หัวกระดาษสมมาตร ซ้าย/ขวากว้างเท่ากัน ชื่ออีเวนต์อยู่กึ่งกลาง */
+  .s49-intl .s49-top{display:grid;grid-template-columns:1fr auto 1fr;gap:12px}
+  .s49-intl .s49-top>.s49-logos-left{justify-self:start;align-items:center}
+  .s49-intl .s49-top>.s49-logos-right:last-child{justify-self:end;align-items:center}
+  .s49-intl .s49-logos-left img{height:40px}
+  .s49-intl .s49-logos-left + .s49-titles + .s49-logos-right img{height:64px}
   .s49-intl .s49-sex,.s49-intl .s49-date,.s49-intl .s49-court{flex:none}
   .s49-intl .s49-court .s49-val{flex:1}
   .s49-box{display:inline-block;width:11px;height:11px;border:1.2px solid #000;line-height:10px;text-align:center;font-size:10px;font-weight:900;vertical-align:-1px}

@@ -713,8 +713,13 @@ SCORECARD_LAYOUTS = {
         "title": "SCORE SHEET · PRECISION SHOOTING",
         "subtitle": "52e Championnats du Monde de Pétanque · Tir de précision · KKU 2026",
         "footer": "Khon Kaen University, Thailand     20 – 24 November 2026",
-        "logos_left": [f"scorecard/kku2026/{n}.png" for n in ("kku2026", "kku", "tpic", "tbf")],
-        "logos_right": [f"scorecard/kku2026/{n}.png" for n in ("fipjp", "wpbf", "absc")],
+        # ซ้าย: FIPJP, WPBF | กลาง: ชื่ออีเวนต์ | ขวา: น้องบุญ (ถ้ายังไม่มีไฟล์ ใช้โลโก้ KKU 2026 แทน)
+        "logos_left": [f"scorecard/kku2026/{n}.png" for n in ("fipjp", "wpbf")],
+        "logos_right": [
+            "scorecard/kku2026/nongboon.png"
+            if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "scorecard", "kku2026", "nongboon.png"))
+            else "scorecard/kku2026/kku2026.png"
+        ],
         "stations": [
             ("Atelier 1", "Boule seule"), ("Atelier 2", "Boule derrière but"), ("Atelier 3", "Entre deux boules"),
             ("Atelier 4", "Sautée"), ("Atelier 5", "But"),
