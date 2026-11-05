@@ -3512,6 +3512,42 @@ def logout():
 @login_required
 @role_required("superadmin")
 def manage_users():
+    if request.method == "POST" and request.form.get("action") in {"edit_user", "delete_user"}:
+        target = db.session.get(User, request.form.get("user_id", type=int) or 0)
+        if not target or target.role == "court":
+            flash("ไม่พบผู้ใช้ (บัญชีสนามให้จัดการจากหน้าอีเวนต์)", "danger")
+            return redirect(url_for("manage_users"))
+        superadmins = User.query.filter_by(role="superadmin").count()
+        if request.form.get("action") == "delete_user":
+            if target.id == current_user.id:
+                flash("ลบบัญชีที่กำลังใช้อยู่ไม่ได้", "danger")
+            elif target.role == "superadmin" and superadmins <= 1:
+                flash("ต้องมี superadmin อย่างน้อย 1 บัญชี", "danger")
+            else:
+                name = target.username
+                detach_users_before_delete([target.id])
+                db.session.delete(target)
+                db.session.commit()
+                flash(f"ลบผู้ใช้ {name} แล้ว", "success")
+            return redirect(url_for("manage_users"))
+        username = request.form.get("username", "").strip()
+        role = request.form.get("role", target.role)
+        if role not in {"user", "admin", "superadmin"}:
+            flash("สิทธิ์ไม่ถูกต้อง", "danger")
+        elif not username:
+            flash("กรุณาใส่ชื่อผู้ใช้", "danger")
+        elif User.query.filter(User.username == username, User.id != target.id).first():
+            flash(f"ชื่อผู้ใช้ {username} มีอยู่แล้ว", "danger")
+        elif target.role == "superadmin" and role != "superadmin" and superadmins <= 1:
+            flash("ต้องมี superadmin อย่างน้อย 1 บัญชี", "danger")
+        elif target.id == current_user.id and role != target.role:
+            flash("เปลี่ยนสิทธิ์ของบัญชีที่กำลังใช้อยู่ไม่ได้", "danger")
+        else:
+            target.username = username[:80]
+            target.role = role
+            db.session.commit()
+            flash(f"แก้ไขผู้ใช้ {target.username} แล้ว", "success")
+        return redirect(url_for("manage_users"))
     if request.method == "POST" and request.form.get("action") == "reset_password":
         target = User.query.get(request.form.get("user_id", type=int) or 0)
         new_password = request.form.get("new_password", "")

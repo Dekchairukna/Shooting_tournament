@@ -28,11 +28,23 @@
     <h2>รายการผู้ใช้</h2>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>ตั้งรหัสผ่านใหม่</th></tr></thead>
+        <thead><tr><th>ID</th><th>ชื่อผู้ใช้ / สิทธิ์</th><th>ตั้งรหัสผ่านใหม่</th><th>ลบ</th></tr></thead>
         <tbody>{% for user in users %}<tr>
           <td>{{ user.id }}</td>
-          <td>{{ user.username }}{% if user.id in weak_users %}<div class="weak-pw">ยังใช้รหัสตั้งต้น – เข้าระบบไม่ได้จนกว่าจะตั้งใหม่</div>{% endif %}</td>
-          <td>{{ user.role }}</td>
+          <td>
+            <form method="post" class="reset-pw-form">
+              <input type="hidden" name="action" value="edit_user">
+              <input type="hidden" name="user_id" value="{{ user.id }}">
+              <input name="username" value="{{ user.username }}" required maxlength="80" aria-label="ชื่อผู้ใช้">
+              <select name="role" aria-label="สิทธิ์" {% if user.id == current_user.id %}disabled{% endif %}>
+                {% for r in ['admin','user','superadmin'] %}<option value="{{ r }}" {% if user.role == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+              </select>
+              {% if user.id == current_user.id %}<input type="hidden" name="role" value="{{ user.role }}">{% endif %}
+              <button class="btn secondary" type="submit">บันทึก</button>
+            </form>
+            {% if user.id in weak_users %}<div class="weak-pw">ยังใช้รหัสตั้งต้น – เข้าระบบไม่ได้จนกว่าจะตั้งใหม่</div>{% endif %}
+            {% if user.id == current_user.id %}<div class="muted" style="font-size:.8rem;">บัญชีที่กำลังใช้อยู่</div>{% endif %}
+          </td>
           <td>
             <form method="post" class="reset-pw-form">
               <input type="hidden" name="action" value="reset_password">
@@ -40,6 +52,15 @@
               <input name="new_password" type="password" minlength="8" autocomplete="new-password" placeholder="รหัสใหม่" required>
               <button class="btn" type="submit">ตั้งรหัส</button>
             </form>
+          </td>
+          <td>
+            {% if user.id != current_user.id %}
+            <form method="post" onsubmit="return confirm('ลบผู้ใช้ {{ user.username|e }} ?');">
+              <input type="hidden" name="action" value="delete_user">
+              <input type="hidden" name="user_id" value="{{ user.id }}">
+              <button class="btn danger" type="submit">ลบ</button>
+            </form>
+            {% endif %}
           </td>
         </tr>{% endfor %}</tbody>
       </table>
