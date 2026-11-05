@@ -1034,7 +1034,12 @@
   .entry-mode-label{font-weight:900;color:#334155;}
   .entry-mode-btn{border:2px solid #cbd5e1;background:#fff;border-radius:999px;padding:8px 14px;font-weight:900;color:#334155;cursor:pointer;}
   .entry-mode-btn.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;}
-  #scorecardForm.tap-mode .scorecard-table-wrap{position:absolute!important;left:-100000px!important;top:0;width:1400px;}
+  /* โหมดปุ่มแตะ: ซ่อนเฉพาะตารางคะแนน ส่วนลายเซ็น / ลายเซ็นผู้แก้ไข / ปุ่มจบการตี ยังอยู่ */
+  #scorecardForm.tap-mode .scorecard-main-table,
+  #scorecardForm.tap-mode .scorecard-meta-table,
+  #scorecardForm.tap-mode .sheet-header{display:none!important;}
+  #scorecardForm.tap-mode .scorecard-sheet{min-width:0!important;width:auto!important;}
+  #scorecardForm.tap-mode .scorecard-table-wrap{overflow-x:visible!important;}
   #scorecardForm.tap-mode .station-stepper{display:none!important;}
   .tap-entry[hidden],.entry-mode-switch[hidden]{display:none!important;}
   .tap-entry{background:#fff;border-radius:18px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.07);margin-bottom:12px;display:grid;gap:10px;}
@@ -1066,7 +1071,7 @@
   .tap-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;}
   .tap-st-sum{font-weight:900;font-size:1.05rem;text-align:center;flex:1;}
   @media (max-width:560px){.tap-grid{grid-template-columns:52px 1fr}.tap-seg button{min-width:48px;height:50px}.tap-total{font-size:2.1rem}}
-  @media print{.entry-mode-switch,.tap-entry{display:none!important}#scorecardForm.tap-mode .scorecard-table-wrap{position:static!important;left:auto!important;width:auto}}
+  @media print{.entry-mode-switch,.tap-entry{display:none!important}#scorecardForm.tap-mode .scorecard-main-table,#scorecardForm.tap-mode .scorecard-meta-table{display:table!important}#scorecardForm.tap-mode .sheet-header{display:grid!important}}
 
   /* แถวข้อมูลนักกีฬา (หมายเลข/ชื่อ/สังกัด/รอบ) ให้ตัวใหญ่ เช็คชื่อก่อนคีย์ได้ง่าย */
   @media screen {
