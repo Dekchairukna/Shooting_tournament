@@ -701,14 +701,16 @@ body.display-mode #overviewTableWrap{font-size:1.1rem;}
 #overviewTableBody tr[data-athlete-id]{cursor:pointer}
 @media (pointer:coarse){
   .responsive-toolbar .btn{min-height:48px;padding-left:14px;padding-right:14px}
-  #overviewTableBody td.status-cell{width:170px;min-width:170px;max-width:190px}
+  #overviewTableBody td.status-cell{width:200px;min-width:170px;max-width:230px}
   #overviewTableBody td.status-cell .status-pill{
-    width:100%;max-width:none;min-height:48px;padding:6px 10px;
-    font-size:.9rem;border-radius:12px;cursor:pointer;
+    width:100%;max-width:none;min-height:43px;padding:3px 10px!important;
+    font-size:.82rem!important;border-radius:10px;cursor:pointer;
   }
-  #overviewTableBody td.status-cell .status-action-wrap{flex-direction:column;align-items:stretch;gap:6px}
-  #overviewTableBody td.status-cell .shoot-off-action{min-height:40px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
-  #overviewTableBody tr[data-athlete-id] > td{padding-top:9px!important;padding-bottom:9px!important}
+  /* ปุ่มสถานะกับปุ่ม Sudden death อยู่แถวเดียวกัน ไม่ซ้อนกันจนแถวสูง */
+  #overviewTableBody td.status-cell .status-action-wrap{flex-direction:row;align-items:center;gap:4px}
+  #overviewTableBody td.status-cell .shoot-off-action{min-height:42px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;padding:3px 8px}
+  /* แถวบนจอสัมผัสสูง 48px */
+  #overviewTableBody tr[data-athlete-id] > td,#overviewTableBody tr[data-athlete-id] > td.status-cell{padding-top:2px!important;padding-bottom:2px!important}
 }
   .status-pill.dq{background:#fee2e2 !important;color:#b91c1c !important;border-color:#fca5a5 !important;}
 .shoot-off-action.sd-edit{background:#f1f5f9 !important;color:#334155 !important;border-color:#cbd5e1 !important;font-weight:700 !important;}

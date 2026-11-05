@@ -1036,6 +1036,7 @@
   .entry-mode-btn.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;}
   #scorecardForm.tap-mode .scorecard-table-wrap{position:absolute!important;left:-100000px!important;top:0;width:1400px;}
   #scorecardForm.tap-mode .station-stepper{display:none!important;}
+  .tap-entry[hidden],.entry-mode-switch[hidden]{display:none!important;}
   .tap-entry{background:#fff;border-radius:18px;padding:14px;box-shadow:0 10px 30px rgba(15,23,42,.07);margin-bottom:12px;display:grid;gap:10px;}
   .tap-head{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#eff6ff;border-radius:14px;padding:10px 14px;}
   .tap-name{font-weight:900;font-size:1.15rem;}
@@ -1066,6 +1067,42 @@
   .tap-st-sum{font-weight:900;font-size:1.05rem;text-align:center;flex:1;}
   @media (max-width:560px){.tap-grid{grid-template-columns:52px 1fr}.tap-seg button{min-width:48px;height:50px}.tap-total{font-size:2.1rem}}
   @media print{.entry-mode-switch,.tap-entry{display:none!important}#scorecardForm.tap-mode .scorecard-table-wrap{position:static!important;left:auto!important;width:auto}}
+
+  /* แถวข้อมูลนักกีฬา (หมายเลข/ชื่อ/สังกัด/รอบ) ให้ตัวใหญ่ เช็คชื่อก่อนคีย์ได้ง่าย */
+  @media screen {
+    .scorecard-meta-table th,
+    .scorecard-meta-table td { font-size: 1rem !important; padding: 9px 8px !important; white-space: normal !important; }
+    .scorecard-meta-table th { background: #f1f5f9; color: #475569; font-weight: 800; }
+    .scorecard-meta-table td { font-size: 1.35rem !important; font-weight: 900; color: #0f172a; }
+    .scorecard-meta-table td img.nflag { width: 1.5em; height: 1.1em; }
+  }
+  @media screen and (max-width: 767px) {
+    /* จอแคบ: แบ่งเป็น 2 แถว (หมายเลข+ชื่อ / สังกัด+รอบ) ไม่ให้ล้นจอ */
+    .scorecard-meta-table, .scorecard-meta-table tbody { display: block; width: 100%; }
+    .scorecard-meta-table tr { display: grid; grid-template-columns: auto minmax(0,1fr) auto minmax(0,1fr); }
+    .scorecard-meta-table td { overflow-wrap: break-word; text-align: center; }
+    .scorecard-meta-table th { font-size: .7rem !important; padding: 6px 3px !important; display: flex; align-items: center; justify-content: center; }
+    .scorecard-meta-table td { font-size: .98rem !important; padding: 6px 4px !important; display: flex; align-items: center; justify-content: center; }
+  }
+
+  /* สรุปคะแนนในหน้าต่างเซ็นชื่อ */
+  .signature-modal-panel{grid-template-rows:auto auto 1fr auto !important;}
+  .sig-summary{padding:8px 16px 4px;display:grid;gap:6px;}
+  .sig-summary .sig-who{font-size:1.1rem;}
+  .sig-summary .sig-who span{color:#475569;margin-left:6px;}
+  .sig-summary table{width:100%;border-collapse:collapse;font-size:1rem;}
+  .sig-summary th,.sig-summary td{border:1px solid #cbd5e1;padding:5px 6px;text-align:center;}
+  .sig-summary thead th{background:#f1f5f9;color:#475569;font-size:.85rem;}
+  .sig-summary tbody th{text-align:left;font-weight:800;white-space:nowrap;}
+  .sig-summary tr.cur td,.sig-summary tr.cur th{background:#eff6ff;font-weight:900;}
+  .sig-summary td.tot{font-size:1.35rem;font-weight:1000;color:#1d4ed8;}
+  @media (max-width:560px){.sig-summary th,.sig-summary td{padding:3px 2px;font-size:.8rem}.sig-summary td.tot{font-size:1.05rem}}
+
+  .sheet-header.has-logo-rows{grid-template-columns:auto minmax(0,1fr) auto;}
+  .sheet-header.no-logos{grid-template-columns:0 minmax(0,1fr) 0;gap:0;}
+  .sheet-logo-row{display:flex;align-items:center;gap:8px;height:64px;}
+  .sheet-logo-row.right{justify-content:flex-end;}
+  .sheet-logo-row img{height:58px;width:auto;max-width:130px;object-fit:contain;}
 </style>
 <section class="card scorecard-theme-{{ theme }}">
   <div class="section-head responsive-head">
@@ -1167,13 +1204,16 @@
     </div>
     <div class="scorecard-table-wrap">
       <div id="scorecardCapture" class="scorecard-sheet print-landscape">
-      <div class="sheet-header">
-        <div class="sheet-logo">LOGO</div>
+      <div class="sheet-header{% if sheet_layout.logos_left or sheet_layout.logos_right or sheet_layout.logo_left %} has-logo-rows{% else %} no-logos{% endif %}">
+        {% if sheet_layout.logos_left %}<div class="sheet-logo-row">{% for lg in sheet_layout.logos_left %}<img src="{{ url_for('static', filename=lg) }}" alt="logo">{% endfor %}</div>
+        {% elif sheet_layout.logo_left %}<div class="sheet-logo-row"><img src="{{ url_for('static', filename=sheet_layout.logo_left) }}" alt="logo"></div>
+        {% else %}<div></div>{% endif %}
         <div class="sheet-title-wrap">
           <div class="sheet-title-main">{{ event.name }}</div>
           <div class="sheet-title-sub">ประเภทสุดยอดความแม่นยำ (SHOOTING)</div>
         </div>
-        <div class="sheet-logo">LOGO</div>
+        {% if sheet_layout.logos_right %}<div class="sheet-logo-row right">{% for lg in sheet_layout.logos_right %}<img src="{{ url_for('static', filename=lg) }}" alt="logo">{% endfor %}</div>
+        {% else %}<div></div>{% endif %}
       </div>
 
       <table class="scorecard-meta-table">
@@ -1441,6 +1481,9 @@
       </div>
       <button type="button" class="btn secondary" id="signatureModalClose">ปิด</button>
     </div>
+    <div class="sig-summary" id="sigSummary"
+         data-name="{{ athlete.name }}" data-aff="{{ athlete.affiliation }}" data-bib="{{ athlete.bib_no or display_order }}"
+         data-round="{{ round_no }}" data-labels='{{ round_labels|tojson }}'></div>
     <div class="signature-modal-body">
       <canvas id="signatureModalCanvas" class="signature-modal-canvas"></canvas>
     </div>
@@ -1560,11 +1603,36 @@
     signatureDirty = false;
 
     signatureModalTitle.textContent = title || 'ลงลายเซ็น';
+    renderSignatureSummary();
     signatureModal.classList.remove('hidden');
     document.body.classList.add('signature-modal-open');
     signatureModal.setAttribute('aria-hidden', 'false');
 
     setTimeout(resizeModalCanvas, 20);
+  }
+
+  // สรุปคะแนนให้ผู้เซ็นเห็นก่อนเซ็น: ตีรอบไหน ได้เท่าไหร่ (อ่านจากตารางบนหน้า จึงตรงกับที่คีย์ล่าสุด)
+  function renderSignatureSummary() {
+    const box = document.getElementById('sigSummary');
+    if (!box) return;
+    const tr = t => (window.translateI18nText ? window.translateI18nText(t) : t);
+    const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+    let labels = [];
+    try { labels = JSON.parse(box.dataset.labels || '[]'); } catch (e) {}
+    const current = Number(box.dataset.round || 1);
+    const num = id => { const el = document.getElementById(id); return el ? Number(el.textContent.trim() || 0) : null; };
+    let rows = '';
+    labels.forEach((label, idx) => {
+      const r = idx + 1;
+      const total = num(`round-total-${r}`);
+      if (total === null || (r > current)) return;
+      let cells = '';
+      for (let st = 1; st <= 5; st++) cells += `<td>${num(`station-total-${r}-${st}`) ?? '-'}</td>`;
+      rows += `<tr class="${r === current ? 'cur' : ''}"><th>${esc(tr(label))}${r === current ? ' ◀' : ''}</th>${cells}<td class="tot">${total}</td></tr>`;
+    });
+    const stHead = [1, 2, 3, 4, 5].map(st => `<th>${esc(tr('สถานี ' + st))}</th>`).join('');
+    box.innerHTML = `<div class="sig-who"><b>#${esc(box.dataset.bib)} ${esc(box.dataset.name)}</b> <span class="aff-flag">${esc(box.dataset.aff)}</span></div>
+      <table><thead><tr><th>${esc(tr('รอบ'))}</th>${stHead}<th>${esc(tr('รวม'))}</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function closeSignatureModal() {

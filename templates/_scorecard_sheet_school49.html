@@ -1,8 +1,10 @@
 {# ใบบันทึกคะแนนรูปแบบ "คำมอกหลวงเกมส์" (กีฬาสาธิตสามัคคี ครั้งที่ 49) · ใช้ตัวแปรจาก loop ใน scorecard_print.html #}
+{% set w = layout.words or {} %}
 {% macro box(on) %}<span class="s49-box">{{ '✓' if on else '' }}</span>{% endmacro %}
-<div class="sheet s49-sheet" data-file-stem="scorecard-print-{{ event.id }}-r{{ round_no }}-a{{ athlete.id }}">
+<div class="sheet s49-sheet{% if layout.words %} s49-intl{% endif %}" data-file-stem="scorecard-print-{{ event.id }}-r{{ round_no }}-a{{ athlete.id }}">
   <div class="s49-top">
-    <img class="s49-logo-left" src="{{ url_for('static', filename=layout.logo_left) }}" alt="">
+    {% if layout.logos_left %}<div class="s49-logos-right s49-logos-left">{% for lg in layout.logos_left %}<img src="{{ url_for('static', filename=lg) }}" alt="">{% endfor %}</div>
+    {% else %}<img class="s49-logo-left" src="{{ url_for('static', filename=layout.logo_left) }}" alt="">{% endif %}
     <div class="s49-titles">
       <div class="s49-title">{{ layout.title }}</div>
       <div class="s49-subtitle">{{ layout.subtitle }}</div>
@@ -12,14 +14,19 @@
 
   <div class="s49-info">
     <div class="s49-line">
-      <span class="s49-f s49-no"><b>หมายเลข</b> <span class="s49-val">{{ athlete.bib_no or display_order or athlete.start_order or '' }}</span></span>
-      <span class="s49-f s49-name"><b>ชื่อ - สกุล</b> <span class="s49-val">{{ athlete.name if athlete.name != athlete.affiliation else '' }}</span></span>
-      <span class="s49-f s49-school"><b>สังกัด / โรงเรียน</b> <span class="s49-val">{{ athlete.affiliation or '' }}</span></span>
+      <span class="s49-f s49-no"><b>{{ w.no or 'หมายเลข' }}</b> <span class="s49-val">{{ athlete.bib_no or display_order or athlete.start_order or '' }}</span></span>
+      <span class="s49-f s49-name"><b>{{ w.name or 'ชื่อ - สกุล' }}</b> <span class="s49-val">{{ athlete.name if (w.no or athlete.name != athlete.affiliation) else '' }}</span></span>
+      <span class="s49-f s49-school"><b>{{ w.affiliation or 'สังกัด / โรงเรียน' }}</b> <span class="s49-val"><span class="aff-flag">{{ athlete.affiliation or '' }}</span></span></span>
     </div>
     <div class="s49-line">
-      <span class="s49-f s49-level"><b>ระดับ</b> {{ box(level_flags.primary) }} ประถม &nbsp; {{ box(level_flags.lower) }} ม.ต้น &nbsp; {{ box(level_flags.upper) }} ม.ปลาย</span>
-      <span class="s49-f s49-sex"><b>ประเภท</b> {{ box(level_flags.male) }} ชาย &nbsp; {{ box(level_flags.female) }} หญิง</span>
-      <span class="s49-f s49-date"><b>วันที่</b> <span class="s49-val s49-short">{{ event_date_th }}</span> <b>สนาม</b> <span class="s49-val s49-short">{{ court_name(event, display_lane_no or athlete.lane_no or '') }}{% if (display_lane_order or athlete.lane_order) %}/{{ display_lane_order or athlete.lane_order }}{% endif %}</span></span>
+      {% if layout.show_level is not defined or layout.show_level %}<span class="s49-f s49-level"><b>ระดับ</b> {{ box(level_flags.primary) }} ประถม &nbsp; {{ box(level_flags.lower) }} ม.ต้น &nbsp; {{ box(level_flags.upper) }} ม.ปลาย</span>{% endif %}
+      <span class="s49-f s49-sex"><b>{{ w.category or 'ประเภท' }}</b> {{ box(level_flags.male) }} {{ w.male or 'ชาย' }} &nbsp; {{ box(level_flags.female) }} {{ w.female or 'หญิง' }}</span>
+      {% if w.queue %}
+      <span class="s49-f s49-date"><b>{{ w.date }}</b> <span class="s49-val">{{ event_date_th }}</span></span>
+      <span class="s49-f s49-court"><b>{{ w.court }}</b> <span class="s49-val">{{ court_name(event, display_lane_no or athlete.lane_no or '') }}</span> <b>{{ w.queue }}</b> <span class="s49-val">{{ display_lane_order or athlete.lane_order or '' }}</span></span>
+      {% else %}
+      <span class="s49-f s49-date"><b>{{ w.date or 'วันที่' }}</b> <span class="s49-val s49-short">{{ event_date_th }}</span> <b>{{ w.court or 'สนาม' }}</b> <span class="s49-val s49-short">{{ court_name(event, display_lane_no or athlete.lane_no or '') }}{% if not w.queue and (display_lane_order or athlete.lane_order) %}/{{ display_lane_order or athlete.lane_order }}{% endif %}</span>{% if w.queue %} <b>{{ w.queue }}</b> <span class="s49-val s49-short s49-tiny">{{ display_lane_order or athlete.lane_order or '' }}</span>{% endif %}</span>
+      {% endif %}
     </div>
   </div>
 
@@ -44,9 +51,9 @@
         {% endfor %}
       </tr>
       <tr class="s49-dist">
-        <th>ระยะ / เมตร</th>
-        {% for st in [1,2,3,4,5] %}<th>6M</th><th>7M</th><th>8M</th><th>9M</th><th class="s49-small">รวม</th>{% endfor %}
-        <th>คะแนนรวม</th><th>ลำดับ</th><th>ลายมือชื่อ</th>
+        <th>{{ w.distance or 'ระยะ / เมตร' }}</th>
+        {% for st in [1,2,3,4,5] %}<th>6M</th><th>7M</th><th>8M</th><th>9M</th><th class="s49-small">{{ w.total or 'รวม' }}</th>{% endfor %}
+        <th>{{ w.grand_total or 'คะแนนรวม' }}</th><th>{{ w.rank or 'ลำดับ' }}</th><th>{{ w.athlete_sign or 'ลายมือชื่อ' }}</th>
       </tr>
     </thead>
     <tbody>
@@ -62,11 +69,11 @@
       {% endif %}
       {% set has_started = ns_started.value %}
       <tr class="s49-r1">
-        <td rowspan="2" class="s49-round">{{ round_label }}</td>
+        <td rowspan="2" class="s49-round">{{ (w.rounds or {}).get(round_label, round_label) }}</td>
         {% for st in [1,2,3,4,5] %}
           {% for dm in [6,7,8,9] %}
           {% set c = score_map.get((rn, st, dm)) %}
-          <td class="s49-score">{% if has_started and c and (c.is_scored or c.score not in [none, '', 0] or c.is_red_card) %}{{ c.score }}{% if c.is_red_card %}<span class="s49-red-card">แดง</span>{% endif %}{% endif %}</td>
+          <td class="s49-score">{% if has_started and c and (c.is_scored or c.score not in [none, '', 0] or c.is_red_card) %}{{ c.score }}{% if c.is_red_card %}<span class="s49-red-card">{{ w.red or 'แดง' }}</span>{% endif %}{% endif %}</td>
           {% endfor %}
           <td class="s49-st-total">{{ station_totals[(rn, st)] if has_started and station_totals[(rn, st)] is defined else '' }}</td>
         {% endfor %}
@@ -80,8 +87,8 @@
         {% endfor %}
         <td class="s49-sum">
           {% set pen = (item.round_penalties or {}).get(rn) %}
-          {% if pen and pen.disqualified %}<span class="s49-dq">{{ "ถอนตัว" if pen.withdrawn else "DQ" }}</span>
-          {% elif pen and pen.points and has_started %}{{ round_totals[rn] - pen.points }}<div class="s49-pen">หัก −{{ pen.points }}</div>
+          {% if pen and pen.disqualified %}<span class="s49-dq">{{ (w.withdrawn or "ถอนตัว") if pen.withdrawn else "DQ" }}</span>
+          {% elif pen and pen.points and has_started %}{{ round_totals[rn] - pen.points }}<div class="s49-pen">{{ w.penalty or 'หัก' }} −{{ pen.points }}</div>
           {% else %}{{ round_totals[rn] if has_started and round_totals[rn] is defined else '' }}{% endif %}
         </td>
         <td class="s49-rank">{{ round_ranks[rn] if has_started and round_ranks[rn] is defined and round_ranks[rn] != '' else '' }}</td>
@@ -92,12 +99,12 @@
   </table>
 
   <div class="s49-signs">
-    {% for who, key in [('ลายมือชื่อกรรมการตัดสิน', 'referee_signature'), ('ลายมือชื่อกรรมการบันทึกคะแนน', 'recorder_signature')] %}
+    {% for who, key in [(w.referee or 'ลายมือชื่อกรรมการตัดสิน', 'referee_signature'), (w.recorder or 'ลายมือชื่อกรรมการบันทึกคะแนน', 'recorder_signature')] %}
     <div class="s49-sign-col">
       <div class="s49-sign-title">{{ who }}</div>
       {% for round_label in round_labels %}
       {% set sig = round_signatures[loop.index] %}
-      <div class="s49-sign-line"><b>{{ round_label }}</b>{% if sig and sig[key] %}<img src="{{ sig[key] }}" alt="" class="signature-image-print">{% endif %}</div>
+      <div class="s49-sign-line"><b>{{ (w.rounds or {}).get(round_label, round_label) }}</b>{% if sig and sig[key] %}<img src="{{ sig[key] }}" alt="" class="signature-image-print">{% endif %}</div>
       {% endfor %}
     </div>
     {% endfor %}

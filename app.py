@@ -694,6 +694,7 @@ SCORECARD_LAYOUTS = {
     "standard": {"label": "มาตรฐาน (ใบเดิมของระบบ)"},
     "school49": {
         "label": "กีฬาสาธิตสามัคคี ครั้งที่ 49 “คำมอกหลวงเกมส์”",
+        "sheet": "s49",
         "title": "ใบบันทึกคะแนนกีฬาเปตอง  ประเภทสุดยอดความแม่นยำ (SHOOTING)",
         "subtitle": "กีฬาสาธิตสามัคคี ครั้งที่ 49  “คำมอกหลวงเกมส์”",
         "footer": "ณ โรงเรียนสาธิตมหาวิทยาลัยพะเยา     24 – 30 ตุลาคม 2569",
@@ -704,6 +705,31 @@ SCORECARD_LAYOUTS = {
             ("สถานที่ 4", "ยิงลูกสีขาวเหนือลูกดำ"), ("สถานที่ 5", "ยิงลูกเป้า"),
         ],
         "station_images": [f"scorecard/school49/st{i}.png" for i in range(1, 6)],
+    },
+    # ชิงแชมป์โลก KKU 2026: โลโก้เจ้าภาพซ้าย / สหพันธ์ระหว่างประเทศขวา (ใช้ใบแบบมาตรฐาน)
+    "kku2026": {
+        "label": "52e Championnats du Monde · KKU 2026",
+        "sheet": "s49",  # ใช้หน้าตาใบแบบคำมอกหลวงเกมส์ เปลี่ยนแค่โลโก้และคำ
+        "title": "SCORE SHEET · PRECISION SHOOTING",
+        "subtitle": "52e Championnats du Monde de Pétanque · Tir de précision · KKU 2026",
+        "footer": "Khon Kaen University, Thailand     20 – 24 November 2026",
+        "logos_left": [f"scorecard/kku2026/{n}.png" for n in ("kku2026", "kku", "tpic", "tbf")],
+        "logos_right": [f"scorecard/kku2026/{n}.png" for n in ("fipjp", "wpbf", "absc")],
+        "stations": [
+            ("Atelier 1", "Boule seule"), ("Atelier 2", "Boule derrière but"), ("Atelier 3", "Entre deux boules"),
+            ("Atelier 4", "Sautée"), ("Atelier 5", "But"),
+        ],
+        "station_images": [f"scorecard/school49/st{i}.png" for i in range(1, 6)],
+        "date_format": "en",
+        "show_level": False,
+        "words": {
+            "no": "No.", "name": "Name", "affiliation": "Nation", "category": "Category", "male": "Men", "female": "Women",
+            "date": "Date", "court": "Court", "queue": "Round", "distance": "Distance (m)", "total": "Total", "grand_total": "Score",
+            "rank": "Rank", "athlete_sign": "Athlete", "referee": "Umpire signature", "recorder": "Recorder signature",
+            "red": "RED", "withdrawn": "WD", "penalty": "Penalty",
+            "rounds": {"รอบที่ 1": "Qualification 1", "รอบที่ 2": "Qualification 2", "รอบ 16 คน": "Round of 16",
+                       "รอบ 8 คน": "Quarterfinal", "รอบรองชนะเลิศ": "Semifinal", "รอบชิงชนะเลิศ": "Final"},
+        },
     },
 }
 
@@ -2600,7 +2626,8 @@ def scorecard_layout_context(event) -> dict:
         "layout": SCORECARD_LAYOUTS[key],
         "layouts": SCORECARD_LAYOUTS,
         "level_flags": scorecard_level_flags(event),
-        "event_date_th": thai_date(event.competition_date),
+        "event_date_th": (event.competition_date.strftime("%d %B %Y") if SCORECARD_LAYOUTS[key].get("date_format") == "en" and event.competition_date
+                          else thai_date(event.competition_date)),
     }
 
 
@@ -5868,6 +5895,7 @@ def scorecard(athlete_id: int):
         "scorecard.html",
         athlete=athlete,
         event=event,
+        sheet_layout=SCORECARD_LAYOUTS[scorecard_layout_key(event)],
         round_no=round_no,
         round_labels=scorecard_round_labels(event),
         score_map=template_data["score_map"],
