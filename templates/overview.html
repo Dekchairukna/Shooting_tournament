@@ -757,7 +757,7 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
       <div class="title-box">
         <h1>{{ event.name }}</h1>
         <p class="muted">{{ event.event_group }} | {{ event.category }} | {{ event.next_round_label }} | รอบที่กำลังดู: {{ round_no }}</p>
-        {% if event.chain_id %}<div class="sort-off-badge" title="อีเวนต์นี้ใช้สนามร่วมกับรุ่นอื่น · ลำดับในสนาม = รอบคิวรวมของสาย">🔗 ต่อคิวสนาม: {{ event.chain.name }}</div>{% endif %}
+        {% if event.chain_id %}<div class="sort-off-badge" title="อีเวนต์นี้ใช้สนามร่วมกับรุ่นอื่น · รอบในตารางคือรอบคิวรวมของสาย">🔗 ต่อคิวสนาม: {{ event.chain.name }}</div>{% endif %}
         {% if not sort_by_rank %}<div class="sort-off-badge" title="แถวไม่สลับตามคะแนน · คอลัมน์ Class ยังแสดงอันดับปัจจุบัน">ลำดับคงที่ตามลำดับการตี</div>{% endif %}
         {% if current_user.is_authenticated and current_user.role == 'court' %}
         <div style="margin-top:7px;display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-weight:950;">🔒 {{ court_public_id(current_user) }} · แสดงเฉพาะสนาม {{ current_user.court_no }}</div>
@@ -862,7 +862,7 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
             <tr>
               <th rowspan="3" class="col-order"><span>ลำดับการตี</span></th>
               <th rowspan="3" class="col-lane"><span>สนาม</span></th>
-              <th rowspan="3" class="col-lane-order"><span>ลำดับในสนาม</span></th>
+              <th rowspan="3" class="col-lane-order"><span>{{ 'ROUNDS' if current_lang == 'en' else 'รอบ' }}</span></th>
               <th rowspan="3" class="col-affiliation">สังกัด</th>
               <th rowspan="3" class="col-name">ชื่อ</th>
               {% if round_no == 2 and event.has_round_two %}

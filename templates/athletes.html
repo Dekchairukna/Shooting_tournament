@@ -65,7 +65,7 @@
     <div class="card muted-box">
       <h3>การกระจายสนามอัตโนมัติ</h3>
       {% if event.chain_id %}
-      <p>อีเวนต์นี้อยู่ในสายคิว <strong>{{ event.chain.name }}</strong> · สนามและ “ลำดับในสนาม” (= รอบคิวรวมของสาย) จัดต่อจากรุ่นก่อนหน้าให้อัตโนมัติ · <a href="{{ url_for('court_chains') }}">ดูสายคิว</a></p>
+      <p>อีเวนต์นี้อยู่ในสายคิว <strong>{{ event.chain.name }}</strong> · สนามและรอบคิวจัดต่อจากรุ่นก่อนหน้าให้อัตโนมัติ · <a href="{{ url_for('court_chains') }}">ดูสายคิว</a></p>
       {% else %}
       <p>สนาม = วนตามจำนวนสนาม เช่น 1, 2, 3, 4 แล้วกลับไป 1</p>
       {% endif %}
@@ -121,7 +121,7 @@
   </div>
   <div class="table-wrap">
     <table class="table">
-    <thead><tr><th>No</th><th>หมายเลข</th><th>ชื่อ</th><th>สังกัด</th><th>สนาม</th><th>ลำดับในสนาม</th>{% if event.has_round_two %}<th>สิทธิ์รอบ 2</th>{% endif %}<th>จัดการ</th></tr></thead>
+    <thead><tr><th>No</th><th>หมายเลข</th><th>ชื่อ</th><th>สังกัด</th><th>สนาม</th><th>{{ 'ROUNDS' if current_lang == 'en' else 'รอบ' }}</th>{% if event.has_round_two %}<th>สิทธิ์รอบ 2</th>{% endif %}<th>จัดการ</th></tr></thead>
     <tbody>
       {% for athlete in athletes %}
       <tr>
