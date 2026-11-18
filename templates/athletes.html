@@ -5,8 +5,14 @@
     <div>
       <h1>{{ event.name }}</h1>
       <p class="muted">เพิ่มนักกีฬาและจัดลำดับยิง</p>
+      {% if is_world_2026 %}
+      <p class="muted">ตั้งต้นด้วยชื่อประเทศและลำดับตามไฟล์รายชื่อ ใช้ “แก้ชื่อ/ลำดับ” ในตารางเมื่อได้ลำดับการตีจริง</p>
+      {% endif %}
     </div>
     <div>
+      {% if has_country_teams %}
+      <a class="btn" href="#country-names">อัปเดตชื่อจาก Excel</a>
+      {% endif %}
       <a class="btn secondary" href="{{ url_for('event_overview', event_id=event.id, round=1) }}">ไปหน้ารวม</a>
     </div>
   </div>
@@ -88,13 +94,27 @@
     </form>
   </details>
   {% endif %}
+  {% if has_country_teams %}
+  <div class="card muted-box" style="margin-top:1rem;" id="country-names">
+    <h3>อัปเดตชื่อนักกีฬาตามประเทศ</h3>
+    <p class="muted">ใช้ไฟล์ .xlsx ขนาดไม่เกิน 2 MB โดยใส่ประเทศในคอลัมน์ A และชื่อนักกีฬาในคอลัมน์ B เว้นช่องชื่อว่างสำหรับประเทศที่ยังไม่ต้องการอัปเดต</p>
+    <form method="post" action="{{ url_for('import_event_country_names', event_id=event.id) }}" enctype="multipart/form-data" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label style="grid-column:1/-1;">เลือกไฟล์อัปเดตชื่อ<input type="file" name="excel_file" accept=".xlsx" required></label>
+      <div style="grid-column:1/-1; display:flex; gap:.75rem; flex-wrap:wrap;">
+        <button class="btn" type="submit">อัปเดตชื่อนักกีฬา</button>
+        <a class="btn secondary" href="{{ url_for('event_country_names_template', event_id=event.id) }}">ดาวน์โหลดไฟล์ที่มีรายชื่อประเทศ</a>
+      </div>
+    </form>
+  </div>
+  {% endif %}
   <div class="card muted-box" style="margin-top:1rem;">
-    <h3>นำเข้ารายชื่อนักกีฬาจาก Excel</h3>
-    <p class="muted">ไฟล์ต้องเป็น .xlsx และต้องมี 2 คอลัมน์คือ <strong>ชื่อ</strong> และ <strong>สังกัด</strong></p>
+    <h3>เพิ่มนักกีฬาใหม่จาก Excel</h3>
+    <p class="muted">ใช้ไฟล์ .xlsx ที่มีคอลัมน์ <strong>ชื่อ</strong> และ <strong>สังกัด</strong> เพื่อเพิ่มรายการใหม่</p>
     <form method="post" action="{{ url_for('import_athletes_excel', event_id=event.id) }}" enctype="multipart/form-data" class="form-grid">
       <label style="grid-column:1/-1;">เลือกไฟล์ Excel<input type="file" name="excel_file" accept=".xlsx" required></label>
       <div style="grid-column:1/-1; display:flex; gap:.75rem; flex-wrap:wrap;">
-        <button class="btn" type="submit">อัปโหลด Excel</button>
+        <button class="btn" type="submit">นำเข้ารายการใหม่</button>
         <a class="btn secondary" href="{{ url_for('athletes_import_template') }}">ดาวน์โหลดไฟล์ตัวอย่าง</a>
       </div>
     </form>

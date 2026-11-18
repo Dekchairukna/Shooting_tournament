@@ -517,7 +517,6 @@
         <a class="btn secondary" href="{{ url_for('court_chains') }}">🔗 ต่อคิวสนาม</a>
         <a class="btn secondary" href="{{ url_for('bulk_create_events') }}">+ สร้างหลายอีเวนต์</a>
         <a class="btn" href="{{ url_for('create_event') }}">+ สร้างอีเวนต์</a>
-        {% if current_user.role == 'superadmin' %}<a class="btn secondary" href="{{ url_for('create_world_48_event') }}">🌐 สร้างรายการโลก 48 ประเทศ</a>{% endif %}
       </div>
       {% endif %}
     </div>

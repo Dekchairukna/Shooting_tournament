@@ -8,6 +8,7 @@ from datetime import date, datetime
 from functools import wraps
 from typing import Dict, List, Tuple
 from types import SimpleNamespace
+import click
 from flask import jsonify
 
 from flask import (
@@ -3630,68 +3631,51 @@ def create_event():
     return render_template("event_form.html")
 
 
-@app.route("/events/world-48/new", methods=["GET", "POST"])
-@login_required
-@role_required("superadmin")
-def create_world_48_event():
-    """สร้างอีเวนต์ 48 ประเทศตามรายชื่อยืนยัน โดยใส่ชื่อผู้เล่นและลำดับจริงภายหลังได้"""
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        event_group = request.form.get("event_group", "World Championship").strip() or "World Championship"
-        category = request.form.get("category", "ชาย").strip() or "ชาย"
-        location = request.form.get("location", "").strip()
-        try:
-            competition_date = date.fromisoformat(request.form.get("competition_date", ""))
-            lane_count = max(1, int(request.form.get("lane_count", 8)))
-        except (TypeError, ValueError):
-            flash("กรุณาตรวจสอบวันที่แข่งขันและจำนวนสนาม", "warning")
-            return render_template("world_event_form.html", teams=WORLD_CHAMPIONSHIP_48, today=date.today().isoformat())
-        if not name:
-            flash("กรุณากรอกชื่ออีเวนต์", "warning")
-            return render_template("world_event_form.html", teams=WORLD_CHAMPIONSHIP_48, today=date.today().isoformat())
-        if Event.query.filter_by(name=name, competition_date=competition_date).first():
-            flash("มีอีเวนต์ชื่อนี้ในวันเดียวกันแล้ว", "warning")
-            return redirect(url_for("index"))
+WORLD_2026_EVENT_NAME = "17th World Pétanque Championship · Men’s Precision Shooting · KKU 2026"
+WORLD_2026_EVENT_NAMES = (
+    WORLD_2026_EVENT_NAME,
+    "52nd PÉTANQUE WORLD CHAMPIONSHIP 2026 · MEN SHOOTING",
+)
 
-        event = Event(
-            name=name,
-            event_group=event_group,
-            category=category,
-            competition_date=competition_date,
-            location=location,
-            lane_count=lane_count,
-            direct_qualifiers=4,
-            has_round_two=True,
-            round_two_cutoff_rank=16,
-            round_two_mode="cutoff",
-            scorecard_layout="kku2026",
-            lane_start=1,
-            court_letters=False,
-            overview_sort_by_rank=False,
-            next_round_label="รอบ 8 คน",
-            round_two_advancers=4,
-            created_by=current_user.id,
-        )
-        db.session.add(event)
-        db.session.flush()
-        for order, country in enumerate(WORLD_CHAMPIONSHIP_48, start=1):
-            display_name = country.rsplit(" (", 1)[0]
-            lane_no, lane_order = lane_for_order(event, order)
-            db.session.add(Athlete(
-                event_id=event.id,
-                bib_no=str(order),
-                name=display_name,
-                affiliation=country,
-                start_order=order,
-                lane_no=lane_no,
-                lane_order=lane_order,
-                status="waiting",
-            ))
-        created_courts, _ = sync_event_court_users(event)
-        db.session.commit()
-        flash(f"สร้างอีเวนต์ 48 ประเทศแล้ว · ลำดับปัจจุบันเป็นลำดับชั่วคราวตามไฟล์ · เตรียม Court ID {created_courts} สนาม", "success")
-        return redirect(url_for("manage_athletes", event_id=event.id))
-    return render_template("world_event_form.html", teams=WORLD_CHAMPIONSHIP_48, today=date.today().isoformat())
+
+@app.cli.command("seed-world-2026")
+@click.option("--competition-date", type=click.DateTime(formats=["%Y-%m-%d"]), required=True)
+@click.option("--lanes", type=click.IntRange(min=1, max=48), required=True)
+def seed_world_2026(competition_date: datetime, lanes: int) -> None:
+    """Create the KKU 2026 event and its 48 teams in the configured database."""
+    existing = Event.query.filter(Event.name.in_(WORLD_2026_EVENT_NAMES)).first()
+    if existing is not None:
+        click.echo(f"Event #{existing.id} already exists.")
+        return
+
+    event = Event(
+        name=WORLD_2026_EVENT_NAME,
+        event_group="World Championship",
+        category="ชาย",
+        competition_date=competition_date.date(),
+        location="Khon Kaen University, Thailand",
+        lane_count=lanes,
+        has_round_two=False,
+        overview_show_cut_lines=False,
+        overview_sort_by_rank=False,
+        scorecard_layout="kku2026",
+    )
+    db.session.add(event)
+    db.session.flush()
+    for order, country in enumerate(WORLD_CHAMPIONSHIP_48, start=1):
+        lane_no, lane_order = lane_for_order(event, order)
+        db.session.add(Athlete(
+            event_id=event.id,
+            bib_no=str(order),
+            name=country.rsplit(" (", 1)[0],
+            affiliation=country,
+            start_order=order,
+            lane_no=lane_no,
+            lane_order=lane_order,
+        ))
+    sync_event_court_users(event)
+    db.session.commit()
+    click.echo(f"Created event #{event.id} with {len(WORLD_CHAMPIONSHIP_48)} teams.")
 
 
 @app.route("/events/<int:event_id>/edit", methods=["GET", "POST"])
@@ -3787,7 +3771,14 @@ def manage_athletes(event_id: int):
         .order_by(User.court_no, User.id)
         .all()
     )
-    return render_template("athletes.html", event=event, athletes=athletes, court_users=court_users)
+    return render_template(
+        "athletes.html",
+        event=event,
+        athletes=athletes,
+        court_users=court_users,
+        is_world_2026=event.name in WORLD_2026_EVENT_NAMES,
+        has_country_teams=any(nation_code(athlete.affiliation) for athlete in athletes),
+    )
 
 
 @app.route("/athletes/<int:athlete_id>/edit", methods=["GET", "POST"])
@@ -4489,6 +4480,138 @@ def import_athlete_names():
         results = {"changed": changed, "same": same, "missing": missing, "total": len(pairs)}
         flash(f"ใส่ชื่อแล้ว {len(changed)} คน · เหมือนเดิม {same} · ไม่พบ id {len(missing)}", "success" if not missing else "warning")
     return render_template("names_import.html", results=results)
+
+
+@app.route("/events/<int:event_id>/athletes/names-by-country.xlsx")
+@login_required
+@role_required("admin", "superadmin")
+def event_country_names_template(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Athlete names"
+    sheet.append(["ประเทศ", "ชื่อนักกีฬา"])
+    sheet.freeze_panes = "A2"
+    sheet.column_dimensions["A"].width = 38
+    sheet.column_dimensions["B"].width = 38
+    for athlete in sorted(event.athletes, key=lambda row: row.start_order):
+        if nation_code(athlete.affiliation):
+            sheet.append([athlete.affiliation, None])
+            sheet.cell(sheet.max_row, 1).data_type = "s"
+            sheet.cell(sheet.max_row, 2).number_format = "@"
+
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    return send_file(
+        stream,
+        as_attachment=True,
+        download_name=f"athlete_names_event_{event.id}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _read_country_names_workbook(file) -> list[tuple[int, str, str]]:
+    from xml.etree.ElementTree import ParseError
+    from zipfile import BadZipFile
+
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    max_bytes = 2 * 1024 * 1024
+    data = file.stream.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError("ไฟล์รายชื่อต้องมีขนาดไม่เกิน 2 MB")
+    try:
+        workbook = load_workbook(BytesIO(data), read_only=True, keep_links=False)
+        try:
+            if not workbook.worksheets:
+                raise ValueError("ไฟล์ไม่มีชีตสำหรับรายชื่อนักกีฬา")
+            updates = []
+            first_row = True
+            headers = {"ประเทศ", "ทีม", "ประเทศ/ทีม", "ทีม/ประเทศ", "สังกัด", "country", "nation", "country/team", "team/country"}
+            rows = workbook.worksheets[0].iter_rows(min_col=1, max_col=2)
+            for row_number, (country_cell, name_cell) in enumerate(rows, start=1):
+                if row_number > 1000:
+                    raise ValueError("ไฟล์รายชื่อต้องมีไม่เกิน 1,000 แถว")
+                country = _cell_text(country_cell.value)
+                name = " ".join(_cell_text(name_cell.value).split())
+                if not country and not name:
+                    continue
+                is_header = first_row and country.casefold().replace(" ", "") in headers
+                first_row = False
+                if is_header or not name:
+                    continue
+                if country_cell.data_type == "f" or name_cell.data_type == "f":
+                    raise ValueError(f"แถว {row_number}: กรุณาใส่ชื่อประเทศและชื่อนักกีฬาเป็นข้อความ")
+                updates.append((row_number, country, name))
+            return updates
+        finally:
+            workbook.close()
+    except (BadZipFile, InvalidFileException, KeyError, OSError, ParseError) as exc:
+        raise ValueError("อ่านไฟล์ Excel ไม่ได้ กรุณาใช้ไฟล์ .xlsx ที่เปิดได้ตามปกติ") from exc
+
+
+@app.route("/events/<int:event_id>/athletes/names-by-country", methods=["POST"])
+@login_required
+@role_required("admin", "superadmin")
+def import_event_country_names(event_id: int):
+    event = Event.query.get_or_404(event_id)
+    back = url_for("manage_athletes", event_id=event.id)
+    file = request.files.get("excel_file")
+    if not file or not file.filename.lower().endswith(".xlsx"):
+        flash("กรุณาเลือกไฟล์ Excel .xlsx", "warning")
+        return redirect(back)
+    try:
+        rows = _read_country_names_workbook(file)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(back)
+    if not rows:
+        flash("ยังไม่มีชื่อนักกีฬาให้ปรับปรุงในไฟล์", "warning")
+        return redirect(back)
+
+    teams = {}
+    for athlete in Athlete.query.filter_by(event_id=event_id).order_by(Athlete.id).with_for_update():
+        code = nation_code(athlete.affiliation)
+        if code:
+            teams.setdefault(code, []).append(athlete)
+
+    errors = []
+    updates = []
+    seen = set()
+    for row_number, country, name in rows:
+        code = nation_code(country)
+        matches = teams.get(code, [])
+        country_display = country[:70] or "(ไม่มีชื่อประเทศ)"
+        if not matches:
+            errors.append(f"แถว {row_number}: ไม่พบประเทศ {country_display} ในอีเวนต์นี้")
+        elif len(matches) > 1:
+            errors.append(f"แถว {row_number}: มีประเทศ {country_display} มากกว่าหนึ่งทีมในอีเวนต์นี้")
+        elif code in seen:
+            errors.append(f"แถว {row_number}: ประเทศ {country_display} ซ้ำในไฟล์")
+        elif len(name) > 255:
+            errors.append(f"แถว {row_number}: ชื่อนักกีฬายาวเกิน 255 ตัวอักษร")
+        else:
+            seen.add(code)
+            updates.append((matches[0], name))
+
+    if errors:
+        message = " · ".join(errors[:5])
+        if len(errors) > 5:
+            message += f" · อีก {len(errors) - 5} แถว"
+        flash(f"ยังไม่ได้อัปเดตชื่อ กรุณาแก้ไฟล์แล้วอัปโหลดอีกครั้ง · {message}", "danger")
+        return redirect(back)
+
+    changed = 0
+    for athlete, name in updates:
+        if athlete.name != name:
+            athlete.name = name
+            changed += 1
+    db.session.commit()
+    clear_request_cache()
+    invalidate_poll_cache(event_id)
+    flash(f"อัปเดตชื่อนักกีฬา {changed} คน · ชื่อเดิม {len(updates) - changed} คน", "success")
+    return redirect(back)
 
 
 @app.route("/events/round2-plan", methods=["GET", "POST"])
