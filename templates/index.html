@@ -505,7 +505,7 @@
       <div>
         <h2>รายการแข่งขัน</h2>
         <div class="muted">เลือกดูหน้ารวม สถิติ และจัดการนักกีฬาได้จากตารางนี้</div>
-        {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] and hidden_count %}
+        {% if current_user.is_authenticated and current_user.role == 'superadmin' and hidden_count %}
         <div class="muted" style="margin-top:4px;">🙈 ซ่อนไว้ {{ hidden_count }} อีเวนต์ ·
           {% if show_hidden %}<a href="{{ url_for('index') }}">ซ่อนจากรายการ</a>{% else %}<a href="{{ url_for('index', show_hidden=1) }}">แสดงที่ซ่อนไว้</a>{% endif %}</div>
         {% endif %}
@@ -517,6 +517,7 @@
         <a class="btn secondary" href="{{ url_for('court_chains') }}">🔗 ต่อคิวสนาม</a>
         <a class="btn secondary" href="{{ url_for('bulk_create_events') }}">+ สร้างหลายอีเวนต์</a>
         <a class="btn" href="{{ url_for('create_event') }}">+ สร้างอีเวนต์</a>
+        {% if current_user.role == 'superadmin' %}<a class="btn secondary" href="{{ url_for('create_world_48_event') }}">🌐 สร้างรายการโลก 48 ประเทศ</a>{% endif %}
       </div>
       {% endif %}
     </div>
@@ -529,6 +530,8 @@
           {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
           <button class="btn secondary" type="button" data-selection-action="round2">🗂 ผังเข้ารอบ 2</button>
           <button class="btn" type="button" data-selection-action="settings">⚙️ ตั้งค่าร่วมกัน</button>
+          {% endif %}
+          {% if current_user.is_authenticated and current_user.role == 'superadmin' %}
           <button class="btn secondary" type="button" data-visibility-action="only">👁 แสดงเฉพาะที่เลือก</button>
           <button class="btn secondary" type="button" data-visibility-action="hide">🙈 ซ่อนที่เลือก</button>
           <button class="btn secondary" type="button" data-visibility-action="show">↩ เลิกซ่อนที่เลือก</button>
@@ -583,13 +586,13 @@
                 {% if current_user.is_authenticated and current_user.role in ['admin','superadmin'] %}
                 <a class="btn secondary" href="{{ url_for('manage_athletes', event_id=event.id) }}">นักกีฬา</a>
                 <a class="btn secondary" href="{{ url_for('edit_event', event_id=event.id) }}">แก้ไข</a>
-                <form method="post" action="{{ url_for('set_events_visibility') }}">
+                {% if current_user.role == 'superadmin' %}<form method="post" action="{{ url_for('set_events_visibility') }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="ids" value="{{ event.id }}">
                   <input type="hidden" name="action" value="{{ 'show' if event.is_hidden else 'hide' }}">
                   <input type="hidden" name="next" value="{{ request.full_path }}">
                   <button class="btn secondary" type="submit">{{ 'แสดง' if event.is_hidden else 'ซ่อน' }}</button>
-                </form>
+                </form>{% endif %}
                 <form method="post" action="{{ url_for('delete_event', event_id=event.id) }}" onsubmit="return confirm('ลบอีเวนต์นี้?');">
                   <button class="btn danger" type="submit">ลบ</button>
                 </form>

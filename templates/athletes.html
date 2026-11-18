@@ -127,6 +127,7 @@
         </td>
         {% endif %}
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          <a class="btn secondary" href="{{ url_for('edit_athlete', athlete_id=athlete.id) }}">แก้ชื่อ/ลำดับ</a>
           {% if athlete.withdrawn %}
           <form method="post" action="{{ url_for('toggle_athlete_withdrawn', athlete_id=athlete.id) }}" style="margin:0;" onsubmit="return confirm('ยกเลิกการถอนตัวของ ' + {{ athlete.name|tojson }} + ' ? กลับเข้าคิวตีตามเดิม');">
             <input type="hidden" name="action" value="cancel">

@@ -15,7 +15,7 @@ NATIONS = [
     ("AUS", "au", "Australie", "Australia", "ออสเตรเลีย", ()),
     ("BEL", "be", "Belgique", "Belgium", "เบลเยียม", ()),
     ("BRU", "bn", "Brunei", "Brunei", "บรูไน", ("Brunei Darussalam",)),
-    ("BFA", "bf", "Burkina Faso", "Burkina Faso", "บูร์กินาฟาโซ", ()),
+    ("BFA", "bf", "Burkina Faso", "Burkina Faso", "บูร์กินาฟาโซ", ("BUR",)),
     ("BEN", "bj", "Bénin", "Benin", "เบนิน", ()),
     ("CMR", "cm", "Cameroun", "Cameroon", "แคเมอรูน", ()),
     ("CAN", "ca", "Canada", "Canada", "แคนาดา", ()),
@@ -35,7 +35,7 @@ NATIONS = [
     ("ISR", "il", "Israël", "Israel", "อิสราเอล", ()),
     ("ITA", "it", "Italie", "Italy", "อิตาลี", ()),
     ("JPN", "jp", "Japon", "Japan", "ญี่ปุ่น", ()),
-    ("LIB", "lb", "Liban", "Lebanon", "เลบานอน", ()),
+    ("LIB", "lb", "Liban", "Lebanon", "เลบานอน", ("LBN",)),
     ("LUX", "lu", "Luxembourg", "Luxembourg", "ลักเซมเบิร์ก", ()),
     ("MAD", "mg", "Madagascar", "Madagascar", "มาดากัสการ์", ()),
     ("MAS", "my", "Malaisie", "Malaysia", "มาเลเซีย", ()),
@@ -46,12 +46,12 @@ NATIONS = [
     ("NED", "nl", "Pays-Bas", "Netherlands", "เนเธอร์แลนด์", ("Holland",)),
     ("POL", "pl", "Pologne", "Poland", "โปแลนด์", ()),
     ("CZE", "cz", "Tchéquie", "Czech Republic", "เช็กเกีย", ("Czechia", "République tchèque")),
-    ("SIN", "sg", "Singapour", "Singapore", "สิงคโปร์", ()),
+    ("SIN", "sg", "Singapour", "Singapore", "สิงคโปร์", ("SGP",)),
     ("SVK", "sk", "Slovaquie", "Slovakia", "สโลวาเกีย", ()),
     ("SWE", "se", "Suède", "Sweden", "สวีเดน", ()),
     ("SUI", "ch", "Suisse", "Switzerland", "สวิตเซอร์แลนด์", ()),
     ("SEN", "sn", "Sénégal", "Senegal", "เซเนกัล", ()),
-    ("PYF", "pf", "Tahiti", "Tahiti", "ตาฮีตี", ("French Polynesia", "Polynésie française")),
+    ("PYF", "pf", "Tahiti", "Tahiti", "ตาฮีตี", ("TAH", "French Polynesia", "French Polynesia : Tahiti", "Polynésie française")),
     ("THA", "th", "Thaïlande", "Thailand", "ไทย", ("ประเทศไทย",)),
     ("TUN", "tn", "Tunisie", "Tunisia", "ตูนิเซีย", ()),
     ("USA", "us", "États-Unis", "United States", "สหรัฐอเมริกา", ("USA", "United States of America", "Etats-Unis")),
@@ -84,6 +84,23 @@ NATIONS = [
 
 FLAG_FILES = sorted({n[1] for n in NATIONS})
 
+# รายชื่อจากไฟล์ยืนยันทีมเข้าร่วมชิงแชมป์โลก เรียงตามสไลด์ 1–48
+WORLD_CHAMPIONSHIP_48 = [
+    "Algeria (ALG)", "Andorra (AND)", "Argentina (ARG)", "Australia (AUS)",
+    "Belgium (BEL)", "Benin (BEN)", "Brunei (BRU)", "Burkina Faso (BUR)",
+    "Canada (CAN)", "China (CHN)", "Ivory Coast (CIV)", "Cameroon (CMR)",
+    "Comoros (COM)", "Czech Republic (CZE)", "Denmark (DEN)", "England (ENG)",
+    "Spain (ESP)", "Estonia (EST)", "Finland (FIN)", "France (FRA)",
+    "Germany (GER)", "Hungary (HUN)", "Indonesia (INA)", "Ireland (IRL)",
+    "Israel (ISR)", "Italy (ITA)", "Japan (JPN)", "Lebanon (LBN)",
+    "Luxembourg (LUX)", "Madagascar (MAD)", "Malaysia (MAS)", "Mali (MLI)",
+    "Monaco (MON)", "Mauritius (MRI)", "Mauritania (MTN)", "Netherlands (NED)",
+    "Niger (NIG)", "Poland (POL)", "Senegal (SEN)", "Singapore (SGP)",
+    "Switzerland (SUI)", "Slovakia (SVK)", "Sweden (SWE)",
+    "French Polynesia : Tahiti (TAH)", "Thailand (THA)", "Chinese Taipei (TPE)",
+    "Tunisia (TUN)", "United States (USA)",
+]
+
 
 def _norm(text: str) -> str:
     import unicodedata
@@ -112,15 +129,25 @@ def nation_code(text) -> str | None:
     if not raw:
         return None
     m = re.search(r"\(([A-Za-z]{3})\)\s*$", raw)
-    if m and m.group(1).upper() in BY_IOC:
-        return m.group(1).upper()
+    if m:
+        code = m.group(1).upper()
+        if code in BY_IOC:
+            return code
+        alias_code = _INDEX.get(code.lower()) or _INDEX.get(_norm(code))
+        if alias_code:
+            return alias_code
     for key in (raw.lower(), _norm(raw)):
         if key and key in _INDEX:
             return _INDEX[key]
     # 'BEL - Belgique' หรือ 'BEL Belgique'
     m = re.match(r"^([A-Za-z]{3})\b", raw)
-    if m and m.group(1).upper() in BY_IOC and len(raw) > 3 and not raw[3:4].isalpha():
-        return m.group(1).upper()
+    if m and len(raw) > 3 and not raw[3:4].isalpha():
+        code = m.group(1).upper()
+        if code in BY_IOC:
+            return code
+        alias_code = _INDEX.get(code.lower()) or _INDEX.get(_norm(code))
+        if alias_code:
+            return alias_code
     return None
 
 

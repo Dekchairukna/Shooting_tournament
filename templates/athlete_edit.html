@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}แก้ชื่อและลำดับการตี · Petanque Shooting{% endblock %}
+{% block content %}
+<section class="card" style="max-width:760px;margin:0 auto;">
+  <div class="section-head">
+    <div>
+      <h1 style="margin:0;">แก้ชื่อและลำดับการตี</h1>
+      <p class="muted">{{ event.name }} · <span class="aff-flag">{{ athlete.affiliation }}</span></p>
+    </div>
+    <a class="btn secondary" href="{{ url_for('manage_athletes', event_id=event.id) }}">กลับหน้ารายชื่อ</a>
+  </div>
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>ชื่อนักกีฬา / ชื่อทีม
+      <input name="name" value="{{ athlete.name }}" required maxlength="255">
+    </label>
+    <label>ประเทศ / สังกัด
+      <input name="affiliation" value="{{ athlete.affiliation }}" required maxlength="255">
+    </label>
+    <label>ลำดับการตี
+      <input name="start_order" type="number" min="1" max="{{ event.athletes|length }}" value="{{ athlete.start_order }}" required>
+      <small class="muted">ถ้าลำดับนี้มีทีมอื่นอยู่ ระบบจะสลับลำดับให้โดยอัตโนมัติ</small>
+    </label>
+    <button class="btn" type="submit">บันทึก</button>
+  </form>
+</section>
+{% endblock %}

@@ -2966,7 +2966,12 @@ def court_name(event, lane) -> str:
 app.jinja_env.globals["court_name"] = court_name
 app.jinja_env.globals["event_file_stem"] = event_file_stem
 
-from nations import client_index as _nation_client_index, flag_file as nation_flag_file, nation_code  # noqa: E402
+from nations import (  # noqa: E402
+    WORLD_CHAMPIONSHIP_48,
+    client_index as _nation_client_index,
+    flag_file as nation_flag_file,
+    nation_code,
+)
 _NATION_FLAG_INDEX = _nation_client_index()
 app.jinja_env.globals["nation_flag_index"] = lambda: _NATION_FLAG_INDEX
 app.jinja_env.globals["nation_flag_file"] = nation_flag_file
@@ -3253,8 +3258,8 @@ def index():
         return redirect(url_for("court_queue", event_id=current_user.court_event_id, round=1))
     stats = dashboard_stats()
     all_events = Event.query.order_by(Event.competition_date.desc(), Event.id.desc()).all()
-    is_admin = current_user.is_authenticated and current_user.role in {"admin", "superadmin"}
-    show_hidden = is_admin and request.args.get("show_hidden") == "1"
+    can_manage_visibility = current_user.is_authenticated and current_user.role == "superadmin"
+    show_hidden = can_manage_visibility and request.args.get("show_hidden") == "1"
     hidden_count = sum(1 for e in all_events if e.is_hidden)
     events = all_events if show_hidden else [e for e in all_events if not e.is_hidden]
     return render_template("index.html", events=events, stats=stats, show_hidden=show_hidden, hidden_count=hidden_count)
@@ -3262,7 +3267,7 @@ def index():
 
 @app.route("/events/visibility", methods=["POST"])
 @login_required
-@role_required("admin", "superadmin")
+@role_required("superadmin")
 def set_events_visibility():
     """ซ่อน/แสดงอีเวนต์ในรายการหน้าแรก (เลือกได้หลายอีเวนต์)"""
     ids = _parse_id_list(request.form.get("ids"))
@@ -3625,6 +3630,70 @@ def create_event():
     return render_template("event_form.html")
 
 
+@app.route("/events/world-48/new", methods=["GET", "POST"])
+@login_required
+@role_required("superadmin")
+def create_world_48_event():
+    """สร้างอีเวนต์ 48 ประเทศตามรายชื่อยืนยัน โดยใส่ชื่อผู้เล่นและลำดับจริงภายหลังได้"""
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        event_group = request.form.get("event_group", "World Championship").strip() or "World Championship"
+        category = request.form.get("category", "ชาย").strip() or "ชาย"
+        location = request.form.get("location", "").strip()
+        try:
+            competition_date = date.fromisoformat(request.form.get("competition_date", ""))
+            lane_count = max(1, int(request.form.get("lane_count", 8)))
+        except (TypeError, ValueError):
+            flash("กรุณาตรวจสอบวันที่แข่งขันและจำนวนสนาม", "warning")
+            return render_template("world_event_form.html", teams=WORLD_CHAMPIONSHIP_48, today=date.today().isoformat())
+        if not name:
+            flash("กรุณากรอกชื่ออีเวนต์", "warning")
+            return render_template("world_event_form.html", teams=WORLD_CHAMPIONSHIP_48, today=date.today().isoformat())
+        if Event.query.filter_by(name=name, competition_date=competition_date).first():
+            flash("มีอีเวนต์ชื่อนี้ในวันเดียวกันแล้ว", "warning")
+            return redirect(url_for("index"))
+
+        event = Event(
+            name=name,
+            event_group=event_group,
+            category=category,
+            competition_date=competition_date,
+            location=location,
+            lane_count=lane_count,
+            direct_qualifiers=4,
+            has_round_two=True,
+            round_two_cutoff_rank=16,
+            round_two_mode="cutoff",
+            scorecard_layout="kku2026",
+            lane_start=1,
+            court_letters=False,
+            overview_sort_by_rank=False,
+            next_round_label="รอบ 8 คน",
+            round_two_advancers=4,
+            created_by=current_user.id,
+        )
+        db.session.add(event)
+        db.session.flush()
+        for order, country in enumerate(WORLD_CHAMPIONSHIP_48, start=1):
+            display_name = country.rsplit(" (", 1)[0]
+            lane_no, lane_order = lane_for_order(event, order)
+            db.session.add(Athlete(
+                event_id=event.id,
+                bib_no=str(order),
+                name=display_name,
+                affiliation=country,
+                start_order=order,
+                lane_no=lane_no,
+                lane_order=lane_order,
+                status="waiting",
+            ))
+        created_courts, _ = sync_event_court_users(event)
+        db.session.commit()
+        flash(f"สร้างอีเวนต์ 48 ประเทศแล้ว · ลำดับปัจจุบันเป็นลำดับชั่วคราวตามไฟล์ · เตรียม Court ID {created_courts} สนาม", "success")
+        return redirect(url_for("manage_athletes", event_id=event.id))
+    return render_template("world_event_form.html", teams=WORLD_CHAMPIONSHIP_48, today=date.today().isoformat())
+
+
 @app.route("/events/<int:event_id>/edit", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "superadmin")
@@ -3719,6 +3788,61 @@ def manage_athletes(event_id: int):
         .all()
     )
     return render_template("athletes.html", event=event, athletes=athletes, court_users=court_users)
+
+
+@app.route("/athletes/<int:athlete_id>/edit", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "superadmin")
+def edit_athlete(athlete_id: int):
+    """แก้ชื่อประเทศ/นักกีฬาและลำดับการตีภายหลัง โดยสลับลำดับเดิมให้ไม่ซ้ำ"""
+    athlete = Athlete.query.get_or_404(athlete_id)
+    event = athlete.event
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        affiliation = request.form.get("affiliation", "").strip()
+        try:
+            wanted_order = int(request.form.get("start_order", athlete.start_order))
+        except (TypeError, ValueError):
+            wanted_order = 0
+        athlete_count = Athlete.query.filter_by(event_id=event.id).count()
+        if not name or not affiliation:
+            flash("กรุณากรอกชื่อและประเทศ/สังกัด", "warning")
+            return render_template("athlete_edit.html", athlete=athlete, event=event)
+        if wanted_order < 1 or wanted_order > athlete_count:
+            flash(f"ลำดับการตีต้องอยู่ระหว่าง 1–{athlete_count}", "warning")
+            return render_template("athlete_edit.html", athlete=athlete, event=event)
+
+        order_changed = wanted_order != athlete.start_order
+        if order_changed:
+            has_scores = (
+                db.session.query(ScoreEntry.id)
+                .join(Athlete, ScoreEntry.athlete_id == Athlete.id)
+                .filter(Athlete.event_id == event.id, ScoreEntry.is_scored.is_(True))
+                .first()
+                is not None
+            )
+            if has_scores:
+                flash("เปลี่ยนลำดับการตีไม่ได้ เพราะอีเวนต์นี้เริ่มบันทึกคะแนนแล้ว", "danger")
+                return render_template("athlete_edit.html", athlete=athlete, event=event)
+            other = Athlete.query.filter_by(event_id=event.id, start_order=wanted_order).first()
+            old_order = athlete.start_order
+            if other and other.id != athlete.id:
+                other.start_order = old_order
+                other.bib_no = str(old_order)
+                other.lane_no, other.lane_order = lane_for_order(event, old_order)
+            athlete.start_order = wanted_order
+            athlete.bib_no = str(wanted_order)
+            athlete.lane_no, athlete.lane_order = lane_for_order(event, wanted_order)
+
+        athlete.name = name[:255]
+        athlete.affiliation = affiliation[:255]
+        refresh_event_chain(event)
+        db.session.commit()
+        clear_request_cache()
+        invalidate_poll_cache(event.id)
+        flash("อัปเดตชื่อ ประเทศ/สังกัด และลำดับการตีแล้ว", "success")
+        return redirect(url_for("manage_athletes", event_id=event.id))
+    return render_template("athlete_edit.html", athlete=athlete, event=event)
 
 
 @app.route("/athletes/<int:athlete_id>/round2-toggle", methods=["POST"])

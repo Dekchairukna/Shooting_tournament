@@ -17,7 +17,9 @@ class EventHiddenTests(unittest.TestCase):
         with db.engine.connect() as conn:
             conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
             db.metadata.drop_all(bind=conn); db.metadata.create_all(bind=conn); conn.commit()
-        self.admin = User(username="adm", role="admin", password_hash="!UNSET!"); db.session.add(self.admin)
+        self.admin = User(username="adm", role="admin", password_hash="!UNSET!")
+        self.superadmin = User(username="boss", role="superadmin", password_hash="!UNSET!")
+        db.session.add_all([self.admin, self.superadmin])
         self.events = []
         for i in range(3):
             e = Event(name=f"EVENT-{i}", event_group="g", category="ชาย", competition_date=date(2026, 11, 20), location="", lane_count=4)
@@ -27,12 +29,12 @@ class EventHiddenTests(unittest.TestCase):
     def tearDown(self):
         db.session.remove(); self.ctx.pop()
 
-    def client(self, login=True):
+    def client(self, login=True, user=None):
         g.pop("_login_user", None)
         c = app.test_client()
         if login:
             with c.session_transaction() as s:
-                s["_user_id"] = str(self.admin.id); s["_fresh"] = True
+                s["_user_id"] = str((user or self.superadmin).id); s["_fresh"] = True
         page = c.get("/login").get_data(as_text=True)
         token = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
         return c, token
@@ -60,6 +62,17 @@ class EventHiddenTests(unittest.TestCase):
         anon.post("/events/visibility", data={"ids": str(d.id), "action": "hide"})
         db.session.expire_all()
         self.assertFalse(db.session.get(Event, d.id).is_hidden)
+
+    def test_admin_cannot_hide_or_view_hidden_controls(self):
+        c, token = self.client(user=self.admin)
+        event = self.events[0]
+        html = c.get("/").get_data(as_text=True)
+        self.assertNotIn("ซ่อนที่เลือก", html)
+        self.assertNotIn('action="/events/visibility"', html)
+        response = c.post("/events/visibility", data={"csrf_token": token, "ids": str(event.id), "action": "hide"})
+        self.assertIn(response.status_code, (302, 403))
+        db.session.expire_all()
+        self.assertFalse(db.session.get(Event, event.id).is_hidden)
 
 
 if __name__ == "__main__":
