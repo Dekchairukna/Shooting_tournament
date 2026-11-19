@@ -669,7 +669,7 @@ body.display-mode .title-box h1{font-size:2rem;}
 body.display-mode .title-box .muted{font-size:1rem;}
 body.display-mode #overviewTableWrap{font-size:1.1rem;}
 /* โหมดจอแสดงผล: พอดีจอ / เลื่อนอัตโนมัติ / หยุดนิ่ง */
-body.display-mode.dm-fit{overflow:hidden;}
+body.display-mode.dm-fit{overflow:hidden;min-height:100vh;}
 body.display-mode.dm-fit .container-main{transform-origin:0 0;}
 body.display-mode.dm-fit .qualification-scroll{overflow:visible;}
 .dm-panel{position:fixed;right:14px;bottom:14px;z-index:2000;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;border-radius:14px;background:rgba(15,23,42,.88);color:#fff;font:600 14px/1.2 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);transition:opacity .3s;}
@@ -703,6 +703,20 @@ body.display-mode.dm-compact .qualification-table td{font-size:18px!important;}
 body.dm-compact .qualification-table thead th:not(.col-order):not(.col-lane){font-size:15px!important;}
 body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!important;line-height:1.2!important;padding:3px 10px!important;max-width:none;}
 .dm-clone tbody tr:not(.dm-second){display:none;}
+/* แบ่งหน้า: แสดงทีละ N ทีม เวียนหน้าอัตโนมัติ หรือล็อกหน้า */
+body.display-mode #overviewTableWrap tbody tr.dm-off{display:none!important;}
+/* ซ่อนคอลัมน์ Class บนจอแสดงผล (ปุ่ม "Class" บนแผงควบคุม) */
+body.display-mode.dm-hide-class #overviewTableWrap th.col-class,
+body.display-mode.dm-hide-class #overviewTableWrap td.overall-rank{display:none!important;}
+/* แบ่งหน้า: ตารางกว้างตามเนื้อหา แล้วขยายทั้งหน้าให้เต็มความสูงจอ (ตัวใหญ่ขึ้นเมื่อทีมต่อหน้าน้อยลง) */
+body.display-mode.dm-page #overviewTableWrap table{width:auto!important;min-width:0!important;}
+body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);}
+.dm-panel select{border:1px solid rgba(255,255,255,.35);background:#1e293b;color:#fff;border-radius:9px;padding:6px 8px;font:inherit;min-height:36px;cursor:pointer;}
+.dm-panel label{display:inline-flex;align-items:center;gap:4px;}
+.dm-page-badge{position:fixed;top:10px;right:14px;z-index:1999;padding:6px 14px;border-radius:999px;background:rgba(15,23,42,.82);color:#fff;font:800 20px/1.2 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2);overflow:hidden;}
+.dm-page-badge .dm-bar{position:absolute;left:0;bottom:0;height:4px;background:#f97316;width:0;}
+.dm-page-badge.locked{background:rgba(185,28,28,.9);}
+@media print{.dm-page-badge{display:none!important;}}
 
 /* ===== ไฮไลต์คะแนน 5 / 3 เฉพาะคนที่ตีเสร็จแล้ว (ตีครบ + APPROVED) =====
    ดูได้ทันทีว่าแต่ละคนได้ 5 กี่ครั้ง 3 กี่ครั้ง · ช่อง 1/0/Total ไม่เปลี่ยน */
@@ -1090,7 +1104,8 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
       const currentStation = deriveCurrentStation(item);
       const visualClass = item.approved ? 'visual-approved' : (item.score_complete ? 'visual-finished' : '');
       const isShooting = item.status === 'active' && !item.score_complete && !item.approved;
-      row.className = `status-${item.status} ${visualClass} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''} ${isShooting ? 'live-active' : ''}`.trim();
+      const keepDm = Array.from(row.classList).filter(c => c.startsWith('dm-')).join(' ');
+      row.className = `status-${item.status} ${visualClass} ${item.is_round2_direct_placeholder ? 'direct-placeholder' : ''} ${item.cut_line_after ? 'cut-line-after' : ''} ${isShooting ? 'live-active' : ''} ${keepDm}`.trim();
       const cutLabelCell = row.querySelector('.start-order');
       if (cutLabelCell) cutLabelCell.dataset.cutLabel = item.cut_line_label || '';
       row.dataset.currentStation = currentStation ? String(currentStation) : '';
@@ -1245,7 +1260,8 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
   }, 1500);
   refreshOverviewData();
 
-  // โหมดจอแสดงผล: เลือกได้ 3 แบบ (จำค่าไว้ในเครื่อง, กำหนดผ่าน URL ได้ ?view=fit|scroll|static&zoom=120)
+  // โหมดจอแสดงผล: เลือกได้ 4 แบบ (จำค่าไว้ในเครื่อง, กำหนดผ่าน URL ได้ ?view=fit|page|scroll|static&zoom=120)
+  //  - page   แบ่งหน้า: ทีละ N ทีม (?per=8) เวียนทุก S วินาที (?sec=15) หรือล็อกหน้า (?lock=1&page=2)
   //  - fit    พอดีจอ: ย่อ/ขยายทั้งหน้าให้เห็นครบทุกคน ไม่ต้องเลื่อน
   //  - scroll เลื่อนอัตโนมัติ: เลื่อนลงช้า ๆ ถึงท้ายแล้วพัก แล้วกลับขึ้นบน
   //  - static หยุดนิ่ง: ไม่เลื่อน ปรับขนาดตัวอักษรเองได้
@@ -1256,7 +1272,7 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
       get(k, d) { try { return localStorage.getItem('overviewDisplay.' + k) || d; } catch (e) { return d; } },
       set(k, v) { try { localStorage.setItem('overviewDisplay.' + k, v); } catch (e) {} },
     };
-    const MODES = ['fit', 'scroll', 'static'];
+    const MODES = ['fit', 'page', 'scroll', 'static'];
     let mode = MODES.includes(qs.get('view')) ? qs.get('view') : store.get('mode', 'fit');
     if (!MODES.includes(mode)) mode = 'fit';
     let zoom = parseInt(qs.get('zoom') || store.get('zoom', '100'), 10);
@@ -1264,6 +1280,35 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
     const main = document.querySelector('.container-main') || document.body;
     let compact = (qs.get('big') || store.get('big', '1')) === '1';
     let split = (qs.get('split') || store.get('split', '1')) === '1';
+    let hideClass = (qs.get('noclass') || store.get('noclass', '1')) === '1';
+    // แบ่งหน้า (?view=page&per=8&sec=15&lock=1&page=2)
+    const PER_OPTIONS = [4, 6, 8, 10, 12, 16, 20, 24];
+    const SEC_OPTIONS = [5, 8, 10, 15, 20, 30, 45, 60];
+    let perPage = parseInt(qs.get('per') || store.get('per', '8'), 10);
+    if (!(perPage >= 1 && perPage <= 100)) perPage = 8;
+    let pageSec = parseInt(qs.get('sec') || store.get('sec', '15'), 10);
+    if (!(pageSec >= 3 && pageSec <= 600)) pageSec = 15;
+    let pageLock = (qs.get('lock') || store.get('lock', '0')) === '1';
+    let pageIdx = Math.max(0, parseInt(qs.get('page') || '1', 10) - 1) || 0;
+    let pageStartedAt = Date.now();
+    function allRows() { return origTable ? Array.from(origTable.querySelectorAll('tbody tr[data-athlete-id]')) : []; }
+    function pageCount() { return Math.max(1, Math.ceil(allRows().length / perPage)); }
+    function applyPaging() {
+      const rows = allRows();
+      if (mode !== 'page') { rows.forEach(r => r.classList.remove('dm-off')); return; }
+      const pages = pageCount();
+      if (pageIdx >= pages) pageIdx = 0;
+      const from = pageIdx * perPage, to = from + perPage;
+      rows.forEach((r, i) => r.classList.toggle('dm-off', i < from || i >= to));
+      // แถว "กำลังโหลด..." ที่ไม่มีข้อมูลนักกีฬา ซ่อนไว้ในโหมดนี้
+      origTable.querySelectorAll('tbody tr:not([data-athlete-id])').forEach(r => r.classList.add('dm-off'));
+    }
+    function goPage(delta) {
+      const pages = pageCount();
+      pageIdx = ((pageIdx + delta) % pages + pages) % pages;
+      pageStartedAt = Date.now();
+      applyMode();
+    }
     const origTable = document.querySelector('#overviewTableWrap .qualification-table');
     const origScroll = origTable ? origTable.closest('.qualification-scroll') : null;
     let splitBox = null, cloneScroll = null;
@@ -1280,8 +1325,10 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
     function buildSplit() {
       if (!origScroll) return;
       if (cloneScroll) { cloneScroll.remove(); cloneScroll = null; }
-      const rows = Array.from(origTable.querySelectorAll('tbody tr[data-athlete-id]'));
-      const on = split && rows.length > 12;
+      applyPaging();
+      const rows = allRows().filter(r => !r.classList.contains('dm-off'));
+      allRows().forEach(r => { if (r.classList.contains('dm-off')) r.classList.remove('dm-second'); });
+      const on = split && rows.length > (mode === 'page' ? 6 : 12);
       document.body.classList.toggle('dm-split-on', on);
       if (!on) {
         rows.forEach(r => r.classList.remove('dm-second'));
@@ -1306,38 +1353,47 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
 
     function fitToScreen() {
       const vw = document.documentElement.clientWidth, vh = window.innerHeight;
-      let scale = 1;
+      // วัดขนาดจริงโดยไม่ติด transform ของรอบก่อน (ตั้งค่าใหม่ในเฟรมเดียวกัน จอไม่กระพริบ)
+      main.style.transform = '';
+      let scale = 1, right = 0;
       // ปรับความกว้างตามสเกล แล้ววัดใหม่ 3 รอบ เพราะความสูงเปลี่ยนตามความกว้าง
       for (let i = 0; i < 3; i++) {
         main.style.setProperty('width', (vw / scale) + 'px', 'important');
         // วัดขอบขวาสุดของทุกตาราง (ตารางอาจล้นกรอบเมื่อแบ่ง 2 ฝั่ง)
         const mainLeft = main.getBoundingClientRect().left;
-        let w = main.scrollWidth;
+        right = 0;
         main.querySelectorAll('#overviewTableWrap table').forEach(t => {
-          w = Math.max(w, (t.getBoundingClientRect().right - mainLeft) / scale + 16);
+          right = Math.max(right, t.getBoundingClientRect().right - mainLeft);
         });
+        // แบ่งหน้า: ใช้ความกว้างของตารางจริง จึงขยายได้เกินความกว้างกรอบเดิม
+        const w = Math.max(mode === 'page' ? 0 : main.scrollWidth, right + 16);
         const h = main.scrollHeight;
         if (!w || !h) break;
-        scale = Math.max(0.25, Math.min(vw / w, vh / h, 2.5));
+        scale = Math.max(0.25, Math.min(vw / w, vh / h, mode === 'page' ? 4 : 2.5));
       }
       main.style.setProperty('width', (vw / scale) + 'px', 'important');
-      main.style.transform = 'scale(' + scale + ')';
+      // แบ่งหน้า: จัดกึ่งกลางแนวนอนเมื่อความสูงจอเป็นตัวจำกัด
+      const shift = mode === 'page' ? Math.max(0, (vw - (right + 16) * scale) / 2) : 0;
+      main.style.transform = (shift ? 'translateX(' + shift + 'px) ' : '') + 'scale(' + scale + ')';
     }
     function applyMode() {
-      document.body.classList.toggle('dm-fit', mode === 'fit');
+      const fitLike = mode === 'fit' || mode === 'page';
+      document.body.classList.toggle('dm-page', mode === 'page');
+      document.body.classList.toggle('dm-hide-class', hideClass);
+      document.body.classList.toggle('dm-fit', fitLike);
       main.style.transform = ''; main.style.removeProperty('width'); main.style.zoom = '';
       applyCompact(); buildSplit();
-      if (mode === 'fit') { window.scrollTo(0, 0); fitToScreen(); }
+      if (fitLike) { window.scrollTo(0, 0); fitToScreen(); }
       else main.style.zoom = zoom / 100;
-      renderPanel();
+      renderPanel(); renderBadge();
     }
     let refitTimer = null;
     window.__displayRefit = () => {
       clearTimeout(refitTimer);
-      refitTimer = setTimeout(() => { buildSplit(); if (mode === 'fit') fitToScreen(); }, 120);
+      refitTimer = setTimeout(() => { buildSplit(); if (mode === 'fit' || mode === 'page') fitToScreen(); renderBadge(); }, 120);
     };
     window.addEventListener('resize', window.__displayRefit);
-    setInterval(() => { if (mode === 'fit') fitToScreen(); }, 5000);
+    setInterval(() => { if (mode === 'fit' || mode === 'page') fitToScreen(); }, 5000);
 
     // แผงควบคุม: ขึ้นเมื่อขยับเมาส์/แตะจอ แล้วซ่อนเองใน 4 วินาที
     const panel = document.createElement('div');
@@ -1346,10 +1402,21 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
     document.body.appendChild(panel);
     function renderPanel() {
       const b = (m, label) => '<button type="button" data-mode="' + m + '" class="' + (mode === m ? 'on' : '') + '">' + label + '</button>';
-      panel.innerHTML = b('fit', 'พอดีจอ') + b('scroll', 'เลื่อนอัตโนมัติ') + b('static', 'หยุดนิ่ง')
-        + (mode === 'fit' ? '' : '<span class="dm-sep"></span><button type="button" data-zoom="-10">A−</button><span class="dm-zoom">' + zoom + '%</span><button type="button" data-zoom="10">A+</button>')
+      const opts = (list, cur, unit) => list.concat(list.includes(cur) ? [] : [cur]).sort((x, y) => x - y)
+        .map(v => '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + v + unit + '</option>').join('');
+      const pageCtl = mode !== 'page' ? '' : '<span class="dm-sep"></span>'
+        + '<label>ทีม/หน้า <select data-set="per">' + opts(PER_OPTIONS, perPage, '') + '</select></label>'
+        + '<label>เวียนทุก <select data-set="sec">' + opts(SEC_OPTIONS, pageSec, ' วิ') + '</select></label>'
+        + '<button type="button" data-page="-1">◀</button>'
+        + '<span class="dm-zoom">' + (pageIdx + 1) + '/' + pageCount() + '</span>'
+        + '<button type="button" data-page="1">▶</button>'
+        + '<button type="button" data-toggle="lock" class="' + (pageLock ? 'on' : '') + '">' + (pageLock ? '🔒 ล็อกหน้า' : '🔓 เวียนอัตโนมัติ') + '</button>';
+      panel.innerHTML = b('fit', 'พอดีจอ') + b('page', 'แบ่งหน้า') + b('scroll', 'เลื่อนอัตโนมัติ') + b('static', 'หยุดนิ่ง')
+        + pageCtl
+        + (mode === 'fit' || mode === 'page' ? '' : '<span class="dm-sep"></span><button type="button" data-zoom="-10">A−</button><span class="dm-zoom">' + zoom + '%</span><button type="button" data-zoom="10">A+</button>')
         + '<span class="dm-sep"></span><button type="button" data-toggle="big" class="' + (compact ? 'on' : '') + '">ตัวใหญ่</button>'
         + '<button type="button" data-toggle="split" class="' + (split ? 'on' : '') + '">แบ่ง 2 ฝั่ง</button>'
+        + '<button type="button" data-toggle="class" class="' + (hideClass ? '' : 'on') + '">Class</button>'
         + '<span class="dm-sep"></span><button type="button" data-fs="1">เต็มจอ</button>';
     }
     panel.addEventListener('click', (e) => {
@@ -1357,12 +1424,50 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
       if (t.dataset.mode) { mode = t.dataset.mode; store.set('mode', mode); applyMode(); }
       else if (t.dataset.toggle === 'big') { compact = !compact; store.set('big', compact ? '1' : '0'); applyMode(); }
       else if (t.dataset.toggle === 'split') { split = !split; store.set('split', split ? '1' : '0'); applyMode(); }
+      else if (t.dataset.toggle === 'class') { hideClass = !hideClass; store.set('noclass', hideClass ? '1' : '0'); applyMode(); }
+      else if (t.dataset.toggle === 'lock') { pageLock = !pageLock; store.set('lock', pageLock ? '1' : '0'); pageStartedAt = Date.now(); renderPanel(); renderBadge(); }
+      else if (t.dataset.page) { goPage(parseInt(t.dataset.page, 10)); }
       else if (t.dataset.zoom) { zoom = Math.max(50, Math.min(250, zoom + parseInt(t.dataset.zoom, 10))); store.set('zoom', String(zoom)); applyMode(); }
       else if (t.dataset.fs) {
         if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
         else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {});
       }
     });
+    panel.addEventListener('change', (e) => {
+      const sel = e.target.closest('select'); if (!sel) return;
+      const v = parseInt(sel.value, 10);
+      if (sel.dataset.set === 'per') { perPage = v; store.set('per', String(v)); pageIdx = 0; }
+      if (sel.dataset.set === 'sec') { pageSec = v; store.set('sec', String(v)); }
+      pageStartedAt = Date.now();
+      applyMode();
+    });
+    // ป้ายเลขหน้า มุมขวาบน + แถบเวลาก่อนเปลี่ยนหน้า
+    const badge = document.createElement('div');
+    badge.className = 'dm-page-badge';
+    badge.setAttribute('translate', 'no');
+    document.body.appendChild(badge);
+    function renderBadge() {
+      if (mode !== 'page') { badge.style.display = 'none'; return; }
+      badge.style.display = '';
+      badge.classList.toggle('locked', pageLock);
+      badge.innerHTML = (pageLock ? '🔒 ' : '') + 'หน้า ' + (pageIdx + 1) + '/' + pageCount() + '<span class="dm-bar"></span>';
+    }
+    setInterval(() => {
+      if (mode !== 'page') return;
+      const bar = badge.querySelector('.dm-bar');
+      if (pageLock || pageCount() <= 1) { if (bar) bar.style.width = '0'; return; }
+      const elapsed = (Date.now() - pageStartedAt) / 1000;
+      if (bar) bar.style.width = Math.min(100, elapsed / pageSec * 100) + '%';
+      if (elapsed >= pageSec) goPage(1);
+    }, 250);
+    // ลูกศรซ้าย/ขวา เปลี่ยนหน้า · Space ล็อก/ปลดล็อก
+    document.addEventListener('keydown', (e) => {
+      if (mode !== 'page' || e.target.closest('select')) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); goPage(1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goPage(-1); }
+      else if (e.key === ' ') { e.preventDefault(); pageLock = !pageLock; store.set('lock', pageLock ? '1' : '0'); pageStartedAt = Date.now(); renderPanel(); renderBadge(); }
+    });
+
     let hideTimer = null;
     function showPanel() {
       panel.classList.remove('dm-hide');
