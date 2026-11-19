@@ -666,11 +666,23 @@ body.display-mode .responsive-toolbar,
 body.display-mode .status-legend{display:none !important;}
 body.display-mode .overview-card{border-radius:0;box-shadow:none;border:0;}
 /* หัวจอแสดงผลแบบบาง: ชื่องานกับรายละเอียดอยู่บรรทัดเดียว ตัวเล็ก เหลือพื้นที่ให้ตาราง */
-body.display-mode .title-box{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;margin:0 0 4px;}
+body.display-mode .title-box{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin:0 0 4px;}
+/* โลโก้ FIPJP · WPBF · KKU 2026 แถวเดียวกับชื่ออีเวนต์ แสดงเฉพาะจอแสดงผล */
+.dm-logos{display:none;}
+body.display-mode .title-box .dm-logos{display:flex;align-items:center;gap:14px;margin-right:6px;}
+body.display-mode .title-box .dm-logos img{height:56px;width:auto;object-fit:contain;}
+/* หัวตารางเตี้ย: No./สนาม แนวนอน ไม่หมุน 90° (เดิมสูง 104px) */
+body.display-mode #overviewTableWrap thead .col-order,
+body.display-mode #overviewTableWrap thead .col-lane,
+body.display-mode #overviewTableWrap thead .col-lane-order{height:auto!important;padding:4px 2px!important;}
+body.display-mode #overviewTableWrap thead .col-order>span,
+body.display-mode #overviewTableWrap thead .col-lane>span,
+body.display-mode #overviewTableWrap thead .col-lane-order>span{position:static!important;transform:none!important;display:block;font-size:13px;}
+body.display-mode #overviewTableWrap thead th{padding-top:4px!important;padding-bottom:4px!important;line-height:1.15!important;}
 body.display-mode .title-box h1{font-size:1.05rem;margin:0;line-height:1.2;}
 body.display-mode .title-box .muted{font-size:.72rem;}
 body.display-mode .title-box .sort-off-badge{display:none!important;}
-body.display-mode .qualification-title{font-size:.72rem!important;padding:2px 6px!important;line-height:1.3!important;}
+body.display-mode .qualification-title{font-size:1.2rem!important;padding:5px 8px!important;line-height:1.25!important;}
 body.display-mode #overviewTableWrap{font-size:1.1rem;}
 /* โหมดจอแสดงผล: พอดีจอ / เลื่อนอัตโนมัติ / หยุดนิ่ง */
 body.display-mode.dm-fit{overflow:hidden;min-height:100vh;}
@@ -776,6 +788,11 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
   <section class="overview-card overview-theme-{{ theme }}">
     <div class="section-head responsive-head">
       <div class="title-box">
+        <div class="dm-logos" aria-hidden="true">
+          <img src="{{ url_for('static', filename='logos/fipjp.png') }}" alt="">
+          <img src="{{ url_for('static', filename='logos/wpbf.png') }}" alt="">
+          <img src="{{ url_for('static', filename='logos/kku2026.png') }}" alt="">
+        </div>
         <h1>{{ event.name }}</h1>
         <p class="muted">{{ event.event_group }} | {{ event.category }} | {{ event.next_round_label }} | รอบที่กำลังดู: {{ round_no }}</p>
         {% if event.chain_id %}<div class="sort-off-badge" title="อีเวนต์นี้ใช้สนามร่วมกับรุ่นอื่น · รอบในตารางคือรอบคิวรวมของสาย">🔗 ต่อคิวสนาม: {{ event.chain.name }}</div>{% endif %}
@@ -1297,16 +1314,25 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
     let pageSec = parseInt(qs.get('sec') || store.get('sec', '15'), 10);
     if (!(pageSec >= 3 && pageSec <= 600)) pageSec = 15;
     let pageLock = (qs.get('lock') || store.get('lock', '0')) === '1';
+    // หน้าแรกของการเวียน = หน้ารวมทุกทีม (แบ่ง 2 ฝั่ง) แล้วค่อยเป็นหน้าละ N ทีม · ปิดได้ที่ปุ่ม "หน้ารวม" หรือ ?overview=0
+    let overviewFirst = (qs.get('overview') || store.get('overview', '1')) === '1';
     let pageIdx = Math.max(0, parseInt(qs.get('page') || '1', 10) - 1) || 0;
     let pageStartedAt = Date.now();
     function allRows() { return origTable ? Array.from(origTable.querySelectorAll('tbody tr[data-athlete-id]')) : []; }
-    function pageCount() { return Math.max(1, Math.ceil(allRows().length / perPage)); }
+    function pageCount() { return Math.max(1, Math.ceil(allRows().length / perPage)) + (overviewFirst ? 1 : 0); }
+    function isOverviewPage() { return mode === 'page' && overviewFirst && pageIdx === 0; }
+    function pageLabel() { return isOverviewPage() ? 'หน้ารวม' : 'หน้า ' + (pageIdx + 1) + '/' + pageCount(); }
     function applyPaging() {
       const rows = allRows();
       if (mode !== 'page') { rows.forEach(r => r.classList.remove('dm-off')); return; }
       const pages = pageCount();
       if (pageIdx >= pages) pageIdx = 0;
-      const from = pageIdx * perPage, to = from + perPage;
+      if (isOverviewPage()) {
+        rows.forEach(r => r.classList.remove('dm-off'));
+        origTable.querySelectorAll('tbody tr:not([data-athlete-id])').forEach(r => r.classList.add('dm-off'));
+        return;
+      }
+      const from = (pageIdx - (overviewFirst ? 1 : 0)) * perPage, to = from + perPage;
       rows.forEach((r, i) => r.classList.toggle('dm-off', i < from || i >= to));
       // แถว "กำลังโหลด..." ที่ไม่มีข้อมูลนักกีฬา ซ่อนไว้ในโหมดนี้
       origTable.querySelectorAll('tbody tr:not([data-athlete-id])').forEach(r => r.classList.add('dm-off'));
@@ -1336,7 +1362,8 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
       applyPaging();
       const rows = allRows().filter(r => !r.classList.contains('dm-off'));
       allRows().forEach(r => { if (r.classList.contains('dm-off')) r.classList.remove('dm-second'); });
-      const on = split && rows.length > (mode === 'page' ? 6 : 12);
+      // หน้ารวมแบ่ง 2 ฝั่งเสมอ เพื่อให้ทุกทีมพอดีจอ
+      const on = (split || isOverviewPage()) && rows.length > (mode === 'page' && !isOverviewPage() ? 6 : 12);
       document.body.classList.toggle('dm-split-on', on);
       if (!on) {
         rows.forEach(r => r.classList.remove('dm-second'));
@@ -1417,8 +1444,9 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
         + '<label>ทีม/หน้า <select data-set="per">' + opts(PER_OPTIONS, perPage, '') + '</select></label>'
         + '<label>เวียนทุก <select data-set="sec">' + opts(SEC_OPTIONS, pageSec, ' วิ') + '</select></label>'
         + '<button type="button" data-page="-1">◀</button>'
-        + '<span class="dm-zoom">' + (pageIdx + 1) + '/' + pageCount() + '</span>'
+        + '<span class="dm-zoom">' + (isOverviewPage() ? 'รวม' : (pageIdx + 1) + '/' + pageCount()) + '</span>'
         + '<button type="button" data-page="1">▶</button>'
+        + '<button type="button" data-toggle="overview" class="' + (overviewFirst ? 'on' : '') + '">หน้ารวม</button>'
         + '<button type="button" data-toggle="lock" class="' + (pageLock ? 'on' : '') + '">' + (pageLock ? '🔒 ล็อกหน้า' : '🔓 เวียนอัตโนมัติ') + '</button>';
       panel.innerHTML = b('fit', 'พอดีจอ') + b('page', 'แบ่งหน้า') + b('scroll', 'เลื่อนอัตโนมัติ') + b('static', 'หยุดนิ่ง')
         + pageCtl
@@ -1436,6 +1464,7 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
       else if (t.dataset.toggle === 'split') { split = !split; store.set('split', split ? '1' : '0'); applyMode(); }
       else if (t.dataset.toggle === 'name') { hideName = !hideName; store.set('noname', hideName ? '1' : '0'); applyMode(); }
       else if (t.dataset.toggle === 'class') { hideClass = !hideClass; store.set('noclass', hideClass ? '1' : '0'); applyMode(); }
+      else if (t.dataset.toggle === 'overview') { overviewFirst = !overviewFirst; store.set('overview', overviewFirst ? '1' : '0'); pageIdx = 0; pageStartedAt = Date.now(); applyMode(); }
       else if (t.dataset.toggle === 'lock') { pageLock = !pageLock; store.set('lock', pageLock ? '1' : '0'); pageStartedAt = Date.now(); renderPanel(); renderBadge(); }
       else if (t.dataset.page) { goPage(parseInt(t.dataset.page, 10)); }
       else if (t.dataset.zoom) { zoom = Math.max(50, Math.min(250, zoom + parseInt(t.dataset.zoom, 10))); store.set('zoom', String(zoom)); applyMode(); }
@@ -1461,7 +1490,7 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
       if (mode !== 'page') { badge.style.display = 'none'; return; }
       badge.style.display = '';
       badge.classList.toggle('locked', pageLock);
-      badge.innerHTML = (pageLock ? '🔒 ' : '') + 'หน้า ' + (pageIdx + 1) + '/' + pageCount() + '<span class="dm-bar"></span>';
+      badge.innerHTML = (pageLock ? '🔒 ' : '') + pageLabel() + '<span class="dm-bar"></span>';
     }
     setInterval(() => {
       if (mode !== 'page') return;
