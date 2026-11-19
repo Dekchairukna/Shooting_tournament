@@ -665,8 +665,12 @@
 body.display-mode .responsive-toolbar,
 body.display-mode .status-legend{display:none !important;}
 body.display-mode .overview-card{border-radius:0;box-shadow:none;border:0;}
-body.display-mode .title-box h1{font-size:2rem;}
-body.display-mode .title-box .muted{font-size:1rem;}
+/* หัวจอแสดงผลแบบบาง: ชื่องานกับรายละเอียดอยู่บรรทัดเดียว ตัวเล็ก เหลือพื้นที่ให้ตาราง */
+body.display-mode .title-box{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;margin:0 0 4px;}
+body.display-mode .title-box h1{font-size:1.05rem;margin:0;line-height:1.2;}
+body.display-mode .title-box .muted{font-size:.72rem;}
+body.display-mode .title-box .sort-off-badge{display:none!important;}
+body.display-mode .qualification-title{font-size:.72rem!important;padding:2px 6px!important;line-height:1.3!important;}
 body.display-mode #overviewTableWrap{font-size:1.1rem;}
 /* โหมดจอแสดงผล: พอดีจอ / เลื่อนอัตโนมัติ / หยุดนิ่ง */
 body.display-mode.dm-fit{overflow:hidden;min-height:100vh;}
@@ -708,6 +712,9 @@ body.display-mode #overviewTableWrap tbody tr.dm-off{display:none!important;}
 /* ซ่อนคอลัมน์ Class บนจอแสดงผล (ปุ่ม "Class" บนแผงควบคุม) */
 body.display-mode.dm-hide-class #overviewTableWrap th.col-class,
 body.display-mode.dm-hide-class #overviewTableWrap td.overall-rank{display:none!important;}
+/* ซ่อนคอลัมน์ ชื่อ บนจอแสดงผล (ปุ่ม "ชื่อ" บนแผงควบคุม) */
+body.display-mode.dm-hide-name #overviewTableWrap th.col-name,
+body.display-mode.dm-hide-name #overviewTableWrap td.cell-name{display:none!important;}
 /* แบ่งหน้า: ตารางกว้างตามเนื้อหา แล้วขยายทั้งหน้าให้เต็มความสูงจอ (ตัวใหญ่ขึ้นเมื่อทีมต่อหน้าน้อยลง) */
 body.display-mode.dm-page #overviewTableWrap table{width:auto!important;min-width:0!important;}
 body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);}
@@ -874,7 +881,7 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
               </th>
             </tr>
             <tr>
-              <th rowspan="3" class="col-order"><span>ลำดับการตี</span></th>
+              <th rowspan="3" class="col-order"><span>No.</span></th>
               <th rowspan="3" class="col-lane"><span>สนาม</span></th>
               <th rowspan="3" class="col-lane-order"><span>{{ 'ROUNDS' if current_lang == 'en' else 'รอบ' }}</span></th>
               <th rowspan="3" class="col-affiliation">สังกัด</th>
@@ -1281,6 +1288,7 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
     let compact = (qs.get('big') || store.get('big', '1')) === '1';
     let split = (qs.get('split') || store.get('split', '1')) === '1';
     let hideClass = (qs.get('noclass') || store.get('noclass', '1')) === '1';
+    let hideName = (qs.get('noname') || store.get('noname', '1')) === '1';
     // แบ่งหน้า (?view=page&per=8&sec=15&lock=1&page=2)
     const PER_OPTIONS = [4, 6, 8, 10, 12, 16, 20, 24];
     const SEC_OPTIONS = [5, 8, 10, 15, 20, 30, 45, 60];
@@ -1380,6 +1388,7 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
       const fitLike = mode === 'fit' || mode === 'page';
       document.body.classList.toggle('dm-page', mode === 'page');
       document.body.classList.toggle('dm-hide-class', hideClass);
+      document.body.classList.toggle('dm-hide-name', hideName);
       document.body.classList.toggle('dm-fit', fitLike);
       main.style.transform = ''; main.style.removeProperty('width'); main.style.zoom = '';
       applyCompact(); buildSplit();
@@ -1416,6 +1425,7 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
         + (mode === 'fit' || mode === 'page' ? '' : '<span class="dm-sep"></span><button type="button" data-zoom="-10">A−</button><span class="dm-zoom">' + zoom + '%</span><button type="button" data-zoom="10">A+</button>')
         + '<span class="dm-sep"></span><button type="button" data-toggle="big" class="' + (compact ? 'on' : '') + '">ตัวใหญ่</button>'
         + '<button type="button" data-toggle="split" class="' + (split ? 'on' : '') + '">แบ่ง 2 ฝั่ง</button>'
+        + '<button type="button" data-toggle="name" class="' + (hideName ? '' : 'on') + '">ชื่อ</button>'
         + '<button type="button" data-toggle="class" class="' + (hideClass ? '' : 'on') + '">Class</button>'
         + '<span class="dm-sep"></span><button type="button" data-fs="1">เต็มจอ</button>';
     }
@@ -1424,6 +1434,7 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
       if (t.dataset.mode) { mode = t.dataset.mode; store.set('mode', mode); applyMode(); }
       else if (t.dataset.toggle === 'big') { compact = !compact; store.set('big', compact ? '1' : '0'); applyMode(); }
       else if (t.dataset.toggle === 'split') { split = !split; store.set('split', split ? '1' : '0'); applyMode(); }
+      else if (t.dataset.toggle === 'name') { hideName = !hideName; store.set('noname', hideName ? '1' : '0'); applyMode(); }
       else if (t.dataset.toggle === 'class') { hideClass = !hideClass; store.set('noclass', hideClass ? '1' : '0'); applyMode(); }
       else if (t.dataset.toggle === 'lock') { pageLock = !pageLock; store.set('lock', pageLock ? '1' : '0'); pageStartedAt = Date.now(); renderPanel(); renderBadge(); }
       else if (t.dataset.page) { goPage(parseInt(t.dataset.page, 10)); }
