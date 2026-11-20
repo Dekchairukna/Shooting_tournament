@@ -801,6 +801,7 @@ def build_bracket_row_data(event, athlete, round_name, seed_map=None):
             "show_ref_score": False,
             "is_direct_qualifier": False,
             "stations": [0, 0, 0, 0, 0],
+            "distances": [[0, 0, 0, 0] for _ in range(5)],
             "total": 0,
             "status": "waiting",
             "status_label": "รอคิว",
@@ -827,10 +828,13 @@ def build_bracket_row_data(event, athlete, round_name, seed_map=None):
     show_ref_score = not is_direct_qualifier
 
     stations = []
+    distances = []  # คะแนนรายระยะ 6/7/8/9 ม. ของแต่ละ Atelier (ใช้กับจอแสดงผลแบบ "ทุกระยะ")
     by_station = current_summary.get("by_station", {})
     for station in [1, 2, 3, 4, 5]:
         station_data = by_station.get(station, {"total": 0})
         stations.append(station_data.get("total", 0))
+        per_distance = station_data.get("distances", {}) or {}
+        distances.append([per_distance.get(d, 0) for d in (6, 7, 8, 9)])
 
     round_status = athlete_round_status(athlete, round_no)
 
@@ -844,6 +848,7 @@ def build_bracket_row_data(event, athlete, round_name, seed_map=None):
         "show_ref_score": show_ref_score,
         "is_direct_qualifier": is_direct_qualifier,
         "stations": stations,
+        "distances": distances,
         "total": current_summary.get("total", 0),
         "status": round_status,
         "status_label": {"waiting": "รอคิว", "active": "กำลังตี", "finished": "ตีเสร็จแล้ว"}.get(round_status, "รอคิว"),
@@ -2481,7 +2486,30 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
         row["display_rank"] = real_rank
         row["view_order"] = real_rank
 
-    return direct_rows + played_rows + waiting_rows
+    # ตำแหน่งแถวบนหน้าจอ: สลับขึ้นไปตามอันดับเฉพาะคนที่ "ตีจบแล้ว"
+    # คนที่กำลังตี/รอตี อยู่ตามคิวตีรอบ 2 (No.) เสมอ ไม่กระโดดไปมาระหว่างตี
+    # (Class ของคนที่กำลังตียังคำนวณสดตามเดิม)
+    def _round2_done(row: dict) -> bool:
+        return bool(
+            row.get("score_complete") or row.get("approved")
+            or row.get("status") == "finished" or row.get("tiebreak_count", 0) > 0
+        )
+
+    finished_rows = [row for row in played_rows if _round2_done(row)]
+    queue_rows = sorted(
+        [row for row in played_rows if not _round2_done(row)] + waiting_rows,
+        key=lambda row: (
+            row["display_order"],
+            row["athlete"].start_order if row["athlete"].start_order is not None else 999999,
+            row["athlete"].id,
+        ),
+    )
+    position = base
+    for row in finished_rows + queue_rows:
+        position += 1
+        row["view_order"] = position
+
+    return direct_rows + finished_rows + queue_rows
 
 def scorecard_print_positions() -> dict:
     return {
@@ -2883,6 +2911,7 @@ def build_bracket_match_row(event: Event, athlete: Athlete | None, round_name: s
             "show_ref_score": False,
             "is_direct_qualifier": False,
             "stations": ["-"] * 5,
+            "distances": [["-"] * 4 for _ in range(5)],
             "total": "-",
             "seed": "",
             "status": "waiting",
@@ -2911,6 +2940,10 @@ def build_bracket_match_row(event: Event, athlete: Athlete | None, round_name: s
         "show_ref_score": show_ref_score,
         "is_direct_qualifier": is_direct_qualifier,
         "stations": [current["by_station"][station]["total"] for station in STATIONS],
+        "distances": [
+            [(current["by_station"][station].get("distances") or {}).get(d, 0) for d in DISTANCES]
+            for station in STATIONS
+        ],
         "total": current["total"],
         "seed": seed_map.get(athlete.id, ""),
         "round_no": round_no,
@@ -4825,7 +4858,10 @@ def apply_overview_order_mode(event: Event, rows: list[dict]) -> list[dict]:
         row["cut_line_after"] = False
         row["cut_line_label"] = ""
         order = row.get("display_order")
-        if not isinstance(order, int):
+        if row.get("is_round2_direct_placeholder"):
+            # รอบ 2: ผู้ผ่านตรงไม่ได้ตี ให้อยู่บนสุดตามอันดับ ไม่แทรกตามลำดับจับสลากรอบ 1
+            order = -100000 + int(row.get("view_order") or 0)
+        elif not isinstance(order, int):
             order = row["athlete"].start_order or 0
         row["view_order"] = order
     rows.sort(key=lambda r: (r["view_order"], r["athlete"].id))
