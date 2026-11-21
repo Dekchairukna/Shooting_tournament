@@ -1708,13 +1708,19 @@
         <thead>
           <tr class="group-head">
             {% if show_qual %}<th colspan="6">ประวัติรอบคัดเลือก</th>{% else %}<th colspan="3">ผู้แข่งขัน</th>{% endif %}
-            <th colspan="6">{{ title }}</th>
+            <th colspan="6" data-base-colspan="6" data-detail-colspan="26">{{ title }}</th>
           </tr>
           <tr>
             {% if show_qual %}<th>Seed</th>{% endif %}
             <th>สังกัด</th><th class="dm-name-head">ชื่อ</th><th>สถานะ</th>
             {% if show_qual %}<th>Qr1</th><th>REF</th>{% endif %}
-            <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>SCORE</th>
+            {% for st in range(1, 6) %}<th data-base-colspan="1" data-detail-colspan="5">S{{ st }}</th>{% endfor %}<th>SCORE</th>
+          </tr>
+          <tr class="dist-head">
+            {% if show_qual %}<th></th>{% endif %}
+            <th></th><th class="dm-name-head"></th><th></th>
+            {% if show_qual %}<th></th><th></th>{% endif %}
+            {% for st in range(1, 6) %}<th>6m</th><th>7m</th><th>8m</th><th>9m</th><th class="dist-sum-head">รวม</th>{% endfor %}<th></th>
           </tr>
         </thead>
         <tbody>
@@ -1740,6 +1746,8 @@
               <td class="r1r2-cell {% if not row.show_ref_score %}direct-ref-empty{% endif %}">{% if row.show_ref_score %}{{ row.r1r2 }}{% endif %}</td>
             {% endif %}
             {% for sc in row.stations %}
+              {% set st_idx = loop.index0 %}
+              {% for dv in (row.distances[st_idx] if row.distances else ['-','-','-','-']) %}<td class="dist-cell" data-st="{{ st_idx }}" data-d="{{ loop.index0 }}" data-score="{{ dv }}">{{ dv }}</td>{% endfor %}
               <td class="station-cell" data-station-index="{{ loop.index0 }}">{{ sc }}</td>
             {% endfor %}
             <td class="total-cell">{{ row.total }}</td>
@@ -1888,9 +1896,29 @@
     body.display-mode .match-row td{cursor:default;}
     body.display-mode .match-row tr.winner-row td{font-weight:900!important;}
     body.display-mode .match-row tr.winner-row .total-cell{background:var(--th-primary,#ea580c)!important;color:#fff!important;}
+    /* รอบชิง (Final): คู่เดียว ขยายให้เต็มจอ */
+    body.display-mode.dm-final .match-row tbody td{padding-top:78px!important;padding-bottom:78px!important;font-size:1.7em;font-weight:800;}
+    body.display-mode.dm-final .match-row tbody td.team-cell{font-size:1.6em;font-weight:900;white-space:nowrap;}
+    body.display-mode.dm-final .match-row td.total-cell{font-size:5em!important;padding-top:6px!important;padding-bottom:6px!important;min-width:2.4em;}
+    body.display-mode.dm-final .match-row thead th{font-size:1.15em;}
+    body.display-mode.dm-final:not(.dm-detail) .match-row td.station-cell{min-width:2.6em;font-size:2.2em;font-weight:800;}
+    body.display-mode.dm-final:not(.dm-detail) .match-row tbody td{padding-top:22px!important;padding-bottom:22px!important;}
+    body.display-mode.dm-final:not(.dm-detail) .match-row tbody td.team-cell{font-size:2.4em;}
+    body.display-mode.dm-final:not(.dm-detail) .match-row td.total-cell{font-size:6.5em!important;}
+    body.display-mode.dm-final:not(.dm-detail) .match-row thead th{font-size:1.6em;}
+    /* ช่อง SCORE รวม: ตัวเลขใหญ่ให้อ่านจากไกลได้ */
+    body.display-mode .match-row td.total-cell{font-size:2.1em!important;font-weight:950!important;line-height:1!important;min-width:2.6em;padding-top:4px!important;padding-bottom:4px!important;color:var(--th-primary-dark,#c2410c);background:rgba(var(--th-primary-rgb,234,88,12),.10);font-variant-numeric:tabular-nums;}
     /* ซ่อนคอลัมน์ชื่อ (ปุ่ม "ชื่อ") เหมือนหน้ารวม */
     body.display-mode.dm-hide-name .match-row th:nth-child(1n).dm-name-head,
     body.display-mode.dm-hide-name .match-row td.name-cell{display:none!important;}
+    /* ทุกระยะ (ปุ่ม "ทุกระยะ"): คะแนน 6/7/8/9 ม. ของทุก Atelier + รวมแต่ละ Atelier */
+    .match-row .dist-cell,.match-row tr.dist-head{display:none;}
+    body.display-mode.dm-detail .match-row .dist-cell{display:table-cell;}
+    body.display-mode.dm-detail .match-row tr.dist-head{display:table-row;}
+    body.display-mode.dm-detail .match-row tr.dist-head th{font-size:.82em;padding-top:2px!important;padding-bottom:2px!important;}
+    body.display-mode.dm-detail .match-row .station-cell{font-weight:900;background:rgba(var(--th-primary-rgb,234,88,12),.08);}
+    body.display-mode.dm-detail .match-row td.dist-cell[data-score="5"]{background:#ffd9d9;color:#b42318;font-weight:900;}
+    body.display-mode.dm-detail .match-row td.dist-cell[data-score="3"]{background:#fff1a8;color:#8a5a00;font-weight:900;}
     /* ทีละรอบ: แสดงเฉพาะรอบที่เลือก จัดเป็นตาราง ไม่มีเส้นสาย */
     body.display-mode.dm-focus .bracket-lines-v2{display:none!important;}
     body.display-mode.dm-focus .bracket-board.auto-bracket .round-col:not(.dm-on){display:none!important;}
@@ -2290,6 +2318,15 @@ function updateBracketGroup(roundKey, items){
         }
       }
 
+      // คะแนนรายระยะ (แสดงเมื่อเปิด "ทุกระยะ" บนจอแสดงผล)
+      row.querySelectorAll(".dist-cell").forEach(cell => {
+        const st = Number(cell.dataset.st), d = Number(cell.dataset.d);
+        const value = (Array.isArray(rowData.distances) && rowData.distances[st] && rowData.distances[st][d] != null)
+          ? rowData.distances[st][d] : 0;
+        cell.textContent = value;
+        cell.dataset.score = String(value);
+      });
+
       // S1-S5 ดึงจาก scorecard ของรอบ bracket ปัจจุบันแบบ realtime
       const stationCells = row.querySelectorAll(".station-cell");
       stationCells.forEach((cell, index) => {
@@ -2351,7 +2388,7 @@ window.addEventListener('resize', refreshShootingBracket);
 window.addEventListener('load', refreshShootingBracket);
 
 // ===== โหมดจอแสดงผล: ทั้งสาย / ทีละรอบ / เวียนอัตโนมัติ (จำค่าไว้ในเครื่อง, ตั้งผ่าน URL ได้)
-// ?view=all|live|QF|SF|F  &rotate=1&sec=15  &noname=0
+// ?view=all|live|QF|SF|F  &rotate=1&sec=15  &noname=0  &detail=1 (คะแนนทุกระยะ)
 //  all  = ทั้งสายพอดีจอ · live = รอบที่กำลังแข่ง (เปลี่ยนเองเมื่อรอบก่อนหน้าจบ) · QF/SF/F = ล็อกรอบนั้น
 //  rotate = สลับ "ทั้งสาย" กับ "รอบที่กำลังแข่ง" ทุก sec วินาที
 if (document.body.classList.contains('display-mode')) (function () {
@@ -2372,6 +2409,7 @@ if (document.body.classList.contains('display-mode')) (function () {
   let sec = parseInt(qs.get('sec') || store.get('sec', '15'), 10);
   if (!(sec >= 3 && sec <= 600)) sec = 15;
   let hideName = (qs.get('noname') || store.get('noname', '1')) === '1';
+  let detail = (qs.get('detail') || store.get('detail', '0')) === '1';
   let showingAll = view === 'all';   // สถานะของการเวียน: กำลังโชว์ทั้งสายอยู่หรือไม่
   let startedAt = Date.now();
 
@@ -2418,11 +2456,20 @@ if (document.body.classList.contains('display-mode')) (function () {
   function apply() {
     document.body.classList.toggle('dm-hide-name', hideName);
     const round = shownRound();
+    // ทุกระยะ: ใช้กับการดูทีละรอบ (ทั้งสายแสดงแค่ S1–S5 เพราะกว้างเกินจอ)
+    const detailOn = detail && !!round;
+    document.body.classList.toggle('dm-detail', detailOn);
+    document.querySelectorAll('.match-row th[data-detail-colspan]').forEach(th => {
+      th.setAttribute('colspan', detailOn ? th.dataset.detailColspan : th.dataset.baseColspan);
+    });
     document.body.classList.toggle('dm-focus', !!round);
+    // รอบชิง: คู่เดียว ขยายเต็มจอ
+    document.body.classList.toggle('dm-final', round === 'F');
     cols().forEach(c => c.classList.toggle('dm-on', c.dataset.bracketRound === round));
     if (round) {
       const n = board.querySelectorAll(`[data-bracket-round="${round}"] [data-bracket-match]`).length;
-      board.style.setProperty('--dm-cols', n >= 4 ? 2 : Math.max(1, n));
+      // ทุกระยะกว้างมาก: เรียงคู่ลงมาทีละแถว (QF 4 คู่ = 1 คอลัมน์ · SF 2 คู่ = 1 คอลัมน์)
+      board.style.setProperty('--dm-cols', detailOn ? 1 : (n >= 4 ? 2 : Math.max(1, n)));
     }
     const stage = document.querySelector('[data-dm-stage]');
     if (stage) stage.textContent = round ? NAMES[round] : 'Knockout';
@@ -2454,13 +2501,15 @@ if (document.body.classList.contains('display-mode')) (function () {
       + '<span class="dm-sep"></span>'
       + '<button type="button" data-toggle="rotate" class="' + (rotate ? 'on' : '') + '"' + (view === 'live' ? '' : ' disabled') + '>เวียน ทั้งสาย ↔ รอบปัจจุบัน</button>'
       + '<label>ทุก <select data-set="sec">' + opts + '</select></label>'
-      + '<span class="dm-sep"></span><button type="button" data-toggle="name" class="' + (hideName ? '' : 'on') + '">ชื่อ</button>'
+      + '<span class="dm-sep"></span><button type="button" data-toggle="detail" class="' + (detail ? 'on' : '') + '">ทุกระยะ</button>'
+      + '<button type="button" data-toggle="name" class="' + (hideName ? '' : 'on') + '">ชื่อ</button>'
       + '<span class="dm-sep"></span><button type="button" data-fs="1">เต็มจอ</button>';
   }
   panel.addEventListener('click', (e) => {
     const t = e.target.closest('button'); if (!t || t.disabled) return;
     if (t.dataset.view) { view = t.dataset.view; store.set('view', view); showingAll = view === 'all'; startedAt = Date.now(); apply(); }
     else if (t.dataset.toggle === 'rotate') { rotate = !rotate; store.set('rotate', rotate ? '1' : '0'); showingAll = false; startedAt = Date.now(); apply(); }
+    else if (t.dataset.toggle === 'detail') { detail = !detail; store.set('detail', detail ? '1' : '0'); apply(); }
     else if (t.dataset.toggle === 'name') { hideName = !hideName; store.set('noname', hideName ? '1' : '0'); apply(); }
     else if (t.dataset.fs) {
       if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
