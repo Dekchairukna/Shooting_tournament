@@ -1331,18 +1331,24 @@ def athlete_round_status(athlete: Athlete, round_no: int) -> str:
     return "waiting"
 
 
+def signature_all_parties_signed(signature) -> bool:
+    """ลงชื่อครบ 3 ฝ่าย (ผู้บันทึก / กรรมการ / นักกีฬา) · แต่ละฝ่ายพิมพ์ชื่อหรือเขียนลายเซ็นอย่างใดอย่างหนึ่งก็ได้"""
+    if not signature:
+        return False
+    return all(
+        bool(getattr(signature, f"{party}_name", None) or getattr(signature, f"{party}_signature", None))
+        for party in ("recorder", "referee", "athlete")
+    )
+
+
 def athlete_round_is_approved(athlete: Athlete, round_no: int) -> bool:
-    """Formal approval is separate from the live shooting/cursor state."""
+    """APPROVED = จบการตีแล้ว และลงชื่อครบ 3 ฝ่าย (หรือ Superadmin กด Approve)"""
     signature = get_round_signature(athlete.id, round_no)
     if not signature:
         return False
     if bool(getattr(signature, "bypass_signed", False)):
         return True
-    return all([
-        bool(getattr(signature, "recorder_signature", None)),
-        bool(getattr(signature, "referee_signature", None)),
-        bool(getattr(signature, "athlete_signature", None)),
-    ])
+    return bool(signature.finished_at) and signature_all_parties_signed(signature)
 
 
 def overview_score_complete(summary: dict) -> bool:
@@ -6127,11 +6133,8 @@ def scorecard(athlete_id: int):
         bypass_ok = current_user.role == "superadmin" or (
             current_user.role == "admin" and bool(expected_bypass) and bypass_code == expected_bypass
         )
-        signed_ok = all([
-            bool(signature.recorder_signature),
-            bool(signature.referee_signature),
-            bool(signature.athlete_signature),
-        ])
+        # ลงชื่อครบ 3 ฝ่าย: พิมพ์ชื่อหรือเขียนลายเซ็นก็ได้ (ตรงกับข้อความบนหน้า Scorecard)
+        signed_ok = signature_all_parties_signed(signature)
 
         if bypass_ok or signed_ok:
             # ห้ามตั้ง bypass_signed จากการส่ง Scorecard เพราะจะทำให้แถวฟ้าทันที

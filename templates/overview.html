@@ -721,6 +721,7 @@ body.dm-compact #overviewTableBody td.status-cell .status-pill{font-size:16px!im
 .dm-clone tbody tr:not(.dm-second){display:none;}
 /* แบ่งหน้า: แสดงทีละ N ทีม เวียนหน้าอัตโนมัติ หรือล็อกหน้า */
 body.display-mode #overviewTableWrap tbody tr.dm-off{display:none!important;}
+body.display-mode #overviewTableWrap tbody tr.direct-placeholder{display:none!important;}
 /* ซ่อนคอลัมน์ Class บนจอแสดงผล (ปุ่ม "Class" บนแผงควบคุม) */
 body.display-mode.dm-hide-class #overviewTableWrap th.col-class,
 body.display-mode.dm-hide-class #overviewTableWrap td.overall-rank{display:none!important;}
@@ -1323,7 +1324,8 @@ body.display-mode.dm-page .dm-split{grid-template-columns:repeat(2,max-content);
     let overviewFirst = (qs.get('overview') || store.get('overview', '1')) === '1';
     let pageIdx = Math.max(0, parseInt(qs.get('page') || '1', 10) - 1) || 0;
     let pageStartedAt = Date.now();
-    function allRows() { return origTable ? Array.from(origTable.querySelectorAll('tbody tr[data-athlete-id]')) : []; }
+    // รอบ 2: จอแสดงผลโชว์เฉพาะคนที่ตีรอบนี้ ไม่เอาแถวผู้เข้ารอบตรง (direct) มานับหน้า/แบ่งฝั่ง
+    function allRows() { return origTable ? Array.from(origTable.querySelectorAll('tbody tr[data-athlete-id]:not(.direct-placeholder)')) : []; }
     function pageCount() { return Math.max(1, Math.ceil(allRows().length / perPage)) + (overviewFirst ? 1 : 0); }
     function isOverviewPage() { return mode === 'page' && overviewFirst && pageIdx === 0; }
     function pageLabel() { return isOverviewPage() ? 'หน้ารวม' : 'หน้า ' + (pageIdx + 1) + '/' + pageCount(); }
