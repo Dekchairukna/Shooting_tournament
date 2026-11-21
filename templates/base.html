@@ -773,5 +773,33 @@
   <script src="{{ url_for('static', filename='js/flags.js') }}"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% if display_mode %}
+<!-- จอแสดงผล: นาฬิกาเวลาปัจจุบัน (เวลาประเทศไทย) มุมขวาบน -->
+<div class="dm-clock" translate="no" aria-label="เวลาปัจจุบัน"><span data-dm-clock>--:--:--</span></div>
+<style>
+  .dm-clock{position:fixed;top:10px;right:14px;z-index:2001;padding:6px 16px;border-radius:999px;
+    background:rgba(15,23,42,.88);color:#fff;font:800 24px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    letter-spacing:.04em;font-variant-numeric:tabular-nums;box-shadow:0 4px 14px rgba(0,0,0,.2);}
+  /* ป้ายเลขหน้า/ชื่อรอบ ขยับไปทางซ้ายของนาฬิกา */
+  body.display-mode .dm-page-badge,body.display-mode .dm-ko-badge{right:200px!important;}
+  body.display-mode .dm-ko-head{padding-right:420px!important;}
+  @media print{.dm-clock{display:none!important;}}
+</style>
+<script>
+(function () {
+  const el = document.querySelector('[data-dm-clock]');
+  if (!el) return;
+  let fmt;
+  try { fmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); }
+  catch (e) { fmt = null; }
+  function tick() {
+    const now = new Date();
+    el.textContent = fmt ? fmt.format(now) : now.toTimeString().slice(0, 8);
+    setTimeout(tick, 1000 - now.getMilliseconds() + 5);
+  }
+  tick();
+})();
+</script>
+{% endif %}
 </body>
 </html>

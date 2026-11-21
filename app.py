@@ -329,6 +329,8 @@ class Event(db.Model):
     # สนามแรกของอีเวนต์ (เช่น รุ่นหญิงใช้สนาม 5-7 = E-G) และแสดงชื่อสนามเป็นตัวอักษร 1=A
     lane_start = db.Column(db.Integer, nullable=False, default=1)
     court_letters = db.Column(db.Boolean, nullable=False, default=False)
+    # สนามที่แสดงชื่อเป็น "Center Court" (เช่น 1 = สนาม 1 เป็น Center Court) · ว่าง = ไม่มี
+    center_court = db.Column(db.Integer, nullable=True)
     # ต่อคิวสนามข้ามรุ่น: อีเวนต์ในสายเดียวกันใช้สนามชุดเดียวกัน คิวต่อกันตาม chain_position
     chain_id = db.Column(db.Integer, db.ForeignKey("court_chain.id"), nullable=True)
     chain_position = db.Column(db.Integer, nullable=True)
@@ -941,6 +943,7 @@ def ensure_schema() -> None:
             conn.exec_driver_sql('UPDATE "event" SET lane_start = 1 WHERE lane_start IS NULL')
             conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS court_letters BOOLEAN DEFAULT false')
             conn.exec_driver_sql('UPDATE "event" SET court_letters = false WHERE court_letters IS NULL')
+            conn.exec_driver_sql('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS center_court INTEGER')
         return
 
     # SQLite migration เดิม
@@ -998,6 +1001,8 @@ def ensure_schema() -> None:
         if "court_letters" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN court_letters BOOLEAN DEFAULT 0")
             conn.exec_driver_sql("UPDATE event SET court_letters = 0 WHERE court_letters IS NULL")
+        if "center_court" not in event_columns:
+            conn.exec_driver_sql("ALTER TABLE event ADD COLUMN center_court INTEGER")
         if "scorecard_layout" not in event_columns:
             conn.exec_driver_sql("ALTER TABLE event ADD COLUMN scorecard_layout VARCHAR(20) DEFAULT 'standard'")
             conn.exec_driver_sql("UPDATE event SET scorecard_layout = 'standard' WHERE scorecard_layout IS NULL")
@@ -1679,7 +1684,9 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
         summary = summarize_round(athlete.id, round_no)
         logical_status = athlete_round_status(athlete, round_no)
         approved = athlete_round_is_approved(athlete, round_no)
-        score_complete = overview_score_complete(summary) or logical_status == "finished"
+        # "ตีแล้ว" นับเมื่อกด "จบการตี" แล้วเท่านั้น (ตีครบ 20 ลูกแต่ยังไม่กดจบ = ยังกำลังตี)
+        score_complete = logical_status == "finished"
+        shots_complete = overview_score_complete(summary)
         row = {
             "athlete": athlete,
             "round_no": round_no,
@@ -1690,6 +1697,7 @@ def build_round_ranking(event: Event, round_no: int) -> List[dict]:
             "tiebreak_count": summary.get("tiebreak_count", 0),
             "status": logical_status,
             "score_complete": score_complete,
+            "shots_complete": shots_complete,
             "approved": approved,
             "by_station": summary["by_station"],
             "red_cards": summary["red_cards"],
@@ -2397,7 +2405,9 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
         combined_total = source_row["total"] + r2["total"]
         logical_status = athlete_round_status(athlete, 2)
         approved = athlete_round_is_approved(athlete, 2)
-        score_complete = overview_score_complete(r2) or logical_status == "finished"
+        # "ตีแล้ว" นับเมื่อกด "จบการตี" แล้วเท่านั้น
+        score_complete = logical_status == "finished"
+        shots_complete = overview_score_complete(r2)
         row = {
             "athlete": athlete,
             "round_no": 2,
@@ -2420,6 +2430,7 @@ def build_round_two_overview_rows(event: Event) -> List[dict]:
             "round2_tiebreak_count": r2.get("tiebreak_count", 0),
             "status": logical_status,
             "score_complete": score_complete,
+            "shots_complete": shots_complete,
             "approved": approved,
             "by_station": r2["by_station"],
             "round1_by_station": source_row.get("by_station", {}),
@@ -2984,14 +2995,23 @@ def event_file_stem(event, suffix: str = "") -> str:
     return stem[:150]
 
 
-def court_name(event, lane) -> str:
-    """ชื่อสนามที่แสดง: ตัวเลข หรือ ตัวอักษร (1=A, 2=B ...) ถ้าอีเวนต์เปิด court_letters"""
+def parse_center_court(form) -> int | None:
+    raw = str(form.get("center_court", "") or "").strip()
+    return int(raw) if raw.isdigit() and int(raw) >= 1 else None
+
+
+def court_name(event, lane, short: bool = False) -> str:
+    """ชื่อสนามที่แสดง: ตัวเลข หรือ ตัวอักษร (1=A, 2=B ...) ถ้าอีเวนต์เปิด court_letters
+    สนามที่ตั้งเป็น Center Court แสดงเป็น "Center Court" (short=True → "CC" สำหรับช่องแคบ)"""
     if lane in (None, "", "-"):
         return "-" if lane == "-" else ""
     try:
         n = int(lane)
     except (TypeError, ValueError):
         return str(lane)
+    center = getattr(event, "center_court", None)
+    if center and n == int(center):
+        return "CC" if short else "Center Court"
     if getattr(event, "court_letters", False) and 1 <= n <= 26:
         return chr(64 + n)
     return str(n)
@@ -3650,6 +3670,7 @@ def create_event():
             scorecard_layout=parse_scorecard_layout(request.form),
             lane_start=max(1, request.form.get("lane_start", 1, type=int) or 1),
             court_letters=request.form.get("court_letters") == "yes",
+            center_court=parse_center_court(request.form),
             overview_sort_by_rank=request.form.get("overview_sort_by_rank", "yes") == "yes",
             next_round_label=request.form["next_round_label"],
             round_two_advancers=int(request.form.get("round_two_advancers") or 4),
@@ -3732,6 +3753,7 @@ def edit_event(event_id: int):
         event.scorecard_layout = parse_scorecard_layout(request.form)
         event.lane_start = max(1, request.form.get("lane_start", 1, type=int) or 1)
         event.court_letters = request.form.get("court_letters") == "yes"
+        event.center_court = parse_center_court(request.form)
         event.overview_sort_by_rank = request.form.get("overview_sort_by_rank", "yes") == "yes"
         event.next_round_label = request.form["next_round_label"]
         event.round_two_advancers = int(request.form.get("round_two_advancers") or 4)
@@ -5769,6 +5791,7 @@ def overview_data(event_id: int):
             "display_lane_order": row.get("display_lane_order", row["athlete"].lane_order),
             "status": row["status"],
             "score_complete": bool(row.get("score_complete", False)),
+            "shots_complete": bool(row.get("shots_complete", False)),
             "approved": bool(row.get("approved", False)),
             "total": row.get("round2_total", row["total"]) if round_no == 2 and event.has_round_two and not row.get("is_round2_direct_placeholder") else row["total"],
             "round1_total": row.get("round1_total"),

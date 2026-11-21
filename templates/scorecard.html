@@ -1069,6 +1069,9 @@
   .tap-seg button:disabled{opacity:.35;cursor:not-allowed;}
   .tap-seg.saving{opacity:.6;pointer-events:none;}
   .tap-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  /* ครบ 4 ระยะแล้ว: ปุ่มสถานีถัดไปเด่นขึ้น ให้ผู้คีย์กดไปเอง */
+  #tapNext.ready{background:#16a34a!important;border-color:#16a34a!important;color:#fff!important;box-shadow:0 0 0 4px rgba(22,163,74,.25);animation:tapNextPulse 1.4s ease-in-out infinite;}
+  @keyframes tapNextPulse{0%,100%{box-shadow:0 0 0 4px rgba(22,163,74,.25);}50%{box-shadow:0 0 0 9px rgba(22,163,74,.08);}}
   .tap-st-sum{font-weight:900;font-size:1.05rem;text-align:center;flex:1;}
   @media (max-width:560px){.tap-grid{grid-template-columns:52px 1fr}.tap-seg button{min-width:48px;height:50px}.tap-total{font-size:2.1rem}}
   @media print{.entry-mode-switch,.tap-entry{display:none!important}#scorecardForm.tap-mode .scorecard-main-table,#scorecardForm.tap-mode .scorecard-meta-table{display:table!important}#scorecardForm.tap-mode .sheet-header{display:grid!important}}
@@ -2388,6 +2391,7 @@
     const next = document.getElementById('tapNext');
     next.disabled = cur === 5;
     next.textContent = cur === 5 ? tr('สถานีสุดท้าย') : tr('สถานี ' + (cur + 1)) + ' →';
+    next.classList.toggle('ready', cur < 5 && stPlayed(cur) === 4);
   }
 
   async function save(c, seg) {
@@ -2397,14 +2401,11 @@
   }
   function tapScore(st, d, v, seg) {
     const c = cell(st, d);
-    const wasDone = stPlayed(st) === 4;
     if (c.red?.checked) { c.red.checked = false; c.score.disabled = false; }
     c.score.value = v;
     if (c.played) c.played.checked = true;
-    save(c, seg).then(() => {
-      // ครบ 4 ระยะแล้วไปสถานีถัดไปเอง
-      if (!wasDone && stPlayed(st) === 4 && st === cur && cur < 5) { cur++; render(); }
-    });
+    // ครบ 4 ระยะแล้วไม่เลื่อนสถานีเอง: ผู้คีย์ตรวจคะแนนแล้วกด "สถานีถัดไป" เอง (ปุ่มจะเด่นขึ้น)
+    save(c, seg);
   }
   function tapRed(st, d, seg) {
     const c = cell(st, d);

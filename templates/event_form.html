@@ -64,6 +64,15 @@
         <option value="yes" {% if event and event.court_letters %}selected{% endif %}>ตัวอักษร (1=A, 2=B … 8=H)</option>
       </select>
     </label>
+    <label>Center Court
+      <select name="center_court">
+        <option value="" {% if not (event and event.center_court) %}selected{% endif %}>ไม่มี</option>
+        {% for n in range(1, 17) %}
+        <option value="{{ n }}" {% if event and event.center_court == n %}selected{% endif %}>สนาม {{ n }}{% if event and event.court_letters %} ({{ 'ABCDEFGHIJKLMNOP'[n-1] }}){% endif %}</option>
+        {% endfor %}
+      </select>
+      <small class="muted">สนามที่เลือกจะแสดงชื่อเป็น “Center Court” ทุกหน้า (ในตารางแคบแสดง “CC”) · บัญชีคีย์คะแนนยังเป็น court01, court02 … เหมือนเดิม</small>
+    </label>
     <label>รูปแบบใบบันทึกคะแนน (พิมพ์)
       <select name="scorecard_layout">
         {% for k, v in SCORECARD_LAYOUTS.items() %}
